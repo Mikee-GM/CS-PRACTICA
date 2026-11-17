@@ -44,6 +44,7 @@ import { TeamChannelModule } from './team-channel/team-channel.module';
 import { ConversationsModule } from './conversations/conversations.module';
 import { PostsModule } from './posts/posts.module';
 import { FeedModule } from './feed/feed.module';
+import { ServiceFeedbackModule } from './service-feedback/service-feedback.module';
 
 @Module({
   imports: [
@@ -219,6 +220,7 @@ import { FeedModule } from './feed/feed.module';
     ConversationsModule,
     PostsModule,
     FeedModule,
+    ServiceFeedbackModule,
   ],
   controllers: [AppController],
   providers: [

@@ -1326,6 +1326,47 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
+   * Los viajes recientes de sus servicios cuyo chofer la modelo no ha calificado.
+   *
+   * Calificar al chofer ya existia en el portal (`POST ratings` con
+   * `employee_to_driver`), pero solo se llegaba con el viaje en la mano, y ese
+   * id solo lo traia el boton del chat. Sin esta lista el score del chofer se
+   * queda sin la unica opinion que lo alimenta.
+   *
+   * La ventana es la misma que hace cumplir `resolveInteractionForPerson`: un
+   * viaje fuera de ella se rechazaria al calificar, asi que ofrecerlo seria
+   * invitar a un error. Los viajes por Uber no tienen chofer y no aparecen.
+   */
+  async listarChoferesPorCalificar(actor: Actor) {
+    const identity = await this.identityForActor(actor);
+    if (!identity || identity.type !== 'employee') {
+      throw new ForbiddenException('No tienes choferes que calificar');
+    }
+    return this.dataSource.query(
+      `SELECT v.id             AS "viajeId",
+              v.tipo           AS "tipo",
+              v.hora_fin_viaje AS "fecha",
+              ch.nombre        AS "choferNombre"
+       FROM viajes v
+       JOIN servicios s ON s.id = v.servicio_id
+       JOIN choferes ch ON ch.id = v.chofer_id
+       WHERE s.empleada_id = $1
+         AND v.estado = 'finalizado'
+         AND v.hora_fin_viaje > now() - ($2::int * interval '1 millisecond')
+         AND v.hora_fin_viaje <= now()
+         AND NOT EXISTS (
+           SELECT 1 FROM interaction_ratings r
+           WHERE r.direction = 'employee_to_driver'
+             AND r.trip_id = v.id
+             AND r.employee_id = $1
+         )
+       ORDER BY v.hora_fin_viaje DESC
+       LIMIT 5`,
+      [identity.id, DisciplineService.WINDOW_MS],
+    );
+  }
+
+  /**
    * Las calificaciones que esta persona todavia puede apelar.
    *
    * La identidad sale del actor y no de un parametro: si viniera del cliente,

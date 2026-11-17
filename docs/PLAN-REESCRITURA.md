@@ -1032,3 +1032,216 @@ Pendiente:
 
 - Portales sin token redirigen al login (Etapa 3, B-portales).
 - Probar el flujo completo contra backend y Postgres reales.
+
+### Fase 5, B-onboarding
+
+Reglamento y cuestionario del personal (empleada, chofer, jefe) por web, en
+`EmployeeOnboardingModule`. No se porta ningun handler de Telegram; el flujo de
+Telegram sigue intacto hasta la Fase 6.
+
+- `ReglamentoWebController` (`staff-onboarding/me`), `JwtAuthGuard + RolesGuard +
+  CsrfGuard`, `@Roles('empleada', 'chofer', 'jefe')`:
+  - `GET /staff-onboarding/me`: `{ reglamento: { titulo, contenido,
+    publicadoEn, puntajeMinimo } | null, cuestionario: { estado, esRenovacion,
+    intentos, mejorPuntaje, aprobadoEn, pregunta } | null }`. Sin reglamento
+    publicado para el rol responde vacio (no 404). Si la persona no tenia
+    asignacion se crea aqui (`ensureCurrentAssignmentForUser`).
+  - `POST /staff-onboarding/me/questionnaire` (10/min): empieza o retoma el
+    intento abierto; devuelve `{ completado: false, pregunta }`.
+  - `POST /staff-onboarding/me/questionnaire/answers` (30/min): `{ opcionId }`
+    (uuid). Devuelve la siguiente pregunta o `{ completado: true, aprobado,
+    puntaje, mejorPuntaje, puntajeMinimo, correctas, total, intentos }`.
+  - La pregunta sale como `{ id, texto, numero, total, opciones: [{ id, texto
+    }] }`: sin `isCorrect` y sin trust score en ninguna respuesta (el trust
+    score ordena candidatas y es para quien asigna).
+- La logica de intentos, variantes por casilla, puntaje y trust score sigue en
+  `EmployeeOnboardingService`; `ReglamentoWebService` solo decide que se muestra
+  (`getNextQuestion` paso a ser publico para eso).
+- Recordatorio (decision 7): `ReglamentoRecordatoriosScheduler`, con clave propia
+  `ADVISORY_LOCKS.onboardingWebReminders` (811_021; compartir la de Telegram
+  haria que uno de los dos ciclos se saltara siempre el turno). Corre sin
+  depender del token del bot. En cada ciclo:
+  1. Crea la asignacion al personal activo sin asignacion cuyo rol ya tiene
+     reglamento (antes nacia al vincular Telegram).
+  2. Push a las `ONBOARDING_REMINDER_HOURS` (3 h) de `assigned_at` y despues uno
+     cada 24 h mientras no este aprobado (incluye intento a medias y
+     reprobado), hasta `MAXIMO_DE_RECORDATORIOS = 7`. Clave de dedupe
+     `onboarding:recordatorio:<asignacion>:<n>`; se avisa y despues se cuenta.
+     Se cuenta aunque la persona no tenga dispositivos.
+  3. El texto del push no lleva contenido ni puntajes. Destino por rol:
+     `/empleada/portal`, `/chofer/portal`, `/jefe` (`DESTINO_POR_ROL`).
+- No bloquea nada (decision 8): ninguna ruta ni guardia consulta el estado del
+  cuestionario.
+- Migracion `1811004100000-AddOnboardingWebReminders`:
+  `employee_onboardings.web_reminder_count smallint NOT NULL DEFAULT 0` y
+  `last_web_reminder_at timestamptz NULL`, idempotente y con `down`. No reutiliza
+  `reminder_sent_at` para que los dos canales no se apaguen entre si.
+
+Pendiente:
+
+- Migracion y consultas (`asignarAlPersonalSinReglamento`,
+  `recordatoriosPendientes`) sin probar contra Postgres real.
+- Confirmar con el dueno el tope de 7 recordatorios y si deben respetar un
+  horario (hoy el diario sale a la hora en que se asigno, tambien de madrugada).
+- Al desplegar, las asignaciones antiguas sin aprobar empiezan a recibir
+  recordatorios web desde el primer ciclo.
+- Frontend: vista del reglamento y del cuestionario; cuando exista su ruta,
+  cambiar solo `DESTINO_POR_ROL`.
+- Los recordatorios no se pueden silenciar desde ajustes (sin `tipo`); si se
+  quiere, registrar el tipo en `avisos-catalogo.ts`.
+- Fase 6: borrar `telegram-onboarding.*`, `findPendingDeliveries`,
+  `findDueReminders`, `markWelcomeSent/RegulationSent/ReminderSent` y las
+  columnas `welcome_sent_at`, `regulation_sent_at`, `reminder_sent_at`.
+
+### Fase 5, B-chofer (backend)
+
+Decisiones 4 y 9: `modo_bot` fuera del reparto y del aviso a la empleada, y
+ubicaciones de mas de 15 minutos ignoradas en el reparto.
+
+- `drivers/ubicacion-fresca.ts`: `MINUTOS_DE_UBICACION_FRESCA = 15` y
+  `sqlUbicacionFresca(alias)`, la condicion unica (`ultima_ubicacion_at` no nula
+  y `>= now() - interval '15 minutes'`, con el reloj de PostgreSQL). Una marca
+  nula cuenta como vieja: es la posicion tecleada a mano en el alta o la
+  edicion, que no actualiza `ultima_ubicacion_at`. La aplican el reparto, su
+  diagnostico, `findAvailableDriversOrderByDistance` y la ficha del jefe.
+- `ServicesService.dispatchViaje`: quita `chofer.modo_bot = true` y exige
+  `sqlUbicacionFresca('chofer')`. Haversine sigue en PostgreSQL
+  (`calcular_distancia_haversine`).
+- `ServicesService.aceptar`: se borra el conteo previo de choferes con
+  `modo_bot` que mandaba el viaje solo a Uber. Ahora siempre se despacha; sin
+  chofer elegible, `notifyNoDriversAvailable` avisa al jefe, que decide si lo
+  cambia a Uber. El aviso de Telegram a la empleada ya no mira `modoBot`.
+- `diagnostico-de-reparto.ts`: deja de contar "con Telegram vinculado" (el
+  reparto ya no lo exigia y el diagnostico culpaba a un chat sin vincular) y
+  anade el escalon "con ubicacion de los ultimos 15 minutos", con su linea
+  propia cuando es ahi donde cae a cero.
+- `GET /drivers` y `GET /drivers/:id` devuelven `ubicacionVieja: boolean`
+  (campo calculado, no columna, como `sancionada`): true si falta la posicion o
+  el reparto la ignora. Lo decide PostgreSQL con la misma condicion. Junto con
+  `ultimaUbicacionAt`, que ya salia, es lo que el jefe necesita.
+- Sin migracion: `ultima_ubicacion_at` ya existia y `LocationsService` la
+  escribe al menos una vez por minuto mientras el portal manda posicion.
+- Pruebas: `ubicacion-fresca.spec.ts`, `diagnostico-de-reparto.spec.ts`,
+  `drivers.service.ubicacion.spec.ts`, `services.reparto-choferes.spec.ts`; el
+  doble de `choferesRepository` en `services.accept-concurrency.spec.ts` queda
+  vacio para probar que aceptar ya no consulta choferes.
+
+Pendiente:
+
+- Frontend: mostrar `ubicacionVieja` (y la antiguedad desde
+  `ultimaUbicacionAt`) en `/admin/drivers`, el mapa y la ficha; anadir el campo
+  a `Driver` en `catalogo-cs/lib/types.ts`. El toggle de `modo_bot`
+  (`lib/actions/modo-bot.ts`) ya no tiene efecto en el reparto.
+- El expediente del chofer en `god-eye.service.ts` no expone
+  `ultima_ubicacion_at` ni la marca; quedo fuera por ser archivo compartido.
+- La ubicacion de la empleada (punto de recogida del viaje de ida) no tiene
+  limite de antiguedad; la decision 9 habla solo de choferes.
+- Probar contra Postgres real la consulta del reparto y la del diagnostico.
+- Fase 6: borrar la columna `modo_bot` de `choferes` y `empleadas`, sus campos
+  en los DTO de alta y el toggle del panel.
+
+### Fase 5, B-schedulers
+
+Contenido semanal, retos y recordatorio de cita sin Telegram. Los avisos salen
+por `NotificationsService.notificar` (push) con `dedupeKey`, asi que un
+guardado que falle tras avisar no duplica el aviso en la pasada siguiente. Los
+tres ciclos siguen bajo su `withAdvisoryLock` (`weeklyContent`, `challenges`,
+`serviceSchedule`); no hizo falta clave nueva.
+
+- Fotos semanales (decision 3): `WeeklyContentScheduler` ya no filtra por
+  `telegramChatId`; pide fotos a toda modelo con `catalogoActivo`. Ni el
+  scheduler ni el de retos se apagan sin token del bot.
+- Semana de gracia: `WeeklyContentService.esSemanaDeGracia` es verdadera cuando
+  la modelo no tiene ningun `weekly_content_schedules` anterior al ciclo. Se
+  deriva de la historia, sin migracion. Quien ya estaba sujeta (tenia Telegram)
+  tiene ciclos previos y no la recibe; quien entra por primera vez, incluida una
+  modelo nueva, si. En gracia el recordatorio dice que no hay multa y al agotar
+  los avisos el ciclo se cierra en `falta_aplicada` sin multa, sin registro de
+  corte y sin reporte de conducta, con un aviso que lo explica.
+  `getWeeklyStatusForEmployee` devuelve `semanaDeGracia`.
+- Avisos de fotos: pedido del viernes, recordatorios ("N de M") y rechazo con
+  motivo (recortado a 120 caracteres) con tipo `fotos_semanales`; la multa con
+  tipo `sancion`. Todos llevan a `/empleada/portal?seccion=fotos`. Se retiraron
+  `TelegramService`, `PanelAccessService` y `botonesDePortal` del modulo.
+- Retos: `ChallengesService` avisa por push al `usuario_id` de cada participante
+  (empleada o chofer) al empezar y al terminar (su lugar y el ganador), con
+  tipo nuevo `retos` en `avisos-catalogo.ts` (apagable por empleada y chofer).
+  `ChallengesModule` importa `NotificationsModule` en lugar de `TelegramModule`.
+- Recordatorio de cita (`ServiceScheduleScheduler`, 45 min antes): corre
+  siempre; la modelo recibe push hacia `/empleada/servicio` y el jefe hacia
+  `/jefe`. Se retiraron el mensaje directo a la modelo y el del grupo del jefe
+  con botones `sched_trans` (el grupo con temas no se porta). El texto no lleva
+  nombres ni hora.
+
+Pendiente:
+
+- Frontend: mostrar `semanaDeGracia` en la seccion de fotos del portal (hoy
+  muestra el importe de la multa aunque esa semana no se cobre).
+- `ServiceScheduleScheduler` conserva `@InjectBot` solo para el recordatorio al
+  cliente de Telegram (la Fase 5 es del personal); se borra en la Fase 6. Sigue
+  contando en la metrica de avance.
+- `TelegramAdminUpdate` conserva el handler `sched_trans`, ya sin emisor.
+- Los portales de empleada y chofer no tienen seccion de retos: el aviso abre
+  el portal sin mas.
+- Probar contra Postgres real el `count` con `LessThan` sobre `semana_inicio`
+  (`date`) y el ciclo completo de un viernes a un martes.
+
+### Fase 5, B-calificaciones-cliente
+
+Modulo nuevo `ServiceFeedbackModule` (`backend/src/service-feedback/`), sin
+migracion. No hay reglas nuevas: cada accion entra por el mismo metodo que el
+bot (`createClientRatingIdempotent`, `addClientRatingReason`,
+`EmployeeReportsService`), asi que ventana de 24 h, propiedad del servicio,
+indice unico de reportes y efectos disciplinarios no pueden divergir.
+
+- Cliente (`ClientServiceFeedbackController`, todo `JwtAuthGuard` + `RolesGuard`
+  + `@Roles('cliente')`; las mutaciones con `CsrfGuard` y `@Throttle`):
+  - `GET /client-feedback/pending?empleadaId=`: servicios finalizados en las
+    ultimas 24 h, agrupados por servicio, con `modelos[{ id, nombreArtistico,
+    estrellas|null }]` (en un grupal, cada participante no cancelada) y
+    `categoriasReportadas`. Tope de 20 servicios.
+  - `POST /client-feedback/services/:serviceId/rating` (10/min): `{ estrellas,
+    empleadaId?, motivo?, comentario? }`. 201 si la crea, 200 si ya existia
+    (devuelve la primera). Una calificacion baja no exige comentario, como en
+    el bot; el motivo se guarda como comentario si no hay uno, y llegado despues
+    se anade con `addClientRatingReason` (no en grupales). Copia las estrellas a
+    `servicios.calificacion` solo si esta vacia y es la modelo principal.
+  - `POST /client-feedback/services/:serviceId/report` (5/min): `{ categoria,
+    descripcion }` a `employee_reports` con `origin = 'cliente'` y la misma
+    `reporter_key` que el bot. Devuelve solo `{ id, categoria, creadoEn }`.
+  - `POST /client-feedback/services/:serviceId/rehire` (10/min): el chat de un
+    servicio aceptado queda `con_servicio` y la IA ya no contesta, asi que se
+    cierra (solo si sigue colgado de ese servicio) con aviso
+    `conversation_status_changed` al cliente, y se abre otro con la misma
+    modelo via `openWithEmployee` (201/200, `ResumenDeConversacion`). Si ya
+    habia otro chat abierto con ella, se devuelve ese. Servicio ajeno 404, sin
+    terminar 409.
+- Personal (`PortalServiceFeedbackController`, ya con sesion web y rol, no con
+  `PortalAuthGuard`; mismo prefijo que cada portal):
+  - `GET /employee-portal/ratings/pending-drivers` (`empleada`): choferes por
+    calificar, `DisciplineService.listarChoferesPorCalificar`, viajes
+    finalizados de sus servicios en las ultimas 24 h sin calificacion
+    `employee_to_driver` suya. Se califica con el `POST
+    /employee-portal/ratings` que ya existia.
+  - `POST /driver-portal/employee-reports` (`chofer`, CSRF, 5/min): `{ viajeId,
+    categoria, descripcion }` a `employee_reports` con `origin = 'chofer'`.
+- `EmployeeReportsService`: `createFromClientAccount` (ficha por `usuarioId`) y
+  `createFromDriverAccount` (por viaje propio y finalizado); la logica del
+  cliente se comparte con la via de Telegram.
+
+Pendiente:
+
+- Frontend: tarjeta de valoracion en `/chats/[id]` (estrellas, motivo,
+  reportar, volver a contratar), lista de choferes por calificar en el portal
+  de la modelo y formulario de reporte en el portal del chofer. Las rutas de
+  portal nuevas piden cookie de sesion: no funcionan con el token por query.
+- `ServicesService.sendPostServiceSurvey` sigue mandando la encuesta solo por
+  Telegram; falta el aviso web que invite a valorar (carril B-emisores).
+- `listarClientesPorCalificar` y `listarEmpleadasPorCalificar` ofrecen 7 dias,
+  pero calificar solo se admite 24 h: ofrecen servicios que el servidor
+  rechaza. La lista nueva usa 24 h.
+- El reporte de un grupal apunta siempre a la modelo principal del servicio.
+- Cerrar el chat al volver a contratar no avisa a los jefes por SSE; su
+  bandeja lo ve al recargar.
+- Probar contra Postgres real la consulta de pendientes (LATERAL con `UNION`,
+  `array_agg` de categorias) y el `UPDATE` de cierre de la conversacion.

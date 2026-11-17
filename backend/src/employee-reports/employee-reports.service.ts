@@ -8,6 +8,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { Clientes } from '../clients/entities/client.entity';
+import { Choferes } from '../drivers/entities/driver.entity';
 import { Servicios } from '../services/entities/service.entity';
 import { Viajes } from '../trips/entities/trip.entity';
 import { Usuarios } from '../users/entities/user.entity';
@@ -63,6 +64,44 @@ export class EmployeeReportsService {
     const client = await this.dataSource.getRepository(Clientes).findOne({
       where: { telegramChatId },
     });
+    return this.reportarServicioDelCliente(
+      client,
+      serviceId,
+      category,
+      description,
+    );
+  }
+
+  /**
+   * Mismo reporte que el boton del bot, levantado desde el chat web.
+   *
+   * El cliente web no tiene `telegramChatId`, asi que su ficha se encuentra por
+   * la cuenta de la sesion. Lo demas --que el servicio sea suyo, que este
+   * finalizado y la ventana de 24 horas-- es comun a las dos vias.
+   */
+  async createFromClientAccount(
+    usuarioId: string,
+    serviceId: string,
+    category: ReportCategory,
+    description: string,
+  ) {
+    const client = await this.dataSource.getRepository(Clientes).findOne({
+      where: { usuarioId },
+    });
+    return this.reportarServicioDelCliente(
+      client,
+      serviceId,
+      category,
+      description,
+    );
+  }
+
+  private async reportarServicioDelCliente(
+    client: Clientes | null,
+    serviceId: string,
+    category: ReportCategory,
+    description: string,
+  ) {
     if (!client) throw new ForbiddenException('Cliente no vinculado');
 
     const service = await this.dataSource.getRepository(Servicios).findOne({
@@ -110,6 +149,49 @@ export class EmployeeReportsService {
       order: { horaFinViaje: 'DESC' },
     });
     if (!trip) {
+      throw new ForbiddenException(
+        'No existe un viaje finalizado de este chofer',
+      );
+    }
+    this.assertWithinWindow(trip.horaFinViaje, 'El viaje');
+
+    return this.createVerified({
+      service: trip.servicio,
+      category,
+      description,
+      origin: 'chofer',
+      clientId: null,
+      driverId: driver.id,
+      reporterKey: `chofer:${driver.id}`,
+    });
+  }
+
+  /**
+   * Reporte del chofer desde su portal.
+   *
+   * Se pide por viaje y no por servicio porque el portal solo conoce viajes:
+   * es lo que le lista `ratings/pending-employees`. El viaje tiene que ser suyo
+   * y estar finalizado; uno ajeno responde igual que uno inexistente para no
+   * revelar que existe. La clave del reportero es la misma que en el bot, asi
+   * que reportar por las dos vias la misma categoria sigue chocando con el
+   * indice unico.
+   */
+  async createFromDriverAccount(
+    usuarioId: string,
+    tripId: string,
+    category: ReportCategory,
+    description: string,
+  ) {
+    const driver = await this.dataSource.getRepository(Choferes).findOne({
+      where: { usuarioId },
+    });
+    if (!driver) throw new ForbiddenException('Chofer no vinculado');
+
+    const trip = await this.dataSource.getRepository(Viajes).findOne({
+      where: { id: tripId, choferId: driver.id, estado: 'finalizado' },
+      relations: { servicio: true },
+    });
+    if (!trip?.servicio) {
       throw new ForbiddenException(
         'No existe un viaje finalizado de este chofer',
       );

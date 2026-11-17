@@ -36,6 +36,182 @@ describe('EmployeeReportsService', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
+  describe('desde la cuenta web del cliente', () => {
+    it('busca la ficha por la cuenta de la sesion, no por Telegram', async () => {
+      const clientes = { findOne: jest.fn().mockResolvedValue(null) };
+      const service = buildService({ Clientes: clientes });
+
+      await expect(
+        service.createFromClientAccount(
+          'usuario-1',
+          'service-1',
+          'otro',
+          'Descripción válida',
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(clientes.findOne).toHaveBeenCalledWith({
+        where: { usuarioId: 'usuario-1' },
+      });
+    });
+
+    it('rechaza el servicio de otro cliente', async () => {
+      const service = buildService({
+        Clientes: {
+          findOne: jest.fn().mockResolvedValue({ id: 'client-1' }),
+        },
+        Servicios: {
+          findOne: jest
+            .fn()
+            .mockResolvedValue({ id: 'service-1', clienteId: 'client-2' }),
+        },
+      });
+      await expect(
+        service.createFromClientAccount(
+          'usuario-1',
+          'service-1',
+          'otro',
+          'Descripción válida',
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('crea el reporte con la misma clave de reportero que el bot', async () => {
+      const service = buildService({
+        Clientes: {
+          findOne: jest.fn().mockResolvedValue({ id: 'client-1' }),
+        },
+        Servicios: {
+          findOne: jest.fn().mockResolvedValue({
+            id: 'service-1',
+            clienteId: 'client-1',
+            estado: 'finalizado',
+            horaFinServicio: new Date(Date.now() - 60_000),
+          }),
+        },
+      }) as any;
+      const createVerified = jest.fn().mockResolvedValue({ id: 'report-1' });
+      service.createVerified = createVerified;
+
+      await service.createFromClientAccount(
+        'usuario-1',
+        'service-1',
+        'cobro',
+        'Me cobraron de mas',
+      );
+
+      expect(createVerified).toHaveBeenCalledWith(
+        expect.objectContaining({
+          origin: 'cliente',
+          clientId: 'client-1',
+          driverId: null,
+          reporterKey: 'cliente:client-1',
+          category: 'cobro',
+        }),
+      );
+    });
+  });
+
+  describe('desde el portal del chofer', () => {
+    it('solo acepta un viaje finalizado del propio chofer', async () => {
+      const viajes = { findOne: jest.fn().mockResolvedValue(null) };
+      const service = buildService({
+        Choferes: {
+          findOne: jest.fn().mockResolvedValue({ id: 'chofer-1' }),
+        },
+        Viajes: viajes,
+      });
+
+      await expect(
+        service.createFromDriverAccount(
+          'usuario-2',
+          'viaje-ajeno',
+          'otro',
+          'Descripción válida',
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(viajes.findOne).toHaveBeenCalledWith({
+        where: {
+          id: 'viaje-ajeno',
+          choferId: 'chofer-1',
+          estado: 'finalizado',
+        },
+        relations: { servicio: true },
+      });
+    });
+
+    it('rechaza una cuenta sin ficha de chofer', async () => {
+      const service = buildService({
+        Choferes: { findOne: jest.fn().mockResolvedValue(null) },
+      });
+      await expect(
+        service.createFromDriverAccount(
+          'usuario-3',
+          'viaje-1',
+          'otro',
+          'Descripción válida',
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('rechaza un viaje fuera de la ventana de 24 horas', async () => {
+      const service = buildService({
+        Choferes: {
+          findOne: jest.fn().mockResolvedValue({ id: 'chofer-1' }),
+        },
+        Viajes: {
+          findOne: jest.fn().mockResolvedValue({
+            id: 'viaje-1',
+            horaFinViaje: new Date(Date.now() - 25 * 60 * 60 * 1000),
+            servicio: { id: 'service-1' },
+          }),
+        },
+      });
+      await expect(
+        service.createFromDriverAccount(
+          'usuario-2',
+          'viaje-1',
+          'otro',
+          'Descripción válida',
+        ),
+      ).rejects.toBeInstanceOf(ConflictException);
+    });
+
+    it('reporta el servicio del viaje con la clave del chofer', async () => {
+      const servicio = { id: 'service-1', empleadaId: 'emp-1' };
+      const service = buildService({
+        Choferes: {
+          findOne: jest.fn().mockResolvedValue({ id: 'chofer-1' }),
+        },
+        Viajes: {
+          findOne: jest.fn().mockResolvedValue({
+            id: 'viaje-1',
+            horaFinViaje: new Date(Date.now() - 60_000),
+            servicio,
+          }),
+        },
+      }) as any;
+      const createVerified = jest.fn().mockResolvedValue({ id: 'report-2' });
+      service.createVerified = createVerified;
+
+      await service.createFromDriverAccount(
+        'usuario-2',
+        'viaje-1',
+        'seguridad',
+        'Descripción válida',
+      );
+
+      expect(createVerified).toHaveBeenCalledWith(
+        expect.objectContaining({
+          service: servicio,
+          origin: 'chofer',
+          driverId: 'chofer-1',
+          clientId: null,
+          reporterKey: 'chofer:chofer-1',
+        }),
+      );
+    });
+  });
+
   it('rejects reports after the 24 hour window', () => {
     const service = buildService() as any;
     const expired = new Date(Date.now() - 24 * 60 * 60 * 1000 - 1);
