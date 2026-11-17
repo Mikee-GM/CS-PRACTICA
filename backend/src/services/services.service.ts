@@ -9,6 +9,7 @@ import {
   OnModuleDestroy,
   BadRequestException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
@@ -71,6 +72,12 @@ import {
   calculateCardExtraSnapshot,
   EMPLOYEE_SERVICE_PERCENTAGE,
 } from './service-financial-calculator';
+import { ConversationNotifier } from '../conversations/conversation-notifier';
+import {
+  avisarAlChatWeb,
+  textoAvisoCancelacionPorDemora,
+  unaVez,
+} from './aviso-al-cliente-web';
 
 /**
  * Si una persona del equipo puede hacerse cargo de algo ahora.
@@ -240,6 +247,13 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
      */
     private readonly transportOperations: TransportOperationsService,
     private readonly serviceOperations: ServiceOperationsService,
+    /*
+     * Los avisos al cliente que reservo por la web. Opcional y al final por la
+     * misma razon que los anteriores: las pruebas arman este servicio a mano y
+     * sin el notificador el canal web simplemente no existe para ellas.
+     */
+    @Optional()
+    private readonly conversationNotifier?: ConversationNotifier,
   ) {}
 
   private estimatedEnd(service: Servicios): Date | null {
@@ -274,6 +288,23 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     } catch (err) {
       this.logger.error(`Error enviando el aviso push "${aviso.titulo}":`, err);
     }
+  }
+
+  /**
+   * El mismo aviso que el cliente recibe por Telegram, en su chat web. Va
+   * aparte del de Telegram, que no cambia, y no lo sustituye: un cliente con
+   * los dos canales lo recibe una vez en cada uno.
+   */
+  private avisarClienteWeb(
+    servicio: Servicios,
+    texto: string | (() => Promise<string>),
+  ): Promise<boolean> {
+    return avisarAlChatWeb(
+      this.conversationNotifier,
+      this.logger,
+      servicio,
+      texto,
+    );
   }
 
   /**
@@ -1605,26 +1636,27 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
     if (!avisarCliente) return;
 
-    const chatId = service.cliente?.telegramChatId;
-    if (!chatId) return;
-
     /*
      * El texto es fijo a proposito. Es un dato que el cliente tiene que leer
      * bien para presentarse a la hora correcta, y no puede quedar sujeto a que
      * el modelo de IA conteste, ni a como decida redactarlo.
      */
     const nombre = service.empleada?.nombreArtistico ?? 'tu cita';
-    try {
-      await this.bot.telegram.sendMessage(
-        chatId,
-        `Amor, te confirmo el cambio de horario: nuestra cita con ${nombre} queda para el ${nueva}. Cualquier cosa me dices por aquí.`,
-      );
-    } catch (error) {
-      this.logger.error(
-        'No se pudo avisar al cliente de la reprogramación:',
-        error,
-      );
+    const texto = `Amor, te confirmo el cambio de horario: nuestra cita con ${nombre} queda para el ${nueva}. Cualquier cosa me dices por aquí.`;
+
+    const chatId = service.cliente?.telegramChatId;
+    if (chatId) {
+      try {
+        await this.bot.telegram.sendMessage(chatId, texto);
+      } catch (error) {
+        this.logger.error(
+          'No se pudo avisar al cliente de la reprogramación:',
+          error,
+        );
+      }
     }
+
+    await this.avisarClienteWeb(service, texto);
   }
 
   /**
@@ -2067,18 +2099,21 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
     const yaConfirmado =
       estadoPrevio === 'agendado' || estadoPrevio === 'en_curso';
+    const redactarCancelacion = unaVez(() =>
+      this.aiMessageService.generate(
+        'service_cancelled',
+        { employeeName: service.empleada?.nombreArtistico },
+        yaConfirmado
+          ? 'Qué pena contigo, al final no voy a poder ir, discúlpame de verdad'
+          : 'Qué pena contigo, esta vez no voy a poder ir',
+      ),
+    );
 
     if (service.cliente?.telegramChatId || service.clienteTelegramId) {
       const chatId =
         service.cliente?.telegramChatId ?? service.clienteTelegramId!;
       try {
-        const mensaje = await this.aiMessageService.generate(
-          'service_cancelled',
-          { employeeName: service.empleada?.nombreArtistico },
-          yaConfirmado
-            ? 'Qué pena contigo, al final no voy a poder ir, discúlpame de verdad'
-            : 'Qué pena contigo, esta vez no voy a poder ir',
-        );
+        const mensaje = await redactarCancelacion();
         await this.bot.telegram.sendMessage(chatId, mensaje);
       } catch (err) {
         this.logger.error(
@@ -2087,6 +2122,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         );
       }
     }
+    await this.avisarClienteWeb(service, redactarCancelacion);
 
     if (yaConfirmado && service.empleadaId) {
       try {
@@ -2841,14 +2877,17 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
+    const redactarAceptacion = unaVez(() =>
+      this.aiMessageService.generate(
+        'service_accepted',
+        { employeeName: servicio.empleada.nombreArtistico },
+        'Oyeee, sí puedo ir contigo, nos vemos en un ratico',
+      ),
+    );
     // Notificar al cliente por Telegram si tiene telegramChatId
     if (servicio.cliente?.telegramChatId) {
       try {
-        const clientMessage = await this.aiMessageService.generate(
-          'service_accepted',
-          { employeeName: servicio.empleada.nombreArtistico },
-          'Oyeee, sí puedo ir contigo, nos vemos en un ratico',
-        );
+        const clientMessage = await redactarAceptacion();
         await this.bot.telegram.sendMessage(
           servicio.cliente.telegramChatId,
           clientMessage,
@@ -2865,6 +2904,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         );
       }
     }
+    // Sin `recordAgencyMessage`: en la web el aviso ya queda en el historial
+    // del chat, que es lo que ve el jefe.
+    await this.avisarClienteWeb(servicio, redactarAceptacion);
 
     // 5. Iniciar despacho de choferes por proximidad
     let uberLink: string | undefined;
@@ -3683,11 +3725,12 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       relatedEntityId: servicio.id,
       dedupeKey: `boss:service_extended:${servicio.id}:event`,
     });
+    const textoExtension = `La extensión de ${horas} hora${horas === 1 ? '' : 's'} quedó registrada.`;
     if (servicio.cliente?.telegramChatId) {
       try {
         await this.bot.telegram.sendMessage(
           servicio.cliente.telegramChatId,
-          `La extensión de ${horas} hora${horas === 1 ? '' : 's'} quedó registrada.`,
+          textoExtension,
         );
       } catch (error) {
         this.logger.warn(
@@ -3695,6 +3738,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         );
       }
     }
+    await this.avisarClienteWeb(servicio, textoExtension);
 
     // Se relee porque los totales los recalcula un trigger de la base.
     return (
@@ -3949,13 +3993,16 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     }
 
     // 4. Notificar al cliente via Telegram con opciones de reinicio
+    const redactarRechazo = unaVez(() =>
+      this.aiMessageService.generate(
+        'service_rejected',
+        { employeeName: servicio.empleada?.nombreArtistico },
+        'Qué pena contigo, esta vez no voy a poder ir',
+      ),
+    );
     if (servicio.clienteTelegramId) {
       try {
-        const clientMessage = await this.aiMessageService.generate(
-          'service_rejected',
-          { employeeName: servicio.empleada?.nombreArtistico },
-          'Qué pena contigo, esta vez no voy a poder ir',
-        );
+        const clientMessage = await redactarRechazo();
         await this.bot.telegram.sendMessage(
           servicio.clienteTelegramId,
           clientMessage,
@@ -3964,6 +4011,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         this.logger.error('Error notifying client of rejected service:', err);
       }
     }
+    await this.avisarClienteWeb(servicio, redactarRechazo);
 
     return servicio;
   }
@@ -3991,17 +4039,20 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       type: 'scheduled_service_eta_updated',
       data: next,
     });
-    if (next.cliente?.telegramChatId) {
-      const eta = next.horaInicioEstimada.toLocaleTimeString(APP_LOCALE, {
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZone: APP_TIME_ZONE,
-      });
-      const message = await this.aiMessageService.generateAgencyMessage(
+    const eta = next.horaInicioEstimada.toLocaleTimeString(APP_LOCALE, {
+      hour: '2-digit',
+      minute: '2-digit',
+      timeZone: APP_TIME_ZONE,
+    });
+    const redactarEta = unaVez(() =>
+      this.aiMessageService.generateAgencyMessage(
         'scheduled_eta_updated',
         { employeeName: next.empleada?.nombreArtistico, eta },
         `Soy el asistente de la agencia. La cita anterior se extendió; la nueva hora aproximada de llegada de ${next.empleada?.nombreArtistico || 'la empleada'} es ${eta}.`,
-      );
+      ),
+    );
+    if (next.cliente?.telegramChatId) {
+      const message = await redactarEta();
       // Va al cliente, asi que sale por el bot de la modelo como el resto de
       // los avisos suyos; el central solo sirve de respaldo.
       await this.bot.telegram
@@ -4009,6 +4060,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         .catch(() => undefined);
       await this.recordAgencyMessage(next, message);
     }
+    await this.avisarClienteWeb(next, redactarEta);
   }
 
   async activateScheduledSuccessor(
@@ -4036,18 +4088,22 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       next.horaInicioEstimada = next.horaInicioServicio;
       await this.serviciosRepository.save(next);
       await this.notifyScheduledServiceStarted(next.id);
-      if (next.cliente?.telegramChatId) {
-        const message = await this.aiMessageService.generateAgencyMessage(
+      const redactarDisponible = unaVez(() =>
+        this.aiMessageService.generateAgencyMessage(
           'employee_available',
           { employeeName: next.empleada?.nombreArtistico },
           `Soy el asistente de la agencia. ${next.empleada?.nombreArtistico || 'La empleada'} ya está disponible y se encuentra en la misma ubicación.`,
-        );
+        ),
+      );
+      if (next.cliente?.telegramChatId) {
+        const message = await redactarDisponible();
         await this.bot.telegram.sendMessage(
           next.cliente.telegramChatId,
           message,
         );
         await this.recordAgencyMessage(next, message);
       }
+      await this.avisarClienteWeb(next, redactarDisponible);
     } else {
       const provider = next.transporteAgendado ?? 'chofer';
       const trip = await this.viajesRepository.save(
@@ -4094,18 +4150,22 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           }
         }
       }
-      if (next.cliente?.telegramChatId) {
-        const message = await this.aiMessageService.generateAgencyMessage(
+      const redactarEnCamino = unaVez(() =>
+        this.aiMessageService.generateAgencyMessage(
           'employee_en_route',
           { employeeName: next.empleada?.nombreArtistico },
           `Soy el asistente de la agencia. ${next.empleada?.nombreArtistico || 'La empleada'} terminó su servicio anterior y ahora va en camino.`,
-        );
+        ),
+      );
+      if (next.cliente?.telegramChatId) {
+        const message = await redactarEnCamino();
         await this.bot.telegram.sendMessage(
           next.cliente.telegramChatId,
           message,
         );
         await this.recordAgencyMessage(next, message);
       }
+      await this.avisarClienteWeb(next, redactarEnCamino);
     }
     this.realtimeEventsService.emitToBoss(next.jefeId, {
       type: sameLocation
@@ -5134,11 +5194,13 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           dedupeKey: `boss:SERVICE_ENDING_SOON:${service.id}:event`,
         }),
       ]);
+      const textoFinProximo =
+        'El servicio termina en aproximadamente 15 minutos. Si deseas extenderlo, indícaselo a la empleada.';
       if (service.cliente?.telegramChatId) {
         try {
           await this.bot.telegram.sendMessage(
             service.cliente.telegramChatId,
-            'El servicio termina en aproximadamente 15 minutos. Si deseas extenderlo, indícaselo a la empleada.',
+            textoFinProximo,
           );
         } catch (error) {
           this.logger.warn(
@@ -5146,6 +5208,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           );
         }
       }
+      await this.avisarClienteWeb(service, textoFinProximo);
     }
   }
 
@@ -5353,6 +5416,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         this.logger.error('Error al notificar al cliente de cancelación:', err);
       }
     }
+    await this.avisarClienteWeb(
+      servicio,
+      textoAvisoCancelacionPorDemora(servicio.empleada?.nombreArtistico),
+    );
   }
 
   /**
@@ -7503,8 +7570,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       }
 
       if (trip.tipo === 'ida') {
-        if (trip.servicio.cliente?.telegramChatId) {
-          const clientMessage = await this.aiMessageService.generate(
+        const redactarTrayecto = unaVez(() =>
+          this.aiMessageService.generate(
             action === 'employee_arrived'
               ? 'employee_arrived'
               : 'employee_on_the_way',
@@ -7512,12 +7579,16 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             action === 'employee_arrived'
               ? 'Ya llegué al punto que cuadramos, aquí te espero'
               : 'Ya voy en camino, nos vemos pronto',
-          );
+          ),
+        );
+        if (trip.servicio.cliente?.telegramChatId) {
+          const clientMessage = await redactarTrayecto();
           await this.bot.telegram.sendMessage(
             trip.servicio.cliente.telegramChatId,
             clientMessage,
           );
         }
+        await this.avisarClienteWeb(trip.servicio, redactarTrayecto);
         if (trip.servicio.clienteId) {
           this.realtimeEventsService.emitToClient(trip.servicio.clienteId, {
             type: action,

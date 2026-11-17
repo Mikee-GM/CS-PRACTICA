@@ -3,6 +3,7 @@ import {
   Logger,
   OnModuleDestroy,
   OnModuleInit,
+  Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -18,6 +19,8 @@ import { AiMessageService } from '../ai/ai-message.service';
 import { describeError } from '../common/errors/error-message';
 import { APP_TIME_ZONE, APP_LOCALE } from '../common/locale';
 import { ServicesService } from './services.service';
+import { ConversationNotifier } from '../conversations/conversation-notifier';
+import { avisarAlChatWeb, unaVez } from './aviso-al-cliente-web';
 
 @Injectable()
 export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
@@ -36,6 +39,9 @@ export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
     private readonly aiMessageService: AiMessageService,
     private readonly dataSource: DataSource,
     private readonly servicesService: ServicesService,
+    // Opcional por lo mismo que en `ServicesService`: sin el no hay canal web.
+    @Optional()
+    private readonly conversationNotifier?: ConversationNotifier,
   ) {}
 
   onModuleInit() {
@@ -224,16 +230,19 @@ export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
         }
 
         // 3. Notificar al Cliente mediante la IA
+        const redactarRecordatorio = unaVez(() =>
+          this.aiMessageService.generate(
+            'appointment_reminder',
+            {
+              employeeName:
+                service.empleada?.nombreArtistico || 'Tu anfitriona',
+            },
+            `Hola amor, te confirmo que todo está listo para nuestra cita de las ${horaStr}, ya me estoy preparando.`,
+          ),
+        );
         if (service.cliente?.telegramChatId) {
           try {
-            const clientMsg = await this.aiMessageService.generate(
-              'appointment_reminder',
-              {
-                employeeName:
-                  service.empleada?.nombreArtistico || 'Tu anfitriona',
-              },
-              `Hola amor, te confirmo que todo está listo para nuestra cita de las ${horaStr}, ya me estoy preparando.`,
-            );
+            const clientMsg = await redactarRecordatorio();
             await this.bot.telegram.sendMessage(
               service.cliente.telegramChatId,
               clientMsg,
@@ -246,6 +255,12 @@ export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
             );
           }
         }
+        await avisarAlChatWeb(
+          this.conversationNotifier,
+          this.logger,
+          service,
+          redactarRecordatorio,
+        );
       }
     }
   }

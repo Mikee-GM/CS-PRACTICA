@@ -24,6 +24,7 @@ import { DisciplineModule } from '../discipline/discipline.module';
 import { UploadModule } from '../upload/upload.module';
 import { ExtensionsModule } from '../extensions/extensions.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { ConversationNotifierModule } from '../conversations/conversation-notifier.module';
 import { ServiceOperationsService } from './operations/service-operations.service';
 import { ServiceOperationEvent } from './operations/entities/service-operation-event.entity';
 import { ExtensionesServicio } from '../service-extensions/entities/service-extension.entity';
@@ -73,6 +74,9 @@ import { ServiceScheduleScheduler } from './service-schedule.scheduler';
     UploadModule,
     NotificationsModule,
     ExtensionsModule,
+    // Los avisos al chat web del cliente. Su modulo propio y no
+    // `ConversationsModule`, para no cerrar un ciclo con el turno de la IA.
+    ConversationNotifierModule,
   ],
   controllers: [
     ServicesController,
