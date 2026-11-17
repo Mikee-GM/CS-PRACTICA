@@ -4,17 +4,24 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { GetUser } from '../auth/decorators/get-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { SesionActual } from '../auth/decorators/sesion-actual.decorator';
 import { CsrfGuard } from '../auth/guards/csrf.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Usuarios } from '../users/entities/user.entity';
-import { ClientAccountsService } from './client-accounts.service';
+import {
+  ClientAccountsService,
+  PerfilDelCliente,
+} from './client-accounts.service';
+import { ChangeClientPasswordDto } from './dto/change-client-password.dto';
+import { UpdateClientProfileDto } from './dto/update-client-profile.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 
 /**
@@ -31,6 +38,38 @@ export class ClientAccountsController {
   @Roles('cliente')
   me(@GetUser() actor: Usuarios) {
     return this.clientAccountsService.me(actor.id);
+  }
+
+  @Get('me/perfil')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('cliente')
+  perfil(@GetUser() actor: Usuarios): Promise<PerfilDelCliente> {
+    return this.clientAccountsService.perfil(actor.id);
+  }
+
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Patch('me')
+  @UseGuards(JwtAuthGuard, RolesGuard, CsrfGuard)
+  @Roles('cliente')
+  actualizar(
+    @GetUser() actor: Usuarios,
+    @Body() dto: UpdateClientProfileDto,
+  ): Promise<{ nombre: string }> {
+    return this.clientAccountsService.actualizarNombre(actor.id, dto.nombre);
+  }
+
+  // `@SesionActual()` depende de que JwtAuthGuard ya haya verificado el token.
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('me/password')
+  @UseGuards(JwtAuthGuard, RolesGuard, CsrfGuard)
+  @Roles('cliente')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async cambiarPassword(
+    @GetUser() actor: Usuarios,
+    @SesionActual() sesion: SesionActual,
+    @Body() dto: ChangeClientPasswordDto,
+  ): Promise<void> {
+    await this.clientAccountsService.cambiarPassword(actor.id, sesion, dto);
   }
 
   @Throttle({ default: { limit: 10, ttl: 60_000 } })

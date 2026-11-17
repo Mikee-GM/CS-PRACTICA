@@ -12,6 +12,15 @@ const cookieExtractor = (request: { signedCookies?: Record<string, string> }) =>
   request?.signedCookies?.[ACCESS_COOKIE] ?? null;
 
 /**
+ * Exportado para que `@SesionActual()` lea exactamente el mismo token que esta
+ * estrategia verifico, y no otro que viniera en la peticion.
+ */
+export const extraerAccessToken = ExtractJwt.fromExtractors([
+  ExtractJwt.fromAuthHeaderAsBearerToken(),
+  cookieExtractor,
+]);
+
+/**
  * Cuanto sigue valiendo un access token cuya sesion acaba de rotar. Es el mismo
  * margen que `AuthService.refresh` da a dos renovaciones que se cruzan.
  */
@@ -34,10 +43,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     configService: ConfigService,
   ) {
     super({
-      jwtFromRequest: ExtractJwt.fromExtractors([
-        ExtractJwt.fromAuthHeaderAsBearerToken(),
-        cookieExtractor,
-      ]),
+      jwtFromRequest: extraerAccessToken,
       ignoreExpiration: false,
       // Sin fallback: si falta el secreto el proceso no arranca, que es
       // preferible a arrancar firmando con una clave publicada en el repo.

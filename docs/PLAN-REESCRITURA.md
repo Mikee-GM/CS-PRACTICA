@@ -942,3 +942,41 @@ Pendiente:
   conviene un `code` estable.
 - Definir que limita una cuenta `restringida` y a que canal remitir.
 - No hay recuperacion de contrasena olvidada (depende del proveedor de correo).
+
+### Fase 4 (backend)
+
+Perfil del cliente, edicion de nombre y cambio de contrasena, en
+`ClientAccountsModule`.
+
+- Rutas, todas `JwtAuthGuard` + `RolesGuard` + `@Roles('cliente')`:
+  `GET /client-accounts/me/perfil` devuelve `{ nombre, email, correoVerificado,
+  miembroDesde, servicios, calificacion: { promedio, cantidad }, nivel: { codigo,
+  nombre }, estado: 'activa'|'restringida' }`, lista cerrada copiada campo por
+  campo; sin ficha 404. `PATCH /client-accounts/me` (`CsrfGuard`, 10/min)
+  recibe `{ nombre }` 1..255 y responde `{ nombre }`. `POST
+  /client-accounts/me/password` (`CsrfGuard`, 5/min) recibe `{ actual, nueva }` y
+  responde 204; una actual incorrecta (o cuenta inexistente, comparada contra un
+  hash de relleno) responde 400 generico; una nueva igual a la actual, 400.
+- Calificacion recibida: mismo criterio que `DisciplineService.ratingSummary`
+  (`employee_to_client`, sin `pending` ni `overturned`); con menos de
+  `MINIMO_DE_CALIFICACIONES = 3` el promedio es `null` y la cantidad se devuelve
+  igual. No se expone comentario, quien califico ni ids.
+- Estado: `restringida` si hay una suspension o expulsion vigente del cliente,
+  leida por SQL directo en `disciplinary_sanctions`. No se inyecta
+  `DisciplineService`: cerraria un ciclo de modulos y su `getActiveSanction`
+  escribe. Nunca se expone motivo, tipo ni fechas.
+- Nivel: `calcularNivel` en `nivel-del-cliente.service.ts`, fija en `inicial`
+  hasta que el dueno defina los niveles; es el unico lugar que debe cambiar. No
+  usa `LoyaltyTier` ni `ClientMembership`. Sin migracion.
+- Cambio de contrasena: hash nuevo y revocacion de las demas `AuthSession` del
+  usuario en una transaccion; se conserva la familia de la sesion actual, no solo
+  su `sid`, para no revocar la sesion que nace de una renovacion cruzada.
+- `@SesionActual()` (`auth/decorators/sesion-actual.decorator.ts`) relee el access
+  token con el mismo extractor que `JwtStrategy` (ahora exportado como
+  `extraerAccessToken`) y lo decodifica; solo es seguro detras de `JwtAuthGuard`.
+
+Pendiente:
+
+- Probar contra Postgres real las consultas de calificacion, servicios y
+  sancion y el UPDATE de revocacion; probar las rutas de punta a punta.
+- Definir con el dueno los niveles del cliente y cambiar solo `calcularNivel`.

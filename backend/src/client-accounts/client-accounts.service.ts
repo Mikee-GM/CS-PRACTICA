@@ -10,12 +10,21 @@ import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcryptjs';
 import { createHash, randomBytes } from 'crypto';
 import { DataSource, EntityManager, IsNull, Repository } from 'typeorm';
+import type { SesionActual } from '../auth/decorators/sesion-actual.decorator';
+import { AuthSession } from '../auth/entities/auth-session.entity';
 import { describeError } from '../common/errors/error-message';
 import { Mailer } from '../common/mail/mailer';
 import { Clientes } from '../clients/entities/client.entity';
 import { Usuarios } from '../users/entities/user.entity';
+import { ChangeClientPasswordDto } from './dto/change-client-password.dto';
 import { RegisterClientDto } from './dto/register-client.dto';
 import { VerificacionCorreo } from './entities/email-verification.entity';
+import { NivelDelClienteService } from './nivel-del-cliente.service';
+import {
+  calificacionDelCliente,
+  serviciosFinalizados,
+  tieneSancionVigente,
+} from './perfil-del-cliente';
 
 /** Vigencia del enlace de verificacion. */
 const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
@@ -29,6 +38,30 @@ export type CuentaCliente = {
   nombre: string | null;
   correoVerificado: boolean;
 };
+
+/**
+ * Lo que el cliente ve de si mismo. Lista cerrada a proposito: nada de ids
+ * internos, de quien califico ni del comentario de la calificacion, que es
+ * interno del equipo; y de una sancion solo que existe, nunca su motivo.
+ */
+export type PerfilDelCliente = {
+  nombre: string | null;
+  email: string;
+  correoVerificado: boolean;
+  miembroDesde: string;
+  servicios: number;
+  calificacion: { promedio: number | null; cantidad: number };
+  nivel: { codigo: string; nombre: string };
+  estado: 'activa' | 'restringida';
+};
+
+/**
+ * Hash bcrypt de una cadena cualquiera. Si la cuenta no aparece se compara
+ * contra el igualmente, para que la respuesta tarde lo mismo que con una
+ * contraseña incorrecta.
+ */
+const HASH_DE_RELLENO =
+  '$2b$10$Snj1RqaARDJOI4JxP4lwpOx3du9nk9eCGVDCa2r/FIyHKycekbTE.';
 
 @Injectable()
 export class ClientAccountsService {
@@ -44,6 +77,9 @@ export class ClientAccountsService {
     private readonly verificacionesRepository: Repository<VerificacionCorreo>,
     private readonly mailer: Mailer,
     private readonly configService: ConfigService,
+    // Con valor por defecto porque la regla del nivel es una funcion pura sin
+    // dependencias: quien construye el servicio a mano no tiene que pasarla.
+    private readonly nivelDelCliente: NivelDelClienteService = new NivelDelClienteService(),
   ) {}
 
   /**
@@ -180,6 +216,107 @@ export class ClientAccountsService {
       nombre: cliente.usuario.nombre,
       correoVerificado: cliente.correoVerificadoAt !== null,
     };
+  }
+
+  async perfil(usuarioId: string): Promise<PerfilDelCliente> {
+    const cliente = await this.clientesRepository.findOne({
+      where: { usuarioId },
+      relations: { usuario: true },
+    });
+    if (!cliente?.usuario) throw new NotFoundException('Cuenta no encontrada');
+
+    const [calificacion, servicios, restringida] = await Promise.all([
+      calificacionDelCliente(this.dataSource, cliente.id),
+      serviciosFinalizados(this.dataSource, cliente.id),
+      tieneSancionVigente(this.dataSource, cliente.id),
+    ]);
+    const nivel = this.nivelDelCliente.de({
+      serviciosFinalizados: servicios,
+      calificacion: calificacion.promedio,
+      miembroDesde: cliente.createdAt,
+    });
+
+    // Se copian campo por campo para que un dato que se añada mañana a esas
+    // estructuras no llegue al cliente sin que alguien lo decida.
+    return {
+      nombre: cliente.usuario.nombre,
+      email: cliente.usuario.email,
+      correoVerificado: cliente.correoVerificadoAt !== null,
+      miembroDesde: cliente.createdAt.toISOString(),
+      servicios,
+      calificacion: {
+        promedio: calificacion.promedio,
+        cantidad: calificacion.cantidad,
+      },
+      nivel: { codigo: nivel.codigo, nombre: nivel.nombre },
+      estado: restringida ? 'restringida' : 'activa',
+    };
+  }
+
+  /** UPDATE de una sola columna: un `save` de la entidad pisaria lo demas. */
+  async actualizarNombre(
+    usuarioId: string,
+    nombre: string,
+  ): Promise<{ nombre: string }> {
+    const resultado = await this.usuariosRepository.update(
+      { id: usuarioId, rol: 'cliente' },
+      { nombre },
+    );
+    if (!resultado.affected) {
+      throw new NotFoundException('Cuenta no encontrada');
+    }
+    return { nombre };
+  }
+
+  /**
+   * Cambia la contraseña y cierra las demas sesiones de la cuenta.
+   *
+   * Quien cambia la contraseña suele hacerlo porque sospecha que otro la
+   * conoce: dejar vivas sus sesiones haria inutil el cambio. Se conserva la
+   * familia de la sesion actual (y no solo su `sid`) porque una renovacion
+   * que se cruce con esta peticion crea una sesion nueva en la misma familia,
+   * y revocarla dejaria fuera a quien acaba de cambiar su propia contraseña.
+   */
+  async cambiarPassword(
+    usuarioId: string,
+    sesion: SesionActual,
+    dto: ChangeClientPasswordDto,
+  ): Promise<void> {
+    const usuario = await this.usuariosRepository
+      .createQueryBuilder('u')
+      .addSelect('u.passwordHash')
+      .where('u.id = :usuarioId', { usuarioId })
+      .andWhere("u.rol = 'cliente'")
+      .getOne();
+    const coincide = await bcrypt.compare(
+      dto.actual,
+      usuario?.passwordHash ?? HASH_DE_RELLENO,
+    );
+    if (!usuario || !coincide) {
+      throw new BadRequestException('La contraseña actual no es correcta');
+    }
+    if (dto.nueva === dto.actual) {
+      throw new BadRequestException(
+        'La nueva contraseña debe ser distinta de la actual',
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(dto.nueva, 10);
+    await this.dataSource.transaction(async (manager) => {
+      await manager.update(Usuarios, { id: usuarioId }, { passwordHash });
+      const revocar = manager
+        .createQueryBuilder()
+        .update(AuthSession)
+        .set({ revokedAt: () => 'now()' })
+        .where('user_id = :usuarioId AND revoked_at IS NULL', { usuarioId })
+        .andWhere('id <> :sid', { sid: sesion.sid });
+      if (sesion.familyId) {
+        revocar.andWhere('family_id <> :familyId', {
+          familyId: sesion.familyId,
+        });
+      }
+      await revocar.execute();
+    });
   }
 
   private async crearToken(
