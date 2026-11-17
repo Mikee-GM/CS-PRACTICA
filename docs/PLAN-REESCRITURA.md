@@ -76,8 +76,24 @@ ahora rompe los despliegues existentes.
   `@Roles` olvidado en el personal no quede abierto a cuentas que cualquiera
   puede crear.
 - El login ya no distingue mayusculas en el correo.
-- Pendiente de la fase: paginas de registro, login de cliente y
-  `/verificar-correo` en el frontend; el middleware debe conocer el rol.
 - La migracion `1811000000000-AddClientAccounts` no se ha ejecutado contra una
   base real (Docker no estaba disponible); hay que correr
   `corepack pnpm migration:run` antes de desplegar.
+
+### Fase 1 (frontend)
+
+- Paginas `/registro`, `/ingresar`, `/verificar-correo` y `/cuenta`, con marco
+  comun (`AuthShell`) y campos con validacion diferida (`Campo`): el error
+  aparece al salir del campo o al intentar enviar, nunca mientras se escribe, y
+  se refleja en `aria-invalid`.
+- La confirmacion del correo es un boton, no una llamada automatica: los
+  antivirus y previsualizaciones abren los enlaces de los correos.
+- El middleware conoce el rol `cliente`: `/cuenta` sin sesion va a `/ingresar`
+  (no al login del panel) y el personal que llegue ahi vuelve a su inicio.
+- `apiFetch` acepta `loginPath` para que una sesion caducada en pantallas de
+  cliente no mande al login del panel.
+- Pendiente: enlace de acceso en el catalogo publico; verificacion visual en
+  navegador (no se ha abierto la aplicacion corriendo).
+- El build de Next compila, pero `next build` falla en el chequeo de tipos por
+  `@playwright/test` y `@testing-library/react`, que no estan instalados en
+  este entorno; hay que correr `pnpm install` antes de comprobarlo.

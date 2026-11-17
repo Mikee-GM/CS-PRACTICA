@@ -107,3 +107,52 @@ describe("middleware: reescritura de /api hacia el backend", () => {
     expect(enviada).toBe("access_token=s:valor.firma");
   });
 });
+
+describe("middleware: area del cliente", () => {
+  const original = global.fetch;
+  afterEach(() => {
+    global.fetch = original;
+  });
+
+  /** Ruta a la que redirigio la respuesta, sea el `Location` absoluto o relativo. */
+  function destino(respuesta: Response): string | null {
+    const ubicacion = respuesta.headers.get("location");
+    return ubicacion
+      ? new URL(ubicacion, "https://colombia-sexys.test").pathname
+      : null;
+  }
+
+  /** El backend responde a `/auth/me` con el rol dado. */
+  function backendConRol(rol: string) {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ rol }),
+    }) as unknown as typeof fetch;
+  }
+
+  it("manda al login de cliente, no al del panel, si no hay sesion", async () => {
+    const respuesta = await middleware(peticion("/cuenta"));
+
+    expect(destino(respuesta)).toBe("/ingresar");
+  });
+
+  it("deja pasar a un cliente con sesion", async () => {
+    backendConRol("cliente");
+
+    const respuesta = await middleware(
+      peticion("/cuenta", { access_token: "s:valor.firma" }),
+    );
+
+    expect(destino(respuesta)).toBeNull();
+  });
+
+  it("devuelve al personal a su propio inicio", async () => {
+    backendConRol("jefe");
+
+    const respuesta = await middleware(
+      peticion("/cuenta", { access_token: "s:valor.firma" }),
+    );
+
+    expect(destino(respuesta)).toBe("/jefe");
+  });
+});

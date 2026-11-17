@@ -373,6 +373,31 @@ export async function middleware(request: NextRequest) {
   }
 
   /*
+   * 3. Area del cliente.
+   *
+   * Sin sesion se manda al login de cliente, no al del panel. El rol se
+   * comprueba contra el backend, como en /admin: una cuenta del personal que
+   * llegue aqui vuelve a su propio inicio.
+   */
+  if (pathname === "/cuenta") {
+    const renovadas = await renovarSiHaceFalta(request);
+    if (!request.cookies.has(ACCESS_COOKIE)) {
+      return redirectFromRequest(request, "/ingresar");
+    }
+    const sesion = await rolDeLaSesion(buildCookieHeader(request));
+    if (sesion.estado === "sin-sesion") {
+      return redirectFromRequest(request, "/ingresar");
+    }
+    if (sesion.estado === "ok" && sesion.rol !== "cliente") {
+      return redirectFromRequest(request, inicioParaRol(sesion.rol));
+    }
+    return conCookies(
+      NextResponse.next({ request: { headers: request.headers } }),
+      renovadas,
+    );
+  }
+
+  /*
    * Todo lo demas del matcher, que renueva igual.
    *
    * Aqui caen los ajustes de cada portal y, sobre todo, `/api/realtime/sse`:
@@ -409,5 +434,10 @@ export const config = {
     "/chofer/portal",
     "/chofer/servicio",
     "/chofer/ajustes",
+    // Acceso del cliente: renuevan la sesion para que quien ya tiene cuenta no
+    // vea el formulario con un acceso caducado.
+    "/cuenta",
+    "/ingresar",
+    "/registro",
   ],
 };

@@ -24,6 +24,11 @@ type ApiFetchOptions = RequestInit & {
    * compartir datos privados entre usuarios.
    */
   next?: NextFetchRequestConfig;
+  /**
+   * Adonde mandar cuando la sesion no existe o caduco. Por defecto el login del
+   * panel; las pantallas de cliente piden el suyo.
+   */
+  loginPath?: string;
 };
 
 /** Conserva el estado HTTP para distinguir un registro ausente de un fallo. */
@@ -36,13 +41,20 @@ export class ApiError extends Error {
 
 export async function apiFetch<T>(
   path: string,
-  { authenticated = true, headers, cache, next, ...options }: ApiFetchOptions = {},
+  {
+    authenticated = true,
+    headers,
+    cache,
+    next,
+    loginPath = "/admin",
+    ...options
+  }: ApiFetchOptions = {},
 ): Promise<T> {
   const cookie = authenticated ? await getBackendCookieHeader() : "";
   const csrfToken = authenticated ? await getCsrfToken() : undefined;
 
   if (authenticated && !cookie.includes(`${ACCESS_COOKIE}=`)) {
-    redirect("/admin");
+    redirect(loginPath);
   }
 
   // Las respuestas autenticadas nunca se cachean: llevan datos por usuario.
@@ -77,7 +89,7 @@ export async function apiFetch<T>(
   if (!response.ok) {
     if (response.status === 401) {
       if (authenticated) {
-        redirect("/admin");
+        redirect(loginPath);
       }
     }
 

@@ -13,7 +13,7 @@ import { getApiBaseUrl } from "@/lib/api-server";
 import { inicioParaRol } from "@/lib/roles";
 
 /** Los roles que tienen a donde ir. Cualquier otro no entra. */
-const INICIO_CONOCIDO = ["admin", "jefe", "empleada", "chofer"];
+const INICIO_CONOCIDO = ["admin", "jefe", "empleada", "chofer", "cliente"];
 
 /**
  * Inicio de sesion.

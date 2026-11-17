@@ -6,7 +6,7 @@
  * divergieran, una mandaria al usuario justo a donde la otra no le deja entrar.
  */
 
-export type Rol = "admin" | "jefe" | "empleada" | "chofer";
+export type Rol = "admin" | "jefe" | "empleada" | "chofer" | "cliente";
 
 /** Roles admitidos en cada area protegida. El admin entra en todas. */
 export const ROLES_POR_AREA: Record<"admin" | "jefe", readonly string[]> = {
@@ -20,6 +20,7 @@ const INICIO_POR_ROL: Record<string, string> = {
   jefe: "/jefe",
   empleada: "/empleada/portal",
   chofer: "/chofer/portal",
+  cliente: "/cuenta",
 };
 
 /**

@@ -22,8 +22,11 @@ import { broadcastLogout } from "@/lib/client-session";
  */
 export default function CerrarSesion({
   className,
+  destino = "/admin",
 }: {
   className?: string;
+  /** A donde llevar tras cerrar: el login del panel, salvo que se indique. */
+  destino?: string;
 }) {
   const router = useRouter();
   const [pendiente, startTransition] = useTransition();
@@ -33,7 +36,7 @@ export default function CerrarSesion({
       try {
         await logoutAction();
         broadcastLogout();
-        router.replace("/admin");
+        router.replace(destino);
       } catch {
         toast.error("No se pudo cerrar la sesión. Intenta de nuevo.");
       }
