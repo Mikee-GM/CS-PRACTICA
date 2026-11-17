@@ -855,3 +855,64 @@ Pendiente:
 - Lo revisado de cada post vive en memoria.
 - Publicar como jefe (`POST /staff/posts`, media, `/publish`) queda para un paso
   posterior.
+
+## Fase 5: personal sin Telegram (plan y decisiones)
+
+Objetivo: que ningun rol (admin, jefe, empleada, chofer, candidata) necesite
+Telegram para entrar, operar ni enterarse de nada. Estrategia: reemplazar la
+funcion y despues borrar; no se porta ningun handler de Telegram. Al terminar,
+`telegram/` y `telegram-conversations/` quedan sin consumidores fuera de sus
+carpetas (salvo columnas y entidades) y la Fase 6 es solo borrar.
+
+### Decisiones tomadas (recomendaciones del planificador)
+
+1. Sin proveedor de correo, el restablecimiento de contrasena lo hace el admin
+   (o el jefe sobre su equipo) con contrasena temporal y cambio forzado en el
+   primer acceso. El flujo por correo llega cuando haya proveedor.
+2. Un solo login para todos los roles: `/ingresar`. `/admin` sin sesion
+   redirige ahi.
+3. Fotos semanales: al quitar el filtro por `telegramChatId`, todas las modelos
+   pasan a estar sujetas a la multa; se da una semana de gracia sin multa.
+4. `modo_bot` se retira del reparto de choferes y del aviso a la empleada: todos
+   usan la plataforma.
+5. Se conservan los dos sistemas de reporte (`conduct_reports` y
+   `employee_reports`) y se da entrada web al segundo desde el chat del cliente y
+   el portal del chofer.
+6. Servicio grupal del cliente web: el jefe elige las modelos en `/jefe/grupos`;
+   el cliente conversa, ve la cotizacion y manda el comprobante.
+7. Recordatorio del reglamento: push a las 3 h y despues una vez al dia, con
+   tope.
+8. El reglamento no bloquea nada (solo fija trust score y orden de candidatas).
+9. Reparto de choferes: se ignoran ubicaciones con mas de 15 minutos de
+   antiguedad y el jefe ve cuando la ubicacion esta vieja.
+
+### No se porta (aprobado por recomendacion)
+
+Comandos de admin sobre clientes de Telegram (`/pausarbot`, `/enviar`,
+`/chats`, espia...), grupo del jefe con temas, enrutado de la IA hacia el jefe
+por Telegram y su infraestructura (guardia de callbacks, cola de envio),
+`/panel`, `/portal` y deep links, fotos exclusivas para clientes (diferidas),
+trio y "otras modelos / modelo ocupada", wizards de servicio manual por botones,
+alerta de sentimiento (solo si se porta la calificacion del cliente con
+comentario), y los schedulers de borrado de mensajes y mantenimiento de sesion.
+
+### Etapas
+
+- Etapa 1 (secuencial): B-acceso (cambio de contrasena propio, restablecimiento
+  por admin con contrasena temporal, `debe_cambiar_password`) y F-acceso (un
+  solo login, portales sin token redirigen al login, cambio forzado).
+- Etapa 2 (carriles en paralelo, archivos disjuntos): B-onboarding (reglamento y
+  cuestionario web), B-candidatas (evaluacion publica por token), B-chofer
+  (disponibilidad y frescura de ubicacion), B-calificaciones-cliente
+  (calificar, reportar y volver a contratar desde el chat; choferes por
+  calificar), B-schedulers (weekly-content, challenges, recordatorios sin
+  Telegram), B-grupos (G1-G5) y B-emisores (quitar ~55 envios de
+  `services.service.ts` y los de `driver-trips`, con su gemelo web).
+- Etapa 3 (secuencial): B-portales (`JwtAuthGuard` + roles en lugar de
+  `PortalAuthGuard`, borrar `portal-session`, canje de token y
+  `Telegram.WebApp`), B-panel-access (borrar pases), limpieza de bandejas de
+  Telegram, mover `CustomerBookingSession` a `booking/entities/`, prueba de
+  aceptacion con Telegram desactivado.
+
+Metrica de avance (debe bajar a cero fuera de las carpetas de Telegram):
+`rg -l "telegram.service|telegram.module|InjectBot|telegram-link-code|telegram-portal-buttons" backend/src --glob '!backend/src/telegram/**' --glob '!backend/src/telegram-conversations/**' --glob '!**/*.spec.ts'`
