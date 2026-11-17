@@ -6,6 +6,8 @@ describe("destinoSeguroDelCliente", () => {
     ["/chats?modelo=0f4e2c1a-1b2c-4d5e-8f90-123456789abc", "/chats?modelo=0f4e2c1a-1b2c-4d5e-8f90-123456789abc"],
     ["/chats/0f4e2c1a-1b2c-4d5e-8f90-123456789abc", "/chats/0f4e2c1a-1b2c-4d5e-8f90-123456789abc"],
     ["/cuenta", "/cuenta"],
+    ["/feed", "/feed"],
+    ["/modelos/valentina-rios", "/modelos/valentina-rios"],
   ])("admite la pantalla del cliente %s", (entrada, esperado) => {
     expect(destinoSeguroDelCliente(entrada)).toBe(esperado);
   });
@@ -20,6 +22,15 @@ describe("destinoSeguroDelCliente", () => {
     "/chatsx",
     "/chats/../admin",
     "/chats/%2e%2e/admin",
+    "/feedx",
+    "/feed/otra-cosa",
+    "/modelos",
+    "/modelos/",
+    "/modelos/valentina/fotos",
+    "/modelos/../admin",
+    "/modelos/ana%20maria",
+    "/modelos/<script>",
+    "//modelos/valentina",
     "",
   ])("rechaza %s", (entrada) => {
     expect(destinoSeguroDelCliente(entrada)).toBeNull();

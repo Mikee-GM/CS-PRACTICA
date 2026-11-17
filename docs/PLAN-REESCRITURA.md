@@ -578,3 +578,30 @@ Pendiente:
   real: trigger, cascada, UNIQUE diferido, CHECKs e indices.
 - WebM se reconoce solo por la cabecera EBML: un Matroska que no sea WebM pasa
   como `video/webm`.
+
+### Fase 3, F0 y F1 (base del frontend del feed y componentes)
+
+- `lib/posts.ts` (probado en `lib/posts.spec.ts`): tipos del contrato
+  (`PostDelFeed`, `PaginaDeFeed`, `EstadoMeGusta`), `rutaDelFeed`, `unirPaginas`
+  (sin duplicados), me gusta como "confirmado + deseado" (un doble toque no cruza
+  un PUT y un DELETE), textos en hora de Mexico y `REGLAS_DE_MEDIA` /
+  `validarMediaLocal` / `ACEPTA_MEDIA` para el portal de la modelo.
+- `Modelo.slug` desde `slugCatalogo`; `destinoSeguroDelCliente` admite `/feed` y
+  `/modelos/<slug>`; middleware: `/feed` en la rama del cliente y `/modelos` solo
+  renueva sesion (perfil publico).
+- `components/feed/`: `TarjetaPost`, `BotonMeGusta`, `CarruselMedia` (scroll
+  nativo con snap local, navegacion finita), `VideoPost` (sin autoplay,
+  `preload="none"`, pausa fuera de pantalla) y `ListaPosts` ("Cargar mas").
+
+Pendiente:
+
+- F2: paginas `/feed` y `/modelos/[slug]` (sin sesion, ficha sin posts).
+- Verificacion en navegador y contra backend real; los componentes no tienen
+  pruebas por falta de `jest-environment-jsdom`.
+- `slugCatalogo` no tiene formato validado en el backend (convendria
+  `^[a-z0-9-]+$`).
+- Sin texto alternativo por imagen ni subtitulos de video.
+- `next.config.ts` debe admitir el dominio publico de R2 si no es `*.r2.dev`.
+- Sin tope por imagen; decidir en F3 si se sube una media por peticion por el
+  limite de 20 MB de Next.
+- Carrusel sin vuelta al principio.

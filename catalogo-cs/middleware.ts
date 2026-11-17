@@ -383,8 +383,14 @@ export async function middleware(request: NextRequest) {
    * enlace a una conversacion concreta no debe acabar en la bandeja--. Lo que
    * se le pase ahi lo valida `destinoSeguroDelCliente` al usarlo.
    */
+  /*
+   * El feed tambien: solo lo ve un cliente con sesion. El perfil de una modelo
+   * (`/modelos/<slug>`) no entra aqui a proposito: es publico, sin sesion se ve
+   * la ficha sin publicaciones, y solo pasa por el matcher para renovar.
+   */
   if (
     pathname === "/cuenta" ||
+    pathname === "/feed" ||
     pathname === "/chats" ||
     pathname.startsWith("/chats/")
   ) {
@@ -448,6 +454,10 @@ export const config = {
     "/cuenta",
     "/chats",
     "/chats/:path*",
+    "/feed",
+    // Solo renueva: el perfil es publico y no exige sesion, pero con ella
+    // caducada se veria como si no la hubiera y faltarian las publicaciones.
+    "/modelos/:path*",
     "/ingresar",
     "/registro",
   ],

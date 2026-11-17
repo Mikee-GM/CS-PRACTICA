@@ -15,6 +15,7 @@ export function mapToModelo(emp: any): Modelo {
     nombre: emp.nombreArtistico, // Mapeado por compatibilidad
     nombreReal: emp.nombreReal || "",
     nombreArtistico: emp.nombreArtistico || "",
+    slug: emp.slugCatalogo || null,
     descripcion: emp.descripcion || "",
     estiloHabla: emp.estiloHabla || "",
     politicaBesos: emp.politicaBesos ?? null,

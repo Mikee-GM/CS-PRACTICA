@@ -23,6 +23,8 @@ export interface Modelo {
   nombre: string; // Mapea a nombreArtistico por compatibilidad con vistas publicas
   nombreReal: string;
   nombreArtistico: string;
+  /** `slugCatalogo` del backend: la ruta del perfil publico, `/modelos/<slug>`. */
+  slug?: string | null;
   descripcion: string;
   /** Sello propio de habla, se inyecta en el prompt de la IA. */
   estiloHabla?: string;

@@ -156,7 +156,7 @@ describe("middleware: area del cliente", () => {
     expect(destino(respuesta)).toBe("/jefe");
   });
 
-  describe.each(["/chats", "/chats/0f4e2c1a-1b2c-4d5e-8f90-123456789abc"])(
+  describe.each(["/chats", "/chats/0f4e2c1a-1b2c-4d5e-8f90-123456789abc", "/feed"])(
     "chats del cliente (%s)",
     (ruta) => {
       it("sin sesion manda al login de cliente y recuerda a donde volver", async () => {
@@ -212,7 +212,46 @@ describe("middleware: area del cliente", () => {
     };
 
     expect(config.matcher).toEqual(
-      expect.arrayContaining(["/chats", "/chats/:path*"]),
+      expect.arrayContaining(["/chats", "/chats/:path*", "/feed", "/modelos/:path*"]),
     );
+  });
+
+  describe("perfil publico de una modelo", () => {
+    it("sin sesion se sirve, sin mandar al login", async () => {
+      const respuesta = await middleware(peticion("/modelos/valentina"));
+
+      expect(destino(respuesta)).toBeNull();
+    });
+
+    it("con el acceso caducado renueva y guarda las cookies nuevas", async () => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        headers: new Headers({
+          "set-cookie": "access_token=nuevo; Path=/; HttpOnly",
+        }),
+      }) as unknown as typeof fetch;
+
+      const respuesta = await middleware(
+        peticion("/modelos/valentina", { refresh_token: "s:refresco.firma" }),
+      );
+
+      expect(destino(respuesta)).toBeNull();
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.objectContaining({ pathname: `${BACKEND_API_PREFIX}/auth/refresh` }),
+        expect.objectContaining({ method: "POST" }),
+      );
+      expect(respuesta.headers.get("set-cookie")).toMatch(/access_token=nuevo/);
+    });
+
+    it("no le pregunta el rol al backend: un empleado tambien puede verlo", async () => {
+      global.fetch = jest.fn() as unknown as typeof fetch;
+
+      const respuesta = await middleware(
+        peticion("/modelos/valentina", { access_token: "s:valor.firma" }),
+      );
+
+      expect(destino(respuesta)).toBeNull();
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
   });
 });

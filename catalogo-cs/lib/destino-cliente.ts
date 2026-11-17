@@ -10,8 +10,20 @@
  */
 const PREFIJOS_PERMITIDOS = ["/chats", "/cuenta"] as const;
 
+/** El feed no tiene subrutas: `/feed/lo-que-sea` no es una pantalla. */
+const RUTAS_EXACTAS = ["/feed"] as const;
+
 /** Ids de conversacion y de modelo: uuids o slugs sencillos. */
 const SEGMENTO_SEGURO = /^[A-Za-z0-9-]+$/;
+
+/**
+ * El perfil de una modelo, `/modelos/<slug>`, va aparte: no es un prefijo con
+ * subrutas, es exactamente un segmento. `/modelos` sola no es una pantalla.
+ */
+function esPerfilDeModelo(ruta: string): boolean {
+  const segmentos = ruta.split("/").slice(1);
+  return segmentos.length === 2 && segmentos[0] === "modelos";
+}
 
 export function destinoSeguroDelCliente(
   siguiente: string | null | undefined,
@@ -29,9 +41,12 @@ export function destinoSeguroDelCliente(
   if (!siguiente.startsWith("/") || siguiente.startsWith("//")) return null;
 
   const ruta = url.pathname;
-  const permitido = PREFIJOS_PERMITIDOS.some(
-    (prefijo) => ruta === prefijo || ruta.startsWith(`${prefijo}/`),
-  );
+  const permitido =
+    esPerfilDeModelo(ruta) ||
+    (RUTAS_EXACTAS as readonly string[]).includes(ruta) ||
+    PREFIJOS_PERMITIDOS.some(
+      (prefijo) => ruta === prefijo || ruta.startsWith(`${prefijo}/`),
+    );
   if (!permitido) return null;
   if (!ruta.split("/").slice(1).every((s) => SEGMENTO_SEGURO.test(s))) {
     return null;
