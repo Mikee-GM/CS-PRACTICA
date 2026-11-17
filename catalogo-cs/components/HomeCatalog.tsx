@@ -8,6 +8,7 @@ import ModelGrid from "@/components/ModelGrid";
 import ModelProfile from "@/components/ModelProfile";
 import Footer from "@/components/Footer";
 import { AnimateIn } from "@/components/AnimateIn";
+import AccesoCliente from "@/components/cliente/AccesoCliente";
 import type { Modelo } from "@/types";
 
 interface HomeCatalogProps {
@@ -66,6 +67,10 @@ export default function HomeCatalog({
   return (
     <>
       <main className="relative">
+        {/* Sobre el Hero, fuera de su flujo: no empuja el logo ni el carrusel. */}
+        <div className="absolute right-0 top-0 z-30 pr-[max(1rem,env(safe-area-inset-right))] pt-[max(1rem,env(safe-area-inset-top))]">
+          <AccesoCliente />
+        </div>
         <Hero
           onViewCatalog={scrollToCatalog}
           modelos={heroModelos}

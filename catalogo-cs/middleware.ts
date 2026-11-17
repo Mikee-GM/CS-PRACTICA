@@ -378,15 +378,24 @@ export async function middleware(request: NextRequest) {
    * Sin sesion se manda al login de cliente, no al del panel. El rol se
    * comprueba contra el backend, como en /admin: una cuenta del personal que
    * llegue aqui vuelve a su propio inicio.
+   *
+   * El login recibe la ruta pedida en `siguiente` para volver a ella --un
+   * enlace a una conversacion concreta no debe acabar en la bandeja--. Lo que
+   * se le pase ahi lo valida `destinoSeguroDelCliente` al usarlo.
    */
-  if (pathname === "/cuenta") {
+  if (
+    pathname === "/cuenta" ||
+    pathname === "/chats" ||
+    pathname.startsWith("/chats/")
+  ) {
+    const alLogin = `/ingresar?siguiente=${encodeURIComponent(`${pathname}${search}`)}`;
     const renovadas = await renovarSiHaceFalta(request);
     if (!request.cookies.has(ACCESS_COOKIE)) {
-      return redirectFromRequest(request, "/ingresar");
+      return redirectFromRequest(request, alLogin);
     }
     const sesion = await rolDeLaSesion(buildCookieHeader(request));
     if (sesion.estado === "sin-sesion") {
-      return redirectFromRequest(request, "/ingresar");
+      return redirectFromRequest(request, alLogin);
     }
     if (sesion.estado === "ok" && sesion.rol !== "cliente") {
       return redirectFromRequest(request, inicioParaRol(sesion.rol));
@@ -437,6 +446,8 @@ export const config = {
     // Acceso del cliente: renuevan la sesion para que quien ya tiene cuenta no
     // vea el formulario con un acceso caducado.
     "/cuenta",
+    "/chats",
+    "/chats/:path*",
     "/ingresar",
     "/registro",
   ],

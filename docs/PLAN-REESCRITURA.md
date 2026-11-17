@@ -383,3 +383,39 @@ Pendiente:
   filtro de vocabulario.
 - Al comparar sin acentos, "modelo" con tilde cuenta como "modelo".
 - Probar contra una base real los avisos del chofer propio.
+
+### Fase 2, paso 10 (frontend del chat web del cliente)
+
+- Paginas `/chats` (bandeja) y `/chats/[id]` (conversacion), `noindex`, con
+  `getCurrentUser`, `optionalSource`, `lib/data/conversaciones.ts` y Server
+  Actions en `lib/actions/conversaciones.ts` (abrir chat, enviar mensaje, subir
+  comprobante). El inicio del cliente pasa a `/chats`; `/cuenta` enlaza alli.
+- Componentes en `components/cliente/`: `ListaChats`, `VistaChat`, `Burbuja`,
+  `EncabezadoAsistente` (fijo, "Asistente virtual de X"; `jefe` se pinta como la
+  modelo y `sistema` como aviso centrado), `BarraEscritura` (Enter envia solo con
+  puntero fino y es seguro con IME; ubicacion con confirmacion previa y
+  alternativa de escribir la direccion), `SubirComprobante`, `AvatarModelo`,
+  `BotonChatear`, `AccesoCliente` y el canal `useCanalCliente`.
+- Logica pura probada en `lib/conversaciones.ts`: mezcla de mensajes
+  (optimistas al final, sustituidos por `clientMessageId`), cursor, deteccion de
+  huecos tras caidas del canal y regla del comprobante.
+- Accesibilidad: historial y paginas antiguas fuera del `role="log"`; solo lo
+  nuevo se anuncia. Errores en `role="alert"`; objetivos de 44 px; sin animacion
+  con `prefers-reduced-motion`; `interactiveWidget: "resizes-content"` para que
+  el teclado no tape la barra.
+- Catalogo: boton "Chatear" en el perfil y accesos "Iniciar sesion / Crear
+  cuenta / Mis chats" sobre el Hero. Sin sesion se vuelve con `siguiente` a
+  `/chats?modelo=<id>`, que ofrece abrir el chat sin crearlo al cargar.
+  `destinoSeguroDelCliente` limita `siguiente` a pantallas del cliente.
+- Middleware: `/chats` y `/chats/*` en la rama del cliente y en el `matcher`.
+
+Pendiente:
+
+- Verificacion en navegador y contra un backend real: teclado movil, area segura,
+  SSE, geolocalizacion, subida y compresion del comprobante.
+- Backend: falta `GET /conversations/:id` (la cabecera sale de la bandeja), un
+  indicador explicito de comprobante pendiente en el resumen (hoy se deduce del
+  texto del aviso) y un evento de fin de `typing`.
+- El aviso de correo sin verificar solo se ve en `/cuenta`.
+- `next build` cae en el chequeo de tipos por `@playwright/test` y 14 suites de
+  jest por `jest-environment-jsdom`, ambos sin instalar.

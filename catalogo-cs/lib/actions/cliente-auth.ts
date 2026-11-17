@@ -4,7 +4,8 @@ import { redirect } from "next/navigation";
 
 import { applyBackendSetCookies } from "@/lib/auth-cookies";
 import { getApiBaseUrl, apiFetch, ApiError } from "@/lib/api-server";
-import { isRedirectError } from "@/lib/auth";
+import { getCurrentUser, isRedirectError } from "@/lib/auth";
+import { destinoSeguroDelCliente } from "@/lib/destino-cliente";
 import { inicioParaRol } from "@/lib/roles";
 
 export type RegistroInput = {
@@ -33,6 +34,7 @@ function mensajeDe(data: unknown, porDefecto: string): string {
  */
 export async function registroAction(
   input: RegistroInput,
+  siguiente?: string | null,
 ): Promise<ResultadoAccion> {
   try {
     const response = await fetch(`${getApiBaseUrl()}/auth/register`, {
@@ -64,7 +66,8 @@ export async function registroAction(
     };
   }
 
-  redirect(inicioParaRol("cliente"));
+  // Quien se registro desde el boton "Chatear" vuelve a esa modelo.
+  redirect(destinoSeguroDelCliente(siguiente) ?? inicioParaRol("cliente"));
 }
 
 /** Canjea el token del enlace del correo. Publica: no exige sesion. */
@@ -113,4 +116,16 @@ export async function reenviarVerificacionAction(): Promise<ResultadoAccion> {
     console.error("reenviarVerificacionAction error:", error);
     return { success: false, error: "No se pudo enviar el correo" };
   }
+}
+
+/**
+ * Rol de quien visita el catalogo, o `null` sin sesion.
+ *
+ * El catalogo es estatico (ISR) y no puede saber en el render quien lo mira;
+ * la cabecera lo pregunta despues de montar para elegir entre "Iniciar sesión"
+ * y "Mis chats". Solo sirve para eso: no autoriza nada.
+ */
+export async function sesionDelVisitanteAction(): Promise<{ rol: string } | null> {
+  const usuario = await getCurrentUser();
+  return usuario ? { rol: usuario.rol } : null;
 }

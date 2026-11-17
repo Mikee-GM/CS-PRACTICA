@@ -50,12 +50,20 @@ export default async function CuentaPage() {
           <AvisoCorreoPendiente email={cuenta.email} />
         )}
 
-        <Link
-          href="/"
-          className="inline-block rounded-lg border border-[#C5A55A]/60 px-5 py-3 text-xs font-bold uppercase tracking-[0.15em] text-[#C5A55A] transition-colors hover:bg-[#C5A55A] hover:text-black"
-        >
-          Ver el catálogo
-        </Link>
+        <div className="flex flex-wrap gap-3">
+          <Link
+            href="/chats"
+            className="inline-block rounded-lg bg-[#C5A55A] px-5 py-3 text-xs font-bold uppercase tracking-[0.15em] text-black transition-colors hover:bg-[#D4AF37]"
+          >
+            Mis chats
+          </Link>
+          <Link
+            href="/"
+            className="inline-block rounded-lg border border-[#C5A55A]/60 px-5 py-3 text-xs font-bold uppercase tracking-[0.15em] text-[#C5A55A] transition-colors hover:bg-[#C5A55A] hover:text-black"
+          >
+            Ver el catálogo
+          </Link>
+        </div>
       </div>
     </main>
   );

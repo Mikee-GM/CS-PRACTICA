@@ -155,4 +155,64 @@ describe("middleware: area del cliente", () => {
 
     expect(destino(respuesta)).toBe("/jefe");
   });
+
+  describe.each(["/chats", "/chats/0f4e2c1a-1b2c-4d5e-8f90-123456789abc"])(
+    "chats del cliente (%s)",
+    (ruta) => {
+      it("sin sesion manda al login de cliente y recuerda a donde volver", async () => {
+        const respuesta = await middleware(peticion(ruta));
+
+        expect(destino(respuesta)).toBe("/ingresar");
+        const ubicacion = new URL(
+          respuesta.headers.get("location") ?? "",
+          "https://colombia-sexys.test",
+        );
+        expect(ubicacion.searchParams.get("siguiente")).toBe(ruta);
+      });
+
+      it("deja pasar a un cliente con sesion", async () => {
+        backendConRol("cliente");
+
+        const respuesta = await middleware(
+          peticion(ruta, { access_token: "s:valor.firma" }),
+        );
+
+        expect(destino(respuesta)).toBeNull();
+      });
+
+      it("devuelve al personal a su propio inicio", async () => {
+        backendConRol("empleada");
+
+        const respuesta = await middleware(
+          peticion(ruta, { access_token: "s:valor.firma" }),
+        );
+
+        expect(destino(respuesta)).toBe("/empleada/portal");
+      });
+
+      it("con la sesion rechazada por el backend vuelve al login", async () => {
+        global.fetch = jest.fn().mockResolvedValue({
+          ok: false,
+          json: () => Promise.resolve({}),
+        }) as unknown as typeof fetch;
+
+        const respuesta = await middleware(
+          peticion(ruta, { access_token: "s:valor.firma" }),
+        );
+
+        expect(destino(respuesta)).toBe("/ingresar");
+      });
+    },
+  );
+
+  it("el matcher cubre la bandeja y cada conversacion", () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { config } = require("./middleware") as {
+      config: { matcher: string[] };
+    };
+
+    expect(config.matcher).toEqual(
+      expect.arrayContaining(["/chats", "/chats/:path*"]),
+    );
+  });
 });

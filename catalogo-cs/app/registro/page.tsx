@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import AuthShell from "@/components/cliente/AuthShell";
 import RegistroForm from "@/components/cliente/RegistroForm";
 import { getCurrentUser } from "@/lib/auth";
+import { destinoSeguroDelCliente } from "@/lib/destino-cliente";
 import { inicioParaRol } from "@/lib/roles";
 
 export const metadata: Metadata = {
@@ -11,13 +12,22 @@ export const metadata: Metadata = {
   robots: { index: false },
 };
 
-export default async function RegistroPage() {
+export default async function RegistroPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ siguiente?: string }>;
+}) {
+  const destino = destinoSeguroDelCliente((await searchParams).siguiente);
   const usuario = await getCurrentUser();
-  if (usuario) redirect(inicioParaRol(usuario.rol));
+  if (usuario) {
+    redirect(
+      (usuario.rol === "cliente" ? destino : null) ?? inicioParaRol(usuario.rol),
+    );
+  }
 
   return (
     <AuthShell etiqueta="Acceso exclusivo" titulo="Crear cuenta">
-      <RegistroForm />
+      <RegistroForm siguiente={destino} />
     </AuthShell>
   );
 }

@@ -15,7 +15,12 @@ import Campo, {
 // (bcrypt solo lee los primeros 72 bytes). `pattern` exige coincidencia total.
 const PATRON_CONTRASENA = "(?=.*[A-Za-z])(?=.*\\d).{8,72}";
 
-export default function RegistroForm() {
+export default function RegistroForm({
+  siguiente,
+}: {
+  /** Pantalla del cliente a la que volver; la accion la valida otra vez. */
+  siguiente?: string | null;
+}) {
   const [mostrar, setMostrar] = useState(false);
   const [errorServidor, setErrorServidor] = useState("");
   const [pendiente, startTransition] = useTransition();
@@ -34,7 +39,7 @@ export default function RegistroForm() {
           nombre: String(datos.get("nombre") ?? ""),
           mayorDeEdad: datos.get("mayorDeEdad") === "on",
           aceptaTerminos: datos.get("aceptaTerminos") === "on",
-        });
+        }, siguiente);
         if (!resultado.success) setErrorServidor(resultado.error);
       } catch (error) {
         if (esRedireccion(error)) throw error;
@@ -121,7 +126,11 @@ export default function RegistroForm() {
       <p className="text-center text-xs text-zinc-500">
         ¿Ya tienes cuenta?{" "}
         <Link
-          href="/ingresar"
+          href={
+            siguiente
+              ? `/ingresar?siguiente=${encodeURIComponent(siguiente)}`
+              : "/ingresar"
+          }
           className="font-medium text-[#C5A55A] underline-offset-4 hover:underline"
         >
           Inicia sesión

@@ -7,7 +7,12 @@ import { loginAction } from "@/lib/actions/auth";
 import { esRedireccion } from "@/lib/es-redireccion";
 import Campo, { botonPrimario, ErrorDeFormulario } from "./Campo";
 
-export default function IngresarForm() {
+export default function IngresarForm({
+  siguiente,
+}: {
+  /** Pantalla del cliente a la que volver; la accion la valida otra vez. */
+  siguiente?: string | null;
+}) {
   const [mostrar, setMostrar] = useState(false);
   const [errorServidor, setErrorServidor] = useState("");
   const [pendiente, startTransition] = useTransition();
@@ -23,6 +28,7 @@ export default function IngresarForm() {
         const resultado = await loginAction(
           String(datos.get("email") ?? ""),
           String(datos.get("password") ?? ""),
+          siguiente,
         );
         if (resultado && !resultado.success) {
           setErrorServidor(resultado.error ?? "Credenciales incorrectas");
@@ -82,7 +88,11 @@ export default function IngresarForm() {
       <p className="text-center text-xs text-zinc-500">
         ¿Aún no tienes cuenta?{" "}
         <Link
-          href="/registro"
+          href={
+            siguiente
+              ? `/registro?siguiente=${encodeURIComponent(siguiente)}`
+              : "/registro"
+          }
           className="font-medium text-[#C5A55A] underline-offset-4 hover:underline"
         >
           Crea una

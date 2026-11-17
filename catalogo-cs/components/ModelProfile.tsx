@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import type { Modelo } from "@/types";
 import CustomerRating from "@/components/ui/CustomerRating";
 import { availabilityLabel } from "@/lib/availability";
+import BotonChatear from "@/components/cliente/BotonChatear";
 
 interface ModelProfileProps {
   modelo: Modelo;
@@ -262,7 +263,11 @@ export default function ModelProfile({ modelo, onClose }: ModelProfileProps) {
             )}
 
             {/* Barra flotante inferior de contacto fija en móvil para que siempre esté visible */}
-            <div className="sticky bottom-0 inset-x-0 z-40 mt-6 -mx-6 -mb-6 p-4 bg-gradient-to-t from-black via-black/95 to-black/80 backdrop-blur-lg border-t border-zinc-800/80 sm:hidden">
+            <div className="sticky bottom-0 inset-x-0 z-40 mt-6 -mx-6 -mb-6 space-y-3 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] bg-gradient-to-t from-black via-black/95 to-black/80 backdrop-blur-lg border-t border-zinc-800/80 sm:hidden">
+              {/* El chat web va primero: es la via que sustituye a Telegram. */}
+              {canContact && (
+                <BotonChatear employeeId={modelo._id} nombre={modelo.nombre} />
+              )}
               {modelo.contactLink && canContact ? (
                 <a
                   href={modelo.contactLink}
@@ -295,6 +300,10 @@ export default function ModelProfile({ modelo, onClose }: ModelProfileProps) {
 
           {/* Links para escritorio / dentro del flujo en desktop */}
           <div className="space-y-3 mt-8 hidden sm:block">
+            {canContact && (
+              <BotonChatear employeeId={modelo._id} nombre={modelo.nombre} />
+            )}
+
             {/* Link de X */}
             {modelo.linkX && (
               <a

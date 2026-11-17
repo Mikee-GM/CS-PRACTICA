@@ -10,6 +10,7 @@ import {
   isRedirectError,
 } from "@/lib/auth";
 import { getApiBaseUrl } from "@/lib/api-server";
+import { destinoSeguroDelCliente } from "@/lib/destino-cliente";
 import { inicioParaRol } from "@/lib/roles";
 
 /** Los roles que tienen a donde ir. Cualquier otro no entra. */
@@ -32,7 +33,16 @@ const INICIO_CONOCIDO = ["admin", "jefe", "empleada", "chofer", "cliente"];
  * en el `catch` de abajo --por eso se relanza-- o se tragaria la navegacion y
  * pareceria un error de login.
  */
-export async function loginAction(email: string, password: string) {
+/*
+ * `siguiente` es la pantalla a la que volver tras entrar --el cliente que tocó
+ * "Chatear" sin sesion-- y solo vale para el rol cliente y para sus propias
+ * pantallas (`destinoSeguroDelCliente`). El personal siempre va a su inicio.
+ */
+export async function loginAction(
+  email: string,
+  password: string,
+  siguiente?: string | null,
+) {
   let destino: string | null = null;
 
   try {
@@ -63,7 +73,9 @@ export async function loginAction(email: string, password: string) {
       return { success: false, error: "Tu cuenta no tiene acceso a la aplicación" };
     }
     await applyBackendSetCookies(response);
-    destino = inicioParaRol(data.user.rol);
+    destino =
+      (data.user.rol === "cliente" ? destinoSeguroDelCliente(siguiente) : null) ??
+      inicioParaRol(data.user.rol);
   } catch (error: unknown) {
     console.error("loginAction error:", error);
     return {
