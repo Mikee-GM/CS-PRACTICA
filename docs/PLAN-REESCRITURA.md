@@ -419,3 +419,50 @@ Pendiente:
 - El aviso de correo sin verificar solo se ve en `/cuenta`.
 - `next build` cae en el chequeo de tipos por `@playwright/test` y 14 suites de
   jest por `jest-environment-jsdom`, ambos sin instalar.
+
+### Fase 2, paso 7 (comprobantes por transferencia en el chat web)
+
+- `booking/booking-receipts.ts`, extraido de Telegram por delegacion (los specs
+  de Telegram no cambiaron): `parseReceiptAmount` y `validateReceiptAnalysis`
+  (movidos y reexportados; el monto se compara en centavos),
+  `registrarValidacion` (registro en `PROCESANDO` a partir de una imagen ya
+  subida; la descarga con `getFileLink` se queda en Telegram),
+  `aplicarAnalisis`/`guardarAnalisis`, `marcarErrorDeValidacion`,
+  `comprobanteEnCurso`, `enlazarComprobanteAServicio`,
+  `montoEsperadoDelComprobante` y `cuentasParaTransferir`. Son funciones que
+  reciben sus repositorios porque los specs de Telegram construyen el handler a
+  mano.
+- `validarComprobanteDeReserva` no se extrajo (depende de `ctx` y de la sesion);
+  la web compone las piezas puras en `ConversationReceiptsService.analizar`.
+- `POST /conversations/:id/receipt` (multipart `file` y `clientMessageId`
+  opcional; `@Roles('cliente')`, CSRF, 6/min, Multer con tope de 10 MB y solo
+  JPEG/PNG/WEBP). 201 nuevo, 200 reintento sin subir ni analizar, 404 ajena,
+  409 si no hay pago por transferencia pendiente, si la conversacion esta
+  cerrada o si ya hay un comprobante en analisis (menos de 3 min), en revision o
+  aprobado. El tipo real lo decide `uploadEvidence` por los bytes.
+- El analisis deja un mensaje `sistema` y emite `receipt_status`
+  (`recibido|en_revision|rechazado|error`) al cliente y a los jefes. Ningun
+  estado confirma el dinero: sigue haciendo falta el CEP. Sin monto acordado va
+  a revision manual. Una clave SPEI que ya confirmo otro pago se rechaza (mismo
+  criterio que `uq_receipt_confirmed_spei_key`, adelantado al analisis). Salvo
+  en el rechazo, la conversacion queda en `en_revision` y se avisa al equipo.
+  Un fallo del analisis deja `ERROR_VALIDACION` y el cliente puede reenviar; no
+  hay trabajo periodico.
+- Cambio de contrato: `MensajeDelChat.attachment` es `{ type, url? }`; en
+  `comprobante` y `foto` lleva la URL publica de R2 para el propio cliente.
+- Al cerrar una reserva por transferencia o mixto, mensaje `sistema` con el
+  monto (`money.ts`) y las cuentas activas (o `BANK_ACCOUNT_DETAILS`).
+
+Pendiente:
+
+- Probar contra Postgres real las consultas del ultimo comprobante y de la
+  clave SPEI, el bloqueo y el filtro de servicios; probar con xAI y R2 reales.
+- Con la reserva en borrador no hay servicio: al aceptar el borrador (paso 8)
+  hay que enlazar el comprobante para poder confirmar el CEP.
+- Pago mixto: la web no pregunta la parte por transferencia; sus comprobantes
+  van siempre a revision manual.
+- Sin portar: cobro final de duracion abierta y comprobante grupal.
+- El prompt web sigue con `comprobanteRecibido: false`.
+- `ERROR_VALIDACION` no se puede confirmar desde el panel.
+- Una imagen puede quedar huerfana en R2 si dos reintentos llegan a la vez.
+- `cuentasParaTransferir` repite el formato de `bankTransferDetails`.

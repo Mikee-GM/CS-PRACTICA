@@ -163,6 +163,8 @@ describe('BookingService (turno web)', () => {
     externalLocationFee: jest.Mock;
     coverageArea: jest.Mock;
   };
+  let cuentasRepository: { find: jest.Mock };
+  let configService: { get: jest.Mock };
   let canal: CanalDePrueba;
   let store: StoreEnMemoria;
   let ref: ConversationRef;
@@ -175,6 +177,8 @@ describe('BookingService (turno web)', () => {
       extrasRepository as any,
       borradoresRepository as any,
       transportOperations as any,
+      cuentasRepository as any,
+      configService as any,
     );
   }
 
@@ -233,6 +237,18 @@ describe('BookingService (turno web)', () => {
       externalLocationFee: jest.fn().mockResolvedValue(500),
       coverageArea: jest.fn().mockResolvedValue(QUERETARO),
     };
+    cuentasRepository = {
+      find: jest.fn().mockResolvedValue([
+        {
+          activa: true,
+          banco: 'BBVA',
+          titular: 'Omar Pérez',
+          cuenta: '4152314214309919',
+          clabe: '012180001234567891',
+        },
+      ]),
+    };
+    configService = { get: jest.fn().mockReturnValue(undefined) };
     canal = new CanalDePrueba();
     store = new StoreEnMemoria();
     ref = {
@@ -330,6 +346,58 @@ describe('BookingService (turno web)', () => {
     expect(canal.avisos[canal.avisos.length - 1]?.mensajeAlCliente).toContain(
       'Queda pendiente el comprobante',
     );
+    // Tras el resumen, el monto y a donde transferir, como mensaje del sistema.
+    const datos = canal.ultimo();
+    expect(datos?.remitente).toBe('sistema');
+    expect(datos?.texto).toContain(
+      'transfiere $2,500.00 a una de estas cuentas',
+    );
+    expect(datos?.texto).toContain('CLABE: 012180001234567891');
+    expect(datos?.texto).toContain('envía aquí la foto');
+    expect(textosSinEmojis()).toBe(true);
+  });
+
+  it('sin cuentas registradas usa el texto configurado', async () => {
+    cuentasRepository.find.mockResolvedValue([]);
+    configService.get.mockReturnValue('Banorte, CLABE 072000000000000000');
+    const servicio = crear();
+    store.state = {
+      ...estadoInicial(),
+      lifecycle: 'COLLECTING',
+      duracionPactadaHoras: 2,
+      ubicacion: { lat: MOTEL.latitude, lng: MOTEL.longitude, origen: 'motel' },
+      presetLocationId: MOTEL.id,
+      locationNameSnapshot: MOTEL.name,
+      customerTransportCharge: 0,
+    };
+
+    await turno(servicio, 'por transferencia');
+
+    expect(configService.get).toHaveBeenCalledWith('BANK_ACCOUNT_DETAILS');
+    expect(canal.ultimo()?.texto).toContain('$5,000.00');
+    expect(canal.ultimo()?.texto).toContain(
+      'Banorte, CLABE 072000000000000000',
+    );
+  });
+
+  it('con efectivo no manda datos bancarios', async () => {
+    const servicio = crear();
+    store.state = {
+      ...estadoInicial(),
+      lifecycle: 'COLLECTING',
+      duracionPactadaHoras: 1,
+      ubicacion: { lat: MOTEL.latitude, lng: MOTEL.longitude, origen: 'motel' },
+      presetLocationId: MOTEL.id,
+      locationNameSnapshot: MOTEL.name,
+      customerTransportCharge: 0,
+    };
+
+    await turno(servicio, 'en efectivo');
+
+    expect(cuentasRepository.find).not.toHaveBeenCalled();
+    expect(
+      canal.enviados.some(({ texto }) => texto.includes('transfiere')),
+    ).toBe(false);
   });
 
   it('no aplica una marca que el cliente no corrobora', async () => {

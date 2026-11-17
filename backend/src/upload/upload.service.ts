@@ -13,7 +13,9 @@ import {
 import { randomUUID } from 'crypto';
 import { describeError } from '../common/errors/error-message';
 
-const EVIDENCE_MAX_BYTES = 10 * 1024 * 1024;
+// Exportado para que las rutas que reciben evidencia corten la subida en
+// Multer con el mismo tope, antes de cargarla entera en memoria.
+export const EVIDENCE_MAX_BYTES = 10 * 1024 * 1024;
 
 /**
  * Lo unico que el servicio necesita del fichero que entrega Multer. Se declara

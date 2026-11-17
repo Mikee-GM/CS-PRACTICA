@@ -8,8 +8,11 @@ import {
   Post,
   Query,
   Res,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { GetUser } from '../auth/decorators/get-user.decorator';
@@ -17,7 +20,9 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { CsrfGuard } from '../auth/guards/csrf.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import type { UploadedFilePayload } from '../upload/upload.service';
 import { Usuarios } from '../users/entities/user.entity';
+import { ConversationReceiptsService } from './conversation-receipts.service';
 import {
   ConversationsService,
   MensajeDelChat,
@@ -27,6 +32,10 @@ import {
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { ListMessagesDto } from './dto/list-messages.dto';
 import { SendMessageDto } from './dto/send-message.dto';
+import {
+  OPCIONES_DE_SUBIDA_DE_COMPROBANTE,
+  UploadReceiptDto,
+} from './dto/upload-receipt.dto';
 
 /**
  * Chat web visto por el cliente. Las rutas del jefe (toma de control,
@@ -39,7 +48,10 @@ import { SendMessageDto } from './dto/send-message.dto';
  */
 @Controller('conversations')
 export class ConversationsController {
-  constructor(private readonly conversationsService: ConversationsService) {}
+  constructor(
+    private readonly conversationsService: ConversationsService,
+    private readonly receiptsService: ConversationReceiptsService,
+  ) {}
 
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -89,6 +101,34 @@ export class ConversationsController {
   ): Promise<MensajeDelChat> {
     const { message, creado } =
       await this.conversationsService.sendClientMessage(actor.id, id, dto);
+    res.status(creado ? HttpStatus.CREATED : HttpStatus.OK);
+    return message;
+  }
+
+  /**
+   * Comprobante de transferencia (multipart: `file` y `clientMessageId`
+   * opcional). 201 al crearlo, 200 si es el reintento de uno ya recibido; el
+   * analisis llega despues por SSE (`receipt_status`). 409 si no hay pago por
+   * transferencia pendiente de comprobante o ya hay uno en revision.
+   */
+  @Throttle({ default: { limit: 6, ttl: 60_000 } })
+  @Post(':id/receipt')
+  @UseGuards(JwtAuthGuard, RolesGuard, CsrfGuard)
+  @Roles('cliente')
+  @UseInterceptors(FileInterceptor('file', OPCIONES_DE_SUBIDA_DE_COMPROBANTE))
+  async uploadReceipt(
+    @GetUser() actor: Usuarios,
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: UploadedFilePayload | undefined,
+    @Body() dto: UploadReceiptDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<MensajeDelChat> {
+    const { message, creado } = await this.receiptsService.subirComprobante(
+      actor.id,
+      id,
+      file,
+      dto,
+    );
     res.status(creado ? HttpStatus.CREATED : HttpStatus.OK);
     return message;
   }

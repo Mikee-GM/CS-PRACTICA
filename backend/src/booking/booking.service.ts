@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
 import { Repository } from 'typeorm';
@@ -33,6 +34,7 @@ import {
 } from '../common/locale';
 import { multiplyMoney, sumMoney } from '../common/money';
 import { Empleadas } from '../employees/entities/employee.entity';
+import { AuthorizedBankAccounts } from '../services/entities/authorized-bank-account.entity';
 import { CustomerBookingSession } from '../telegram-conversations/entities/customer-booking-session.entity';
 import { TransportOperationsService } from '../transport-operations/transport-operations.service';
 import { BookingAiService, HistorialDeReserva } from './booking-ai.service';
@@ -44,6 +46,10 @@ import {
   registerLoopFailure,
   transitionBookingStatus,
 } from './booking-lifecycle';
+import {
+  cuentasParaTransferir,
+  montoEsperadoDelComprobante,
+} from './booking-receipts';
 import {
   duracionFijada,
   estadoInicial,
@@ -200,6 +206,9 @@ export class BookingService {
     @InjectRepository(CustomerBookingSession)
     private readonly borradoresRepository: Repository<CustomerBookingSession>,
     private readonly transportOperations: TransportOperationsService,
+    @InjectRepository(AuthorizedBankAccounts)
+    private readonly cuentasRepository: Repository<AuthorizedBankAccounts>,
+    private readonly configService: ConfigService,
   ) {}
 
   /**
@@ -881,6 +890,37 @@ export class BookingService {
       bookingSessionId: borradorId,
       mensajeAlCliente: resumenDeReserva(estado, empleada),
     });
+
+    // Igual que Telegram al elegir transferencia: los datos para pagar salen
+    // en el mismo momento en que la reserva queda esperando el comprobante.
+    if (estado.esperandoComprobante) {
+      const cuentas = await this.cuentasParaPagar();
+      await this.decir(t, datosParaPagar(estado, empleada, cuentas), 'sistema');
+    }
+  }
+
+  /**
+   * Las cuentas autorizadas activas; sin ninguna, el texto libre de
+   * `BANK_ACCOUNT_DETAILS`, como hace `ServicesService.bankTransferDetails`.
+   * Un fallo al leerlas no tumba el cierre: el cliente recibe igual el monto.
+   */
+  private async cuentasParaPagar(): Promise<string | null> {
+    try {
+      const cuentas = cuentasParaTransferir(
+        await this.cuentasRepository.find({
+          where: { activa: true },
+          order: { banco: 'ASC', titular: 'ASC' },
+        }),
+      );
+      if (cuentas) return cuentas;
+    } catch (error) {
+      this.logger.error(
+        `No se pudieron leer las cuentas para transferir: ${describeError(error)}`,
+      );
+    }
+    return (
+      this.configService.get<string>('BANK_ACCOUNT_DETAILS')?.trim() || null
+    );
   }
 
   /**
@@ -1307,4 +1347,30 @@ export function resumenDeReserva(
     `Solicitud lista para revisión con ${empleada.nombreArtistico}: ${partes.join(', ')}. ` +
     `${importe}.${comprobante} El equipo la revisará y te confirmará por aquí.`
   );
+}
+
+/**
+ * Lo que el cliente necesita para pagar por transferencia: cuanto y a donde.
+ * Sin cuentas que dar no se inventan; se le dice que el equipo se las pasara.
+ * En pago mixto la parte por transferencia aun no se acuerda en la web, asi
+ * que no se le pone una cifra que luego no cuadre.
+ */
+export function datosParaPagar(
+  estado: BookingState,
+  empleada: Pick<Empleadas, 'precioBaseHora'>,
+  cuentas: string | null,
+): string {
+  const monto = montoEsperadoDelComprobante(estado, empleada.precioBaseHora);
+  const destino = cuentas
+    ? 'a una de estas cuentas'
+    : 'a la cuenta que el equipo te compartirá por aquí';
+  const cuanto =
+    estado.metodoPago === 'mixto' && monto === null
+      ? `Tu pago es mixto: la parte por transferencia va ${destino} y el resto se paga en efectivo.`
+      : `Para confirmar tu reserva, transfiere ${monto === null ? 'el total acordado' : FORMATO_MONEDA.format(monto)} ${destino}.`;
+  const comprobante =
+    'Cuando lo tengas, envía aquí la foto o captura del comprobante.';
+  return cuentas
+    ? `${cuanto}\n\n${cuentas}\n\n${comprobante}`
+    : `${cuanto} ${comprobante}`;
 }

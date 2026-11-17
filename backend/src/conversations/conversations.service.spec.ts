@@ -316,12 +316,16 @@ describe('ConversationsService', () => {
       expect(pagina.nextCursor).toBeNull();
     });
 
-    it('solo entrega el tipo del adjunto, no la clave del archivo', async () => {
+    it('entrega el tipo y la URL del comprobante a su propio cliente', async () => {
       conversationsRepository.findOne.mockResolvedValue(conversacion());
       dataSource.query.mockResolvedValue([
         {
           ...filaMensaje('m1'),
-          attachment: { type: 'comprobante', url: 'r2/clave-privada' },
+          attachment: {
+            type: 'comprobante',
+            url: 'https://media.example.com/evidencias/a.jpg',
+            sizeBytes: 1200,
+          },
         },
       ]);
 
@@ -331,7 +335,10 @@ describe('ConversationsService', () => {
         {},
       );
 
-      expect(pagina.items[0].attachment).toEqual({ type: 'comprobante' });
+      expect(pagina.items[0].attachment).toEqual({
+        type: 'comprobante',
+        url: 'https://media.example.com/evidencias/a.jpg',
+      });
     });
   });
 

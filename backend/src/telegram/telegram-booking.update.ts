@@ -145,10 +145,23 @@ import {
   evaluarMarca,
   vestirRespuestaIa,
 } from '../booking/respuesta-ia';
+import {
+  comprobanteEnCurso,
+  enlazarComprobanteAServicio,
+  guardarAnalisis,
+  marcarErrorDeValidacion,
+  parseReceiptAmount,
+  registrarValidacion,
+  validateReceiptAnalysis,
+  type ResultadoDeComprobante,
+  type TipoDeCobro,
+} from '../booking/booking-receipts';
 
 // La logica pura de reserva vive en `booking/`. Se reexporta desde aqui porque
 // las pruebas y modulos de Telegram la importan de este archivo.
 export {
+  parseReceiptAmount,
+  validateReceiptAnalysis,
   buildModelKeys,
   detectGroupServiceIntent,
   detectOpenEndedDuration,
@@ -430,193 +443,9 @@ export function parseUberFareInput(text: string): number | undefined {
   return Number.isFinite(amount) && amount > 0 ? amount : undefined;
 }
 
-export function parseReceiptAmount(value: unknown): number | undefined {
-  if (typeof value === 'number') {
-    return Number.isFinite(value) && value > 0 ? value : undefined;
-  }
-  if (typeof value !== 'string') return undefined;
-  let normalized = value.replace(/[^\d.,-]/g, '').trim();
-  if (!normalized) return undefined;
-  const lastComma = normalized.lastIndexOf(',');
-  const lastDot = normalized.lastIndexOf('.');
-  if (lastComma > lastDot) {
-    normalized = normalized.replace(/\./g, '').replace(',', '.');
-  } else {
-    normalized = normalized.replace(/,/g, '');
-  }
-  const amount = Number(normalized);
-  return Number.isFinite(amount) && amount > 0 ? amount : undefined;
-}
-
-function normalizedDigits(value: unknown): string {
-  return typeof value === 'string' ? value.replace(/\D/g, '') : '';
-}
-
-function normalizedName(value: unknown): string {
-  return typeof value === 'string'
-    ? value
-        .normalize('NFD')
-        .replace(/\p{Diacritic}/gu, '')
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, '')
-    : '';
-}
-
 /** Lee un campo de texto del JSON que devuelve el modelo sin fiarse del tipo. */
 function readModelString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
-}
-
-export function validateReceiptAnalysis(
-  analysis: any,
-  expectedAmount: number,
-  accounts: AuthorizedBankAccounts[],
-): {
-  valid: boolean;
-  amount?: number;
-  reason?: string;
-  needsManualReview?: boolean;
-} {
-  if (analysis?.aiCallFailed === true) {
-    return {
-      valid: false,
-      needsManualReview: true,
-      reason:
-        'No fue posible verificar automáticamente el comprobante; un asesor lo revisará en breve.',
-    };
-  }
-  const isReceipt = Boolean(analysis?.valid ?? analysis?.esComprobante);
-  if (!isReceipt) {
-    return {
-      valid: false,
-      reason: 'La imagen no fue reconocida como comprobante bancario.',
-    };
-  }
-  if (analysis?.analisisIA?.posibleFraude === true) {
-    return {
-      valid: false,
-      reason:
-        analysis.analisisIA.alertas?.join(', ') ||
-        'El comprobante presenta señales de posible edición.',
-    };
-  }
-  if (analysis?.estadoVisual?.textoLegible === false) {
-    return {
-      valid: false,
-      reason: 'El texto del comprobante no es suficientemente legible.',
-    };
-  }
-
-  const amount = parseReceiptAmount(analysis?.amount ?? analysis?.monto);
-  if (!amount) {
-    return {
-      valid: false,
-      needsManualReview: true,
-      reason: 'La foto no muestra un monto legible; se conserva para revisión.',
-    };
-  }
-  if (amount + 0.009 < expectedAmount) {
-    return {
-      valid: false,
-      amount,
-      reason: `El comprobante muestra $${amount.toFixed(2)}, pero se esperaban $${expectedAmount.toFixed(2)}.`,
-    };
-  }
-
-  const activeAccounts = accounts.filter((account) => account.activa);
-  if (!activeAccounts.length) {
-    return {
-      valid: false,
-      amount,
-      needsManualReview: true,
-      reason: 'No hay cuentas de transferencia activas configuradas.',
-    };
-  }
-  const extractedNumbers = [
-    analysis?.destinationAccount,
-    analysis?.cuentaDestino,
-    analysis?.clabe,
-    analysis?.ultimos4CuentaDestino,
-  ]
-    .map(normalizedDigits)
-    .filter(Boolean);
-  const extractedHolder = normalizedName(
-    analysis?.destinationHolder ?? analysis?.titularDestino,
-  );
-
-  let strongMatch = false;
-  let weakMatch = false;
-  for (const account of activeAccounts) {
-    const registeredNumbers = [account.cuenta, account.clabe]
-      .map(normalizedDigits)
-      .filter(Boolean);
-    const registeredLast4 =
-      normalizedDigits(account.ultimos4) ||
-      registeredNumbers.find(Boolean)?.slice(-4) ||
-      '';
-    const numberMatches = extractedNumbers.some((extracted) =>
-      extracted.length <= 4
-        ? Boolean(registeredLast4 && extracted === registeredLast4)
-        : registeredNumbers.some(
-            (registered) =>
-              registered === extracted ||
-              registered.endsWith(extracted) ||
-              extracted.endsWith(registered),
-          ),
-    );
-    const registeredHolder = normalizedName(account.titular);
-    const holderMatches = Boolean(
-      extractedHolder &&
-      registeredHolder &&
-      (extractedHolder.includes(registeredHolder) ||
-        registeredHolder.includes(extractedHolder)),
-    );
-    // Coincidencia parcial: mismo titular con últimos 4 dígitos con un solo
-    // dígito distinto (posible error de OCR), útil para no rechazar de golpe
-    // comprobantes legítimos con datos ligeramente mal leídos.
-    const near4 =
-      registeredLast4.length === 4 &&
-      extractedNumbers.some((extracted) => {
-        const last4 = extracted.length >= 4 ? extracted.slice(-4) : extracted;
-        if (last4.length !== 4) return false;
-        let shared = 0;
-        for (let i = 0; i < 4; i++) {
-          if (last4[i] === registeredLast4[i]) shared++;
-        }
-        return shared >= 3;
-      });
-
-    if (extractedNumbers.length ? numberMatches : holderMatches) {
-      strongMatch = true;
-      break;
-    }
-    if (holderMatches || near4) {
-      weakMatch = true;
-    }
-  }
-
-  if (!strongMatch && !weakMatch) {
-    const missingDestination =
-      extractedNumbers.length === 0 && !extractedHolder;
-    return {
-      valid: false,
-      amount,
-      needsManualReview: missingDestination,
-      reason: missingDestination
-        ? 'La foto no muestra la cuenta beneficiaria; se conserva para revisión.'
-        : 'La cuenta, CLABE, últimos cuatro o titular del comprobante no coincide con una cuenta autorizada.',
-    };
-  }
-  if (!strongMatch) {
-    return {
-      valid: false,
-      amount,
-      needsManualReview: true,
-      reason:
-        'La cuenta destino no coincide con certeza con ninguna cuenta autorizada; requiere revisión manual.',
-    };
-  }
-  return { valid: true, amount };
 }
 
 /** A historical service may be changed only by an explicit service-change request. */
@@ -870,99 +699,67 @@ export class TelegramBookingUpdate {
     private readonly telegramConversationsService: TelegramConversationsService,
   ) {}
 
+  /**
+   * Baja la foto de Telegram, la sube a R2 y registra la validacion. Lo propio
+   * de Telegram es solo la descarga con `getFileLink`; el registro es comun a
+   * los canales y vive en `booking/booking-receipts`.
+   */
   private async createReceiptEvidence(
     ctx: BotContext,
     fileId: string,
     clientName?: string | null,
     serviceId?: string,
-    purpose: 'reserva' | 'final' | 'grupal' = 'reserva',
+    purpose: TipoDeCobro = 'reserva',
   ): Promise<{ validation: PaymentReceiptValidations; sourceUrl: string }> {
     const fileUrl = await ctx.telegram.getFileLink(fileId);
     const evidence = await this.uploadService.uploadEvidenceFromUrl({
       sourceUrl: fileUrl.href,
       folder: 'transferencias',
     });
-    const now = new Date();
-    const validation = await this.paymentReceiptValidationsRepository.save(
-      this.paymentReceiptValidationsRepository.create({
-        fechaRecepcion: now,
-        horaRecepcion: now.toISOString().slice(11, 19),
-        clienteTelegram: clientName ?? undefined,
-        chatId: ctx.from?.id.toString(),
+    const validation = await registrarValidacion(
+      this.paymentReceiptValidationsRepository,
+      {
         imageUrl: evidence.url,
-        telegramFileId: fileId,
-        esComprobante: false,
-        estado: 'PROCESANDO',
-        servicioId: serviceId,
         tipoCobro: purpose,
-      }),
+        servicioId: serviceId,
+        clienteNombre: clientName,
+        chatId: ctx.from?.id.toString(),
+        telegramFileId: fileId,
+      },
     );
     return { validation, sourceUrl: fileUrl.href };
   }
 
-  private async finishReceiptValidation(
+  private finishReceiptValidation(
     validation: PaymentReceiptValidations,
     analysis: any,
-    result: {
-      valid: boolean;
-      amount?: number;
-      reason?: string;
-      needsManualReview?: boolean;
-    },
+    result: ResultadoDeComprobante,
     extra?: { jefeId?: string; draftPayload?: any; expectedAmount?: number },
   ): Promise<PaymentReceiptValidations> {
-    Object.assign(validation, {
-      esComprobante: Boolean(analysis?.valid ?? analysis?.esComprobante),
-      bancoOrigen: analysis?.bankOrigin ?? analysis?.bancoOrigen,
-      bancoDestino: analysis?.bankDestination ?? analysis?.bancoDestino,
-      titularDestino: analysis?.destinationHolder ?? analysis?.titularDestino,
-      cuentaDestino: analysis?.destinationAccount ?? analysis?.cuentaDestino,
-      clabe: analysis?.clabe,
-      monto:
-        result.amount ??
-        parseReceiptAmount(analysis?.amount ?? analysis?.monto),
-      montoEsperado: extra?.expectedAmount,
-      fechaTransferencia:
-        analysis?.transferDate ?? analysis?.fechaTransferencia,
-      horaTransferencia: analysis?.transferTime ?? analysis?.horaTransferencia,
-      referencia: analysis?.reference ?? analysis?.referencia,
-      folio: analysis?.folio,
-      idSpei:
-        analysis?.trackingKey ?? analysis?.idSpei ?? analysis?.claveRastreo,
-      concepto: analysis?.concept ?? analysis?.concepto,
-      confianza: analysis?.confidence ?? analysis?.confianza,
-      estado: result.valid
-        ? 'APROBADO'
-        : result.needsManualReview
-          ? 'PENDIENTE_REVISION'
-          : 'RECHAZADO',
-      observaciones: result.reason ?? analysis?.reason ?? null,
-      jsonIA: analysis,
-      jefeId: extra?.jefeId,
-      draftPayload: extra?.draftPayload ?? null,
-    });
-    return this.paymentReceiptValidationsRepository.save(validation);
+    return guardarAnalisis(
+      this.paymentReceiptValidationsRepository,
+      validation,
+      analysis,
+      result,
+      extra,
+    );
   }
 
-  private async markReceiptValidationError(
+  private markReceiptValidationError(
     validation: PaymentReceiptValidations | undefined,
     error: unknown,
   ): Promise<void> {
-    if (!validation || validation.estado !== 'PROCESANDO') return;
-    validation.estado = 'ERROR_VALIDACION';
-    validation.observaciones =
-      error instanceof Error ? error.message : 'Error inesperado de validación';
-    await this.paymentReceiptValidationsRepository
-      .save(validation)
-      .catch(() => undefined);
+    return marcarErrorDeValidacion(
+      this.paymentReceiptValidationsRepository,
+      validation,
+      error,
+    );
   }
 
   /**
-   * Engancha un comprobante ya validado al servicio que lo estaba esperando.
-   *
-   * Cuando la reserva se cierra antes de cobrar, el servicio ya existe y el
-   * jefe ya lo tiene delante: la foto que llega despues no debe dar de alta uno
-   * nuevo ni confirmar el dinero. Solo enlaza la evidencia y avisa al jefe.
+   * Engancha un comprobante ya validado al servicio que lo estaba esperando
+   * (`enlazarComprobanteAServicio`) y avisa al jefe por Telegram, en el hilo
+   * del servicio.
    *
    * Devuelve `false` si el servicio ya no esta o ya no espera comprobante, para
    * que quien llama siga por el camino de siempre.
@@ -971,26 +768,21 @@ export class TelegramBookingUpdate {
     servicioId: string,
     validationId: string,
   ): Promise<boolean> {
-    const servicio = await this.serviciosRepository.findOne({
-      where: { id: servicioId },
-      relations: { empleada: true, cliente: true },
-    });
-    if (!servicio) return false;
-    if (['cancelado', 'finalizado'].includes(servicio.estado)) return false;
-
-    await this.paymentReceiptValidationsRepository
-      .update(validationId, { servicioId })
-      .catch((err) =>
+    const servicio = await enlazarComprobanteAServicio(
+      {
+        servicios: this.serviciosRepository,
+        validaciones: this.paymentReceiptValidationsRepository,
+      },
+      this.realtimeEventsService,
+      servicioId,
+      validationId,
+      (err) =>
         this.logger.error(
           `No se pudo enlazar el comprobante ${validationId} al servicio ${servicioId}:`,
           err,
         ),
-      );
-
-    this.realtimeEventsService.emitToBoss(servicio.jefeId, {
-      type: 'service_updated',
-      data: servicio,
-    });
+    );
+    if (!servicio) return false;
 
     try {
       const jefe = servicio.empleada
@@ -4917,17 +4709,11 @@ export class TelegramBookingUpdate {
     const pendiente = await this.paymentReceiptValidationsRepository.findOne({
       where: { id: validationId },
     });
-    const estado = pendiente?.estado ?? '';
-    const analisisReciente =
-      estado === 'PROCESANDO' &&
-      Date.now() - new Date(pendiente!.createdAt).getTime() <
-        TelegramBookingUpdate.VENTANA_ANALISIS_COMPROBANTE_MS;
-
     if (
-      pendiente &&
-      (analisisReciente ||
-        estado === 'PENDIENTE_REVISION' ||
-        estado === 'APROBADO')
+      comprobanteEnCurso(
+        pendiente,
+        TelegramBookingUpdate.VENTANA_ANALISIS_COMPROBANTE_MS,
+      )
     ) {
       await ctx.reply(
         'Ya tengo tu comprobante mi amor, lo estoy revisando. No hace falta que lo mandes otra vez 😘',

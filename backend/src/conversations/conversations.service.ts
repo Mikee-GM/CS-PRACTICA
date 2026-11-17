@@ -71,9 +71,11 @@ export type MensajeDelChat = {
   conversationId: string;
   sender: MessageSender;
   body: string;
-  // Solo el tipo: la clave del archivo en R2 no se entrega hasta que el paso
-  // de comprobantes decida como se sirven (URL firmada o proxy).
-  attachment: { type: MessageAttachment['type'] } | null;
+  /**
+   * El tipo y, en `comprobante` y `foto`, la URL publica del archivo en R2,
+   * para que el cliente vea lo que el mismo mando. Del pin solo va el tipo.
+   */
+  attachment: { type: MessageAttachment['type']; url?: string } | null;
   clientMessageId: string | null;
   createdAt: Date;
 };
@@ -489,7 +491,7 @@ export class ConversationsService {
 
 const CONVERSACION_NO_ENCONTRADA = 'Conversación no encontrada';
 
-function aMensajeDelChat(message: {
+export function aMensajeDelChat(message: {
   id: string;
   conversationId: string;
   sender: MessageSender;
@@ -503,10 +505,23 @@ function aMensajeDelChat(message: {
     conversationId: message.conversationId,
     sender: message.sender,
     body: message.body,
-    attachment: message.attachment ? { type: message.attachment.type } : null,
+    attachment: adjuntoParaElCliente(message.attachment),
     clientMessageId: message.clientMessageId,
     createdAt: message.createdAt,
   };
+}
+
+function adjuntoParaElCliente(
+  adjunto: MessageAttachment | null,
+): MensajeDelChat['attachment'] {
+  if (!adjunto) return null;
+  if (
+    (adjunto.type === 'comprobante' || adjunto.type === 'foto') &&
+    adjunto.url
+  ) {
+    return { type: adjunto.type, url: adjunto.url };
+  }
+  return { type: adjunto.type };
 }
 
 /**

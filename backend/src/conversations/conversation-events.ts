@@ -34,6 +34,27 @@ export type TypingEvent = {
   data: { conversationId: string };
 };
 
+/**
+ * Como quedo el analisis de un comprobante. Ninguno confirma el dinero: eso
+ * solo lo hace el equipo al comprobar el CEP.
+ * - `recibido`: la foto cuadra; falta que el equipo confirme la transferencia.
+ * - `en_revision`: la foto no se pudo leer con certeza; la revisa una persona.
+ * - `rechazado`: no vale (no es un comprobante, monto o cuenta incorrectos,
+ *   clave de rastreo ya usada); el cliente tiene que mandar otro.
+ * - `error`: el analisis fallo; puede volver a mandarlo.
+ */
+export type EstadoDelComprobante =
+  'recibido' | 'en_revision' | 'rechazado' | 'error';
+
+export type ReceiptStatusEvent = {
+  type: typeof RECEIPT_STATUS;
+  data: {
+    conversationId: string;
+    messageId: string;
+    status: EstadoDelComprobante;
+  };
+};
+
 export type ConversationStatusChangedEvent = {
   type: typeof CONVERSATION_STATUS_CHANGED;
   data: { conversationId: string; status: string };

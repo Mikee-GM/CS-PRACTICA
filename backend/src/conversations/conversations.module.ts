@@ -1,8 +1,14 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { AiModule } from '../ai/ai.module';
 import { BookingModule } from '../booking/booking.module';
 import { Clientes } from '../clients/entities/client.entity';
 import { Empleadas } from '../employees/entities/employee.entity';
+import { AuthorizedBankAccounts } from '../services/entities/authorized-bank-account.entity';
+import { PaymentReceiptValidations } from '../services/entities/payment-receipt-validation.entity';
+import { Servicios } from '../services/entities/service.entity';
+import { UploadModule } from '../upload/upload.module';
+import { ConversationReceiptsService } from './conversation-receipts.service';
 import { ConversationNotifierModule } from './conversation-notifier.module';
 import { CONVERSATION_TURN_HANDLER } from './conversation-turn-handler';
 import { ConversationsController } from './conversations.controller';
@@ -17,13 +23,26 @@ import { WebTurnHandler } from './web-turn-handler';
 // `BookingModule` no conoce a este modulo, asi que no hay ciclo.
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Conversation, Message, Clientes, Empleadas]),
+    TypeOrmModule.forFeature([
+      Conversation,
+      Message,
+      Clientes,
+      Empleadas,
+      // Comprobantes del chat web: se leen y escriben las entidades, sin
+      // importar `ServicesModule`, que ya importa el notificador de aqui.
+      Servicios,
+      PaymentReceiptValidations,
+      AuthorizedBankAccounts,
+    ]),
     ConversationNotifierModule,
     BookingModule,
+    AiModule,
+    UploadModule,
   ],
   controllers: [ConversationsController],
   providers: [
     ConversationsService,
+    ConversationReceiptsService,
     WebBookingStateStore,
     WebTurnHandler,
     { provide: CONVERSATION_TURN_HANDLER, useExisting: WebTurnHandler },
