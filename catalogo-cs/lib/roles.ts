@@ -20,9 +20,9 @@ const INICIO_POR_ROL: Record<string, string> = {
   jefe: "/jefe",
   empleada: "/empleada/portal",
   chofer: "/chofer/portal",
-  // Los chats son lo que el cliente viene a hacer; la cuenta queda a un toque
-  // desde su cabecera.
-  cliente: "/chats",
+  // Las publicaciones son la portada del cliente; los chats y la cuenta quedan
+  // a un toque en su barra de navegacion.
+  cliente: "/feed",
 };
 
 /**

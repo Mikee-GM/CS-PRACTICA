@@ -156,6 +156,19 @@ describe("middleware: area del cliente", () => {
     expect(destino(respuesta)).toBe("/jefe");
   });
 
+  it.each(["/admin", "/admin/dashboard", "/jefe"])(
+    "un cliente que abre %s aterriza en su portada, las publicaciones",
+    async (ruta) => {
+      backendConRol("cliente");
+
+      const respuesta = await middleware(
+        peticion(ruta, { access_token: "s:valor.firma" }),
+      );
+
+      expect(destino(respuesta)).toBe("/feed");
+    },
+  );
+
   describe.each(["/chats", "/chats/0f4e2c1a-1b2c-4d5e-8f90-123456789abc", "/feed"])(
     "chats del cliente (%s)",
     (ruta) => {

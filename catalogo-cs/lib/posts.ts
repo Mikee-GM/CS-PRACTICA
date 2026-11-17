@@ -251,6 +251,70 @@ export function proporcionDelCarrusel(media: readonly MediaDelPost[]): number {
   return Math.min(PROPORCION_MAXIMA, Math.max(PROPORCION_MINIMA, proporcion));
 }
 
+// ---------------------------------------------------------------------------
+// Lectura de la primera pagina
+// ---------------------------------------------------------------------------
+
+/**
+ * Resultado de pedir la primera pagina en el servidor.
+ *
+ * No es un `PaginaDeFeed | null`: un 403 (cuenta sin declaracion 18+) y un 404
+ * (modelo que ya no publica) piden a la persona cosas distintas que una caida
+ * de red, y con un `null` la pantalla no sabria cual de las tres enseñar.
+ */
+export type LecturaDelFeed =
+  | { estado: "ok"; pagina: PaginaDeFeed }
+  | { estado: "sin-edad" | "no-disponible" | "error"; mensaje: string };
+
+export const MENSAJE_SIN_EDAD =
+  "Para ver las publicaciones tienes que confirmar que eres mayor de edad, y tu cuenta todavía no tiene esa confirmación.";
+
+/**
+ * Traduce el estado HTTP con el que fallo la lectura. `null` es que ni siquiera
+ * hubo respuesta. El 404 significa cosas distintas segun la ruta: en el perfil,
+ * modelo no visible; en el feed general, cuenta sin ficha de cliente.
+ */
+export function falloDelFeed(
+  status: number | null,
+  { perfil }: { perfil: boolean },
+): LecturaDelFeed {
+  if (status === 403) return { estado: "sin-edad", mensaje: MENSAJE_SIN_EDAD };
+  if (status === 404) {
+    return {
+      estado: "no-disponible",
+      mensaje: perfil
+        ? "Las publicaciones de esta modelo no están disponibles por ahora."
+        : "No encontramos tu ficha de cliente, así que no podemos mostrarte publicaciones.",
+    };
+  }
+  return {
+    estado: "error",
+    mensaje: "No se pudieron cargar las publicaciones. Revisa tu conexión y vuelve a intentarlo.",
+  };
+}
+
+/**
+ * Normaliza una pagina recibida. Lo que no tenga forma de pagina se lee como
+ * vacia y sin mas: inventar un cursor mandaria a pedir paginas que no existen.
+ */
+export function paginaDelFeed(respuesta: unknown): PaginaDeFeed {
+  const r = respuesta as Partial<PaginaDeFeed> | null;
+  return {
+    items: Array.isArray(r?.items) ? r.items : [],
+    nextCursor: typeof r?.nextCursor === "string" && r.nextCursor ? r.nextCursor : null,
+  };
+}
+
+/**
+ * Lo que el perfil publico de una modelo puede enseñar bajo su ficha, segun
+ * quien lo mire: nadie, alguien del personal o un cliente (y entonces lo que
+ * respondio el feed).
+ */
+export type PublicacionesDelPerfil =
+  | { sesion: "ninguna" }
+  | { sesion: "personal"; inicio: string }
+  | { sesion: "cliente"; lectura: LecturaDelFeed };
+
 /** Login con regreso a la pantalla del feed en la que estaba. */
 export function loginConRegreso(ruta: string): string {
   return `/ingresar?siguiente=${encodeURIComponent(ruta)}`;
@@ -259,6 +323,11 @@ export function loginConRegreso(ruta: string): string {
 /** Ruta del perfil publico de una modelo. */
 export function rutaDelPerfil(slug: string): string {
   return `/modelos/${encodeURIComponent(slug)}`;
+}
+
+/** Registro con regreso a la pantalla del feed en la que estaba. */
+export function registroConRegreso(ruta: string): string {
+  return `/registro?siguiente=${encodeURIComponent(ruta)}`;
 }
 
 // ---------------------------------------------------------------------------

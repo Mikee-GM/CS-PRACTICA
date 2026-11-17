@@ -284,3 +284,20 @@ input[type="number"] {
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/*
+ * Hueco de la barra inferior del area del cliente (`NavegacionCliente`).
+ *
+ * La barra es fija y taparia el final de la pagina. Se reserva desde aqui, con
+ * `:has()`, y no en cada pantalla: en el perfil de una modelo la barra solo
+ * aparece despues de montar, cuando se sabe que hay sesion de cliente, y la
+ * pagina prerenderizada no puede saberlo de antemano. Por encima de `md` la
+ * barra pasa arriba y en el flujo, y no hace falta reservar nada. El margen de
+ * desplazamiento de los controles (6rem, arriba) ya cubre su alto, asi que el
+ * foco no queda debajo de ella.
+ */
+@media (width < 48rem) {
+  body:has([data-navegacion-cliente]) {
+    padding-bottom: calc(3.5rem + 1px + env(safe-area-inset-bottom, 0px));
+  }
+}

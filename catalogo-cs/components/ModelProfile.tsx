@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import type { Modelo } from "@/types";
-import CustomerRating from "@/components/ui/CustomerRating";
-import { availabilityLabel } from "@/lib/availability";
+import FichaModelo, { estadoDeContacto } from "@/components/FichaModelo";
+import { rutaDelPerfil } from "@/lib/posts";
 import BotonChatear from "@/components/cliente/BotonChatear";
 
 interface ModelProfileProps {
@@ -19,13 +20,7 @@ export default function ModelProfile({ modelo, onClose }: ModelProfileProps) {
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [touchEndX, setTouchEndX] = useState<number | null>(null);
 
-  const status = availabilityLabel(modelo);
-  const effectiveStatus =
-    modelo.availabilityStatus ??
-    (modelo.disponible ? "disponible" : "ocupada");
-  const canContact =
-    effectiveStatus === "disponible" ||
-    (effectiveStatus === "ocupada" && modelo.canScheduleNext !== false);
+  const { status, canContact } = estadoDeContacto(modelo);
 
   const goTo = (index: number) => {
     setActiveIndex(index);
@@ -199,68 +194,15 @@ export default function ModelProfile({ modelo, onClose }: ModelProfileProps) {
             <h2 className="font-heading text-3xl sm:text-4xl font-semibold text-white tracking-wide mb-2 pr-10">
               {modelo.nombre}
             </h2>
-            {modelo.clientRatingAverage != null && (modelo.clientRatingCount ?? 0) > 0 && (
-              <div className="mb-5">
-                <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
-                  Calificación de clientes
-                </p>
-                <CustomerRating
-                  average={modelo.clientRatingAverage}
-                  count={modelo.clientRatingCount}
-                />
-              </div>
-            )}
-            <div className="mb-6">
-              <span className="text-[9px] font-light uppercase tracking-[0.25em] text-zinc-500 block mb-1.5">
-                Disponibilidad
-              </span>
-              <div className="inline-flex items-center gap-2">
-                <span
-                  className={`h-1.5 w-1.5 rounded-full ${
-                    effectiveStatus === "disponible"
-                      ? "bg-[#E8D5A3] shadow-[0_0_8px_rgba(232,213,163,0.8)]"
-                      : "bg-zinc-500"
-                  }`}
-                />
-                <span className="text-xs font-light tracking-[0.25em] uppercase text-[#E8D5A3]">
-                  {status}
-                </span>
-              </div>
-              {effectiveStatus === "ocupada" &&
-                modelo.canScheduleNext !== false && (
-                  <p className="mt-1.5 text-xs font-light text-zinc-400">
-                    Puedes solicitar el siguiente turno desde Telegram.
-                  </p>
-                )}
-            </div>
-            <div className="w-12 h-px bg-[#C5A55A]/60 mb-6" />
-
-            {/* Descripcion con whitespace-pre-wrap para respetar saltos de linea */}
-            {modelo.descripcion && (
-              <p className="text-sm sm:text-[15px] text-zinc-300 font-light leading-relaxed mb-8 whitespace-pre-wrap">
-                {modelo.descripcion}
-              </p>
-            )}
-
-            {/* Servicios Extra */}
-            {modelo.extras && modelo.extras.length > 0 && (
-              <div className="mt-6 mb-8">
-                <h3 className="font-heading text-lg font-semibold text-[#C5A55A] tracking-wider mb-3">
-                  Servicios Extra
-                </h3>
-                <div className="space-y-3 border-t border-zinc-900 pt-3">
-                  {modelo.extras.map((extra) => (
-                    <div
-                      key={extra.id || extra.nombre}
-                      className="flex items-center justify-between text-xs sm:text-sm text-zinc-300 font-light"
-                    >
-                      <span className="font-sans">{extra.nombre}</span>
-                      <span className="font-mono text-[#E8D5A3] font-medium">${extra.precio}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            {modelo.slug ? (
+              <Link
+                href={rutaDelPerfil(modelo.slug)}
+                className="mb-5 inline-flex min-h-11 items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#C5A55A] underline-offset-4 transition-colors hover:text-[#E8D5A3] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C5A55A]"
+              >
+                Ver perfil
+              </Link>
+            ) : null}
+            <FichaModelo modelo={modelo} />
 
             {/* Barra flotante inferior de contacto fija en móvil para que siempre esté visible */}
             <div className="sticky bottom-0 inset-x-0 z-40 mt-6 -mx-6 -mb-6 space-y-3 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] bg-gradient-to-t from-black via-black/95 to-black/80 backdrop-blur-lg border-t border-zinc-800/80 sm:hidden">

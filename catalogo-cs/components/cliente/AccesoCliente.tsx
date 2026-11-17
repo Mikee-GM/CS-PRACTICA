@@ -10,8 +10,8 @@ const enlace =
   "inline-flex min-h-11 items-center rounded-full px-4 text-[11px] font-semibold uppercase tracking-[0.18em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5A55A]/60";
 
 /**
- * Accesos discretos del catalogo: entrar o crear cuenta, o ir a los chats si
- * ya hay sesion.
+ * Accesos discretos del catalogo: entrar o crear cuenta, o ir a las
+ * publicaciones y a los chats si ya hay sesion de cliente.
  *
  * El catalogo se sirve estatico (ISR), asi que la sesion se pregunta despues
  * de montar. Mientras no se sabe no se pinta nada: enseñar "Iniciar sesión" a
@@ -53,12 +53,17 @@ export default function AccesoCliente() {
           </Link>
         </>
       ) : sesion.rol === "cliente" ? (
-        <Link
-          href="/chats"
-          className={`${enlace} border border-[#C5A55A]/50 text-[#C5A55A] hover:bg-[#C5A55A] hover:text-black`}
-        >
-          Mis chats
-        </Link>
+        <>
+          <Link href="/feed" className={`${enlace} text-zinc-300 hover:text-[#E8D5A3]`}>
+            Publicaciones
+          </Link>
+          <Link
+            href="/chats"
+            className={`${enlace} border border-[#C5A55A]/50 text-[#C5A55A] hover:bg-[#C5A55A] hover:text-black`}
+          >
+            Mis chats
+          </Link>
+        </>
       ) : (
         <Link
           href={inicioParaRol(sesion.rol)}

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import AvisoCorreoPendiente from "@/components/cliente/AvisoCorreoPendiente";
+import NavegacionCliente from "@/components/cliente/NavegacionCliente";
 import CerrarSesion from "@/components/ui/CerrarSesion";
 import { apiFetch } from "@/lib/api-server";
 import { getCurrentUser } from "@/lib/auth";
@@ -31,40 +32,43 @@ export default async function CuentaPage() {
   });
 
   return (
-    <main className="min-h-dvh bg-[#050505] px-4 pb-[max(2.5rem,env(safe-area-inset-bottom))] pt-[max(2rem,env(safe-area-inset-top))]">
-      <div className="mx-auto w-full max-w-xl space-y-8">
-        <header className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.4em] text-[#C5A55A]/60">
-              Mi cuenta
-            </p>
-            <h1 className="mt-2 font-heading text-3xl font-semibold text-white">
-              {cuenta.nombre || "Bienvenido"}
-            </h1>
-            <p className="mt-1 text-sm text-zinc-500">{cuenta.email}</p>
+    <>
+      <NavegacionCliente />
+      <main className="min-h-dvh bg-[#050505] px-4 pb-[max(2.5rem,env(safe-area-inset-bottom))] pt-[max(2rem,env(safe-area-inset-top))] md:pt-8">
+        <div className="mx-auto w-full max-w-xl space-y-8">
+          <header className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.4em] text-[#C5A55A]/60">
+                Mi cuenta
+              </p>
+              <h1 className="mt-2 font-heading text-3xl font-semibold text-white">
+                {cuenta.nombre || "Bienvenido"}
+              </h1>
+              <p className="mt-1 text-sm text-zinc-500">{cuenta.email}</p>
+            </div>
+            <CerrarSesion destino="/" />
+          </header>
+
+          {cuenta.correoVerificado ? null : (
+            <AvisoCorreoPendiente email={cuenta.email} />
+          )}
+
+          <div className="flex flex-wrap gap-3">
+            <Link
+              href="/chats"
+              className="inline-block rounded-lg bg-[#C5A55A] px-5 py-3 text-xs font-bold uppercase tracking-[0.15em] text-black transition-colors hover:bg-[#D4AF37]"
+            >
+              Mis chats
+            </Link>
+            <Link
+              href="/"
+              className="inline-block rounded-lg border border-[#C5A55A]/60 px-5 py-3 text-xs font-bold uppercase tracking-[0.15em] text-[#C5A55A] transition-colors hover:bg-[#C5A55A] hover:text-black"
+            >
+              Ver el catálogo
+            </Link>
           </div>
-          <CerrarSesion destino="/" />
-        </header>
-
-        {cuenta.correoVerificado ? null : (
-          <AvisoCorreoPendiente email={cuenta.email} />
-        )}
-
-        <div className="flex flex-wrap gap-3">
-          <Link
-            href="/chats"
-            className="inline-block rounded-lg bg-[#C5A55A] px-5 py-3 text-xs font-bold uppercase tracking-[0.15em] text-black transition-colors hover:bg-[#D4AF37]"
-          >
-            Mis chats
-          </Link>
-          <Link
-            href="/"
-            className="inline-block rounded-lg border border-[#C5A55A]/60 px-5 py-3 text-xs font-bold uppercase tracking-[0.15em] text-[#C5A55A] transition-colors hover:bg-[#C5A55A] hover:text-black"
-          >
-            Ver el catálogo
-          </Link>
         </div>
-      </div>
-    </main>
+      </main>
+    </>
   );
 }

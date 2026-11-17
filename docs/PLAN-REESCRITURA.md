@@ -710,3 +710,35 @@ Pendiente:
 - Probar contra Postgres real `FOR UPDATE`, `SET CONSTRAINTS` por nombre, el
   `unnest ... WITH ORDINALITY`, la cascada al borrar y los CHECKs.
 - Multer aplica un solo `fileSize` (20 MB) a `file` y `poster`.
+
+### Fase 3, F2 (paginas del feed y navegacion del cliente)
+
+- `/feed` (noindex, `getCurrentUser`; sin sesion al login con `siguiente`,
+  personal a su inicio): primera pagina en servidor con `lib/data/posts.ts`, que
+  devuelve `LecturaDelFeed` (ok / sin-edad 403 / no-disponible 404 / error). El
+  error de red llega a `ListaPosts` como `errorInicial`.
+- `/modelos/[slug]`: perfil con forma de red social, ISR como el catalogo
+  (`revalidate = 30`, `generateStaticParams`, `dynamicParams`). El render no lee
+  cookies; la ficha sale de `getCatalogModelos` (slug inexistente -> 404). La
+  sesion y los posts los resuelve `SesionDelPerfil` despues de montar con
+  `publicacionesDelPerfilAction`: sin sesion, bloque para entrar o crear cuenta
+  con regreso al perfil; personal, aviso de que es solo para clientes; cliente,
+  `ListaPosts` del slug. El perfil se indexa (canonical, OG `profile`): el HTML
+  solo lleva la ficha publica que el catalogo ya publica, nunca los posts.
+- `FichaModelo` y `estadoDeContacto` extraidos de `ModelProfile`; el modal los
+  reutiliza y enlaza "Ver perfil" si hay slug.
+- `NavegacionCliente`: Publicaciones, Mis chats, Mi cuenta. Barra inferior fija
+  en movil (area segura), franja sticky arriba desde `md`. En `/feed`, `/chats`,
+  `/cuenta` y el perfil con sesion de cliente; no en `/chats/[id]`.
+- El inicio del cliente pasa a `/feed` (`lib/roles.ts`).
+
+Pendiente:
+
+- Verificacion en navegador y contra el backend real (403/404 reales, barra en la
+  app instalada, salto al llegar la sesion en el perfil).
+- Backend: no hay forma de declarar los 18+ despues del registro (una cuenta
+  antigua recibe 403 para siempre); el 404 de `GET /feed` no distingue "sin
+  ficha" de otros; no hay lectura publica de una modelo por slug.
+- `ListaPosts` muestra un 403 en paginas siguientes como error generico.
+- Decision de producto: el perfil de la modelo se indexa en buscadores (solo la
+  ficha publica). Revisar si se prefiere noindex.

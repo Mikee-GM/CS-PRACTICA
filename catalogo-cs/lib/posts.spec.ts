@@ -1,15 +1,19 @@
 import {
   accionPendiente,
   errorDelMeGusta,
+  falloDelFeed,
   etiquetaDeDiapositiva,
   fechaDelPost,
   loginConRegreso,
   mediaOrdenada,
   meGustaVisible,
+  MENSAJE_SIN_EDAD,
+  paginaDelFeed,
   PROPORCION_MAXIMA,
   PROPORCION_MINIMA,
   proporcionDelCarrusel,
   reconciliarMeGusta,
+  registroConRegreso,
   REGLAS_DE_MEDIA,
   rutaDelFeed,
   rutaDelPerfil,
@@ -296,5 +300,61 @@ describe("validarMediaLocal", () => {
 
   it("las imagenes no tienen tope de duracion ni de video", () => {
     expect(validarMediaLocal([{ tipo: "image/png", bytes: 30 * MB }])).toEqual([]);
+  });
+});
+
+describe("falloDelFeed", () => {
+  it("un 403 es la cuenta sin declaracion 18+, en el feed y en el perfil", () => {
+    expect(falloDelFeed(403, { perfil: false })).toEqual({
+      estado: "sin-edad",
+      mensaje: MENSAJE_SIN_EDAD,
+    });
+    expect(falloDelFeed(403, { perfil: true }).estado).toBe("sin-edad");
+  });
+
+  it("un 404 en el perfil es la modelo no visible, no un error de red", () => {
+    const lectura = falloDelFeed(404, { perfil: true });
+    expect(lectura.estado).toBe("no-disponible");
+    expect(lectura).toHaveProperty("mensaje", expect.stringMatching(/esta modelo/));
+  });
+
+  it("un 404 en el feed general es la cuenta sin ficha de cliente", () => {
+    const lectura = falloDelFeed(404, { perfil: false });
+    expect(lectura.estado).toBe("no-disponible");
+    expect(lectura).toHaveProperty("mensaje", expect.stringMatching(/ficha de cliente/));
+  });
+
+  it.each([null, 500, 502, 429])("lo demas (%s) es un error que se puede reintentar", (status) => {
+    expect(falloDelFeed(status, { perfil: true }).estado).toBe("error");
+  });
+});
+
+describe("paginaDelFeed", () => {
+  it("conserva una pagina bien formada", () => {
+    const pagina = { items: [post("a")], nextCursor: "c1" };
+    expect(paginaDelFeed(pagina)).toEqual(pagina);
+  });
+
+  it.each([null, undefined, "texto", { items: "no" }, {}])(
+    "lee como vacia una respuesta sin forma de pagina (%p)",
+    (respuesta) => {
+      expect(paginaDelFeed(respuesta)).toEqual({ items: [], nextCursor: null });
+    },
+  );
+
+  it("un cursor vacio o que no es texto no invita a pedir otra pagina", () => {
+    expect(paginaDelFeed({ items: [], nextCursor: "" }).nextCursor).toBeNull();
+    expect(paginaDelFeed({ items: [], nextCursor: 3 }).nextCursor).toBeNull();
+  });
+});
+
+describe("registroConRegreso", () => {
+  it("codifica la ruta de regreso como hace el login", () => {
+    expect(registroConRegreso("/modelos/valentina")).toBe(
+      "/registro?siguiente=%2Fmodelos%2Fvalentina",
+    );
+    expect(loginConRegreso("/modelos/valentina")).toBe(
+      "/ingresar?siguiente=%2Fmodelos%2Fvalentina",
+    );
   });
 });
