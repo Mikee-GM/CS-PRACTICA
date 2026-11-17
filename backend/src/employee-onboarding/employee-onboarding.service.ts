@@ -503,9 +503,7 @@ export class EmployeeOnboardingService {
     return Math.max(1, Math.min(5, base - Math.max(0, attemptCount - 1)));
   }
 
-  private async getNextQuestion(
-    attemptId: string,
-  ): Promise<RegulationQuestion> {
+  async getNextQuestion(attemptId: string): Promise<RegulationQuestion> {
     const attempt = await this.attemptRepository.findOne({
       where: { id: attemptId },
       relations: { onboarding: true },

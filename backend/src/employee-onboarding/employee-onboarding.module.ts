@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Empleadas } from '../employees/entities/employee.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { Usuarios } from '../users/entities/user.entity';
 import { EmployeeOnboardingController } from './employee-onboarding.controller';
 import { EmployeeOnboardingService } from './employee-onboarding.service';
@@ -10,6 +11,9 @@ import { QuestionnaireAnswer } from './entities/questionnaire-answer.entity';
 import { QuestionnaireAttempt } from './entities/questionnaire-attempt.entity';
 import { RegulationOption } from './entities/regulation-option.entity';
 import { RegulationQuestion } from './entities/regulation-question.entity';
+import { ReglamentoRecordatoriosScheduler } from './reglamento-recordatorios.scheduler';
+import { ReglamentoWebController } from './reglamento-web.controller';
+import { ReglamentoWebService } from './reglamento-web.service';
 
 @Module({
   imports: [
@@ -23,9 +27,14 @@ import { RegulationQuestion } from './entities/regulation-question.entity';
       Empleadas,
       Usuarios,
     ]),
+    NotificationsModule,
   ],
-  controllers: [EmployeeOnboardingController],
-  providers: [EmployeeOnboardingService],
+  controllers: [EmployeeOnboardingController, ReglamentoWebController],
+  providers: [
+    EmployeeOnboardingService,
+    ReglamentoWebService,
+    ReglamentoRecordatoriosScheduler,
+  ],
   exports: [EmployeeOnboardingService],
 })
 export class EmployeeOnboardingModule {}

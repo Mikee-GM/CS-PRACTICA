@@ -106,4 +106,7 @@ export const ADVISORY_LOCKS = {
   // `withAdvisoryLockPorClave` para que nunca corran dos turnos de la IA a la
   // vez sobre la misma conversacion, tampoco entre replicas.
   conversationTurn: 811_011,
+  // Propia y no `onboardingReminders`: el ciclo de Telegram y este arrancan con
+  // el mismo intervalo, y compartiendo clave uno se saltaria siempre el turno.
+  onboardingWebReminders: 811_021,
 } as const;

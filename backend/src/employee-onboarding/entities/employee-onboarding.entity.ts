@@ -93,6 +93,16 @@ export class EmployeeOnboarding {
   })
   reminderSentAt: Date | null;
 
+  /** Recordatorios push del reglamento ya enviados; se cortan en un tope. */
+  @Column('smallint', { name: 'web_reminder_count', default: 0 })
+  webReminderCount: number;
+
+  @Column('timestamp with time zone', {
+    name: 'last_web_reminder_at',
+    nullable: true,
+  })
+  lastWebReminderAt: Date | null;
+
   @Column('timestamp with time zone', { name: 'completed_at', nullable: true })
   @ApiPropertyOptional()
   completedAt: Date | null;
