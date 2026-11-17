@@ -31,13 +31,14 @@ describe('ConversationsController: guards y roles por ruta', () => {
 
   const NOMBRES = [
     'list',
+    'get',
     'listMessages',
     'open',
     'sendMessage',
     'uploadReceipt',
   ];
 
-  it('expone las cinco rutas del cliente', () => {
+  it('expone las seis rutas del cliente', () => {
     expect(rutas.map((r) => r.nombre).sort()).toEqual([...NOMBRES].sort());
   });
 

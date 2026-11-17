@@ -567,6 +567,16 @@ describe('BookingService (turno web)', () => {
     expect(store.state?.entregadaAlEquipo).toBe(true);
   });
 
+  it('con el borrador ya convertido en servicio la IA no contesta', async () => {
+    const servicio = crear();
+    store.state = { ...estadoInicial(), lifecycle: 'SERVICE_CREATED' };
+
+    await turno(servicio, 'ya viene?');
+
+    expect(bookingAi.callModel).not.toHaveBeenCalled();
+    expect(canal.enviados).toHaveLength(0);
+  });
+
   it('no vuelve a atender un mensaje ya atendido', async () => {
     const servicio = crear();
     bookingAi.callModel.mockResolvedValue('Hola guapo');

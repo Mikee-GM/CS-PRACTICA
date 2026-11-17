@@ -62,6 +62,7 @@ export class WebChatChannel implements ChatChannel {
   readonly kind = 'web' as const;
   private readonly logger = new Logger(WebChatChannel.name);
   private jefes: Array<string | null | undefined> | null = null;
+  private escribiendo = false;
 
   constructor(
     private readonly dataSource: DataSource,
@@ -119,12 +120,34 @@ export class WebChatChannel implements ChatChannel {
   }
 
   showTyping(ref: ConversationRef): Promise<void> {
+    this.escribiendo = true;
+    this.emitirTyping(ref, true);
+    return Promise.resolve();
+  }
+
+  /**
+   * Apaga el "escribiendo" al terminar el turno, haya ido bien o mal. Solo si
+   * se llego a encender: un turno que no paso por el modelo no manda nada.
+   * Nunca lanza; lo llama un `finally`.
+   */
+  terminarTyping(ref: ConversationRef): void {
+    if (!this.escribiendo) return;
+    this.escribiendo = false;
+    try {
+      this.emitirTyping(ref, false);
+    } catch (error) {
+      this.logger.warn(
+        `No se pudo apagar el escribiendo de la conversacion ${ref.conversationId}: ${describeError(error)}`,
+      );
+    }
+  }
+
+  private emitirTyping(ref: ConversationRef, activo: boolean): void {
     const evento: TypingEvent = {
       type: TYPING,
-      data: { conversationId: conversacionDe(ref) },
+      data: { conversationId: conversacionDe(ref), activo },
     };
     this.realtime.emitToClient(ref.clienteId, evento);
-    return Promise.resolve();
   }
 
   /**

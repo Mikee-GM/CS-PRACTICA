@@ -151,7 +151,14 @@ describe('ConversationsService', () => {
       ];
       expect(sql).toContain('WHERE c.client_id = $1');
       expect(sql).toContain('ORDER BY c.last_message_at DESC NULLS LAST');
-      expect(params).toEqual([CLIENTE, null, 100]);
+      expect(params).toEqual([
+        CLIENTE,
+        null,
+        100,
+        ['transferencia', 'mixto'],
+        ['cancelado', 'finalizado'],
+      ]);
+      expect(lista[0].comprobantePendiente).toBe(false);
       expect(lista[0].employee).toEqual({
         id: MODELO,
         nombreArtistico: 'Valentina',
@@ -168,6 +175,75 @@ describe('ConversationsService', () => {
 
       const [sql] = dataSource.query.mock.calls[0] as [string];
       expect(sql).not.toMatch(/nombre_real|telefono|email|telegram/);
+    });
+  });
+
+  describe('getForClient', () => {
+    it('devuelve el resumen de una conversacion propia', async () => {
+      dataSource.query.mockResolvedValue([filaResumen()]);
+
+      const resumen = await crearServicio().getForClient(USUARIO, CONVERSACION);
+
+      expect(resumen.id).toBe(CONVERSACION);
+      const [sql, params] = dataSource.query.mock.calls[0] as [
+        string,
+        unknown[],
+      ];
+      expect(sql).toContain('WHERE c.client_id = $1');
+      expect(params.slice(0, 2)).toEqual([CLIENTE, CONVERSACION]);
+    });
+
+    it('responde 404 con una conversacion ajena o inexistente', async () => {
+      // La consulta filtra por la ficha de la sesion: una ajena no sale.
+      dataSource.query.mockResolvedValue([]);
+
+      await expect(
+        crearServicio().getForClient(USUARIO, CONVERSACION),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('comprobantePendiente', () => {
+    const esperando = {
+      esquema: 1,
+      lifecycle: 'READY',
+      metodoPago: 'transferencia',
+      esperandoComprobante: true,
+    };
+
+    it.each([
+      ['reserva esperando comprobante', { state: esperando }, true],
+      [
+        'servicio por transferencia con la marca puesta',
+        { state: {}, servicio_espera_comprobante: true },
+        true,
+      ],
+      ['sin cobro pendiente', { state: {} }, false],
+      ['conversacion cerrada', { state: esperando, status: 'cerrada' }, false],
+      [
+        'comprobante ya en revision',
+        {
+          state: esperando,
+          comprobante_estado: 'PENDIENTE_REVISION',
+          comprobante_created_at: new Date(),
+        },
+        false,
+      ],
+      [
+        'el anterior fue rechazado',
+        {
+          state: esperando,
+          comprobante_estado: 'RECHAZADO',
+          comprobante_created_at: new Date(),
+        },
+        true,
+      ],
+    ])('%s', async (_caso, fila, esperado) => {
+      dataSource.query.mockResolvedValue([filaResumen(fila)]);
+
+      const [resumen] = await crearServicio().listForClient(USUARIO);
+
+      expect(resumen.comprobantePendiente).toBe(esperado);
     });
   });
 
@@ -238,7 +314,7 @@ describe('ConversationsService', () => {
       expect(resultado.creada).toBe(false);
       expect(resultado.conversation.id).toBe('ganadora');
       const [, params] = dataSource.query.mock.calls[1] as [string, unknown[]];
-      expect(params).toEqual([CLIENTE, 'ganadora', 100]);
+      expect(params.slice(0, 3)).toEqual([CLIENTE, 'ganadora', 100]);
     });
 
     it('no oculta otras violaciones de unicidad', async () => {

@@ -22,6 +22,11 @@ import { Empleadas } from '../employees/entities/employee.entity';
 import { CustomerBookingSession } from './entities/customer-booking-session.entity';
 import { ServicesService } from '../services/services.service';
 import type { UpdateBookingDraftDto } from './dto/update-booking-draft.dto';
+import {
+  aceptarBorradorDeReserva,
+  tieneLugarEscrito,
+  ubicacionDeBorradorValida,
+} from '../booking/aceptacion-de-borrador';
 
 type PreServiceBookingData = {
   durationHours: number | null;
@@ -416,141 +421,40 @@ export class TelegramConversationsService {
       bookingSessionId,
       actor,
     );
-    if (
-      !draft.intendedEmployeeId ||
-      (!draft.durationHours && !draft.openEndedDuration) ||
-      !draft.paymentMethod ||
-      !this.isValidDraftLocation(draft)
-    ) {
-      throw new BadRequestException('El borrador todavía está incompleto');
-    }
-    const claimed = await this.bookingDraftRepository
-      .createQueryBuilder()
-      .update(CustomerBookingSession)
-      .set({
-        status: 'ACCEPTING',
-        version: draft.version + 1,
-        updatedAt: new Date(),
-      })
-      .where('id = :id AND service_id IS NULL AND version = :version', {
-        id: draft.id,
-        version: draft.version,
-      })
-      .execute();
-    if (!claimed.affected) {
-      const current = await this.getBookingDraft(bookingSessionId);
-      if (current.serviceId)
-        return { draft: this.serializeDraft(current), idempotent: true };
-      throw new ConflictException(
-        'La reserva está siendo aceptada por otra persona',
-      );
-    }
-    try {
-      const preexistingService = await this.servicesRepository.findOne({
-        where: { bookingSessionId: draft.id },
-      });
-      if (preexistingService) {
-        const recovered = await this.bookingDraftRepository.save({
-          ...draft,
-          serviceId: preexistingService.id,
-          status: 'SERVICE_CREATED',
-          version: draft.version + 2,
-          updatedAt: new Date(),
-        });
-        await this.conversationsRepository.update(
-          { bookingSessionId: draft.id, servicioId: IsNull() },
-          { servicioId: preexistingService.id },
-        );
-        return {
-          draft: this.serializeDraft(recovered),
-          service: preexistingService,
-          idempotent: true,
-        };
-      }
-      const service = await this.servicesService.reserveNext({
-        clienteId: draft.clientId,
-        bookingSessionId: draft.id,
-        empleadaId: employee.id,
+    // El protocolo (reclamar, crear, recuperar) es comun con el chat web y
+    // vive en `booking/`; aqui queda lo propio del bot.
+    const resultado = await aceptarBorradorDeReserva(
+      {
+        borradores: this.bookingDraftRepository,
+        servicios: this.servicesRepository,
+        reservas: this.servicesService,
+      },
+      draft,
+      employee,
+      {
+        actorId: actor.id,
         jefeId: employee.jefeId ?? actor.id,
-        duracionPactadaHoras: draft.openEndedDuration
-          ? 1
-          : draft.durationHours!,
-        duracionIndefinida: draft.openEndedDuration,
-        metodoPago: draft.paymentMethod,
-        ubicacionClienteLat: draft.locationLat,
-        ubicacionClienteLng: draft.locationLng,
-        precioBaseHoraPactado: Number(employee.precioBaseHora) || 1200,
-        estado: 'pendiente',
-        notas: draft.locationNotes || null,
-        habitacion: draft.room,
         clienteTelegramId: conversation.cliente?.telegramChatId ?? null,
         comprobantePendiente: draft.paymentMethod === 'transferencia',
-        iaActiva: false,
-        presetLocationId: draft.presetLocationId,
-        locationNameSnapshot: draft.locationName,
-        locationAddressSnapshot: draft.locationAddress,
-        tipoAgenda: draft.scheduleType,
-        fechaProgramada: draft.scheduledAt,
-      });
-      // Boss acceptance opens the employee acceptance window. The transport
-      // remains null and is only activated after the employee accepts.
-      await this.servicesService.ofrecerAEmpleada(
-        service.id,
-        actor.id,
-        'chofer',
-        typeof draft.metadata?.['bossNotes'] === 'string'
-          ? draft.metadata['bossNotes']
-          : undefined,
-        draft.room ?? undefined,
-      );
-      const updated = await this.bookingDraftRepository.save({
-        ...draft,
-        serviceId: service.id,
-        status: 'SERVICE_CREATED',
-        version: draft.version + 2,
-        updatedAt: new Date(),
-      });
-      await this.conversationsRepository.update(
-        { bookingSessionId: draft.id, servicioId: IsNull() },
-        { servicioId: service.id },
-      );
+        enlazarConversacion: async (serviceId) => {
+          await this.conversationsRepository.update(
+            { bookingSessionId: draft.id, servicioId: IsNull() },
+            { servicioId: serviceId },
+          );
+        },
+      },
+    );
+    if (!resultado.idempotent && resultado.service) {
       this.emitPreServiceEvent(conversation.intendedEmployee, {
         type: 'booking_service_created',
-        data: { bookingSessionId: draft.id, serviceId: service.id },
+        data: { bookingSessionId: draft.id, serviceId: resultado.service.id },
       });
-      return {
-        draft: this.serializeDraft(updated),
-        service,
-        idempotent: false,
-      };
-    } catch (error) {
-      const existingService = await this.servicesRepository.findOne({
-        where: { bookingSessionId: draft.id },
-      });
-      if (existingService) {
-        const recovered = await this.bookingDraftRepository.save({
-          ...draft,
-          serviceId: existingService.id,
-          status: 'SERVICE_CREATED',
-          version: draft.version + 2,
-          updatedAt: new Date(),
-        });
-        await this.conversationsRepository.update(
-          { bookingSessionId: draft.id, servicioId: IsNull() },
-          { servicioId: existingService.id },
-        );
-        return {
-          draft: this.serializeDraft(recovered),
-          service: existingService,
-          idempotent: true,
-        };
-      }
-      await this.bookingDraftRepository.update(
-        { id: draft.id, serviceId: IsNull() },
-        { status: 'READY', version: draft.version + 1, updatedAt: new Date() },
-      );
-      throw error;
     }
+    return {
+      draft: this.serializeDraft(resultado.draft),
+      ...(resultado.service ? { service: resultado.service } : {}),
+      idempotent: resultado.idempotent,
+    };
   }
 
   private async syncDraftToTelegramSessions(draft: CustomerBookingSession) {
@@ -1467,20 +1371,11 @@ export class TelegramConversationsService {
       'presetLocationId' | 'locationName' | 'locationAddress'
     >,
   ): boolean {
-    return Boolean(
-      draft.presetLocationId ||
-      draft.locationName?.trim() ||
-      draft.locationAddress?.trim(),
-    );
+    return tieneLugarEscrito(draft);
   }
 
   private isValidDraftLocation(draft: CustomerBookingSession): boolean {
-    const hasGps = draft.locationLat != null && draft.locationLng != null;
-    const hasManualLocation =
-      draft.mode === 'HUMAN_ACTIVE' &&
-      draft.manualLocationConfirmed &&
-      this.hasManualLocationText(draft);
-    return hasGps || hasManualLocation;
+    return ubicacionDeBorradorValida(draft);
   }
 
   private isValidSessionLocation(session: Record<string, unknown>): boolean {

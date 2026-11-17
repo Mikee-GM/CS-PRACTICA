@@ -300,4 +300,27 @@ describe('WebTurnHandler', () => {
     expect(bookingService.handleClientMessage).toHaveBeenCalledTimes(1);
     expect(base.locks.size).toBe(0);
   });
+
+  it('apaga el escribiendo al terminar el turno, tambien si falla', async () => {
+    const apagar = jest.spyOn(WebChatChannel.prototype, 'terminarTyping');
+    bookingService.handleClientMessage.mockImplementationOnce(
+      async (ref: ConversationRef, _inbound: unknown, canal: ChatChannel) => {
+        await canal.showTyping(ref);
+        throw new Error('modelo caido');
+      },
+    );
+
+    await turno.onClientMessage(conversacion(), base.agregar('m1', 'hola'));
+
+    expect(apagar).toHaveBeenCalledTimes(1);
+    apagar.mockRestore();
+  });
+
+  it('procesarPendientes atiende lo pendiente sin mensaje nuevo', async () => {
+    base.agregar('m1', 'hola');
+
+    await turno.procesarPendientes!(CONVERSACION);
+
+    expect(atendidos.map((m) => m.channelMessageId)).toEqual(['m1']);
+  });
 });

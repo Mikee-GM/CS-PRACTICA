@@ -159,12 +159,16 @@ export class WebTurnHandler implements ConversationTurnHandler {
           pausaMaximaMs: this.pausaMaximaMs,
         },
       );
-      await this.bookingService.handleClientMessage(
-        ref,
-        aMensajeEntrante(pendientes),
-        canal,
-        this.store,
-      );
+      try {
+        await this.bookingService.handleClientMessage(
+          ref,
+          aMensajeEntrante(pendientes),
+          canal,
+          this.store,
+        );
+      } finally {
+        canal.terminarTyping(ref);
+      }
     }
   }
 

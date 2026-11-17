@@ -17,4 +17,10 @@ export interface ConversationTurnHandler {
    * cliente: lo que tarde o falle aqui no afecta a la respuesta HTTP.
    */
   onClientMessage(conversation: Conversation, message: Message): Promise<void>;
+
+  /**
+   * Atiende lo que quede pendiente sin esperar a un mensaje nuevo; lo usa el
+   * equipo al devolverle la conversacion al asistente.
+   */
+  procesarPendientes?(conversationId: string): Promise<void>;
 }

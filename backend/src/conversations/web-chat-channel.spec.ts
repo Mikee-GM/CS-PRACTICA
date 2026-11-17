@@ -3,6 +3,7 @@ import {
   CONVERSATION_STATUS_CHANGED,
   MESSAGE_CREATED,
   TYPING,
+  estaEscribiendo,
 } from './conversation-events';
 import { WebChatChannel } from './web-chat-channel';
 
@@ -96,9 +97,32 @@ describe('WebChatChannel', () => {
 
     expect(realtime.emitToClient).toHaveBeenCalledWith('cliente-1', {
       type: TYPING,
-      data: { conversationId: 'conversacion-1' },
+      data: { conversationId: 'conversacion-1', activo: true },
     });
     expect(realtime.emitToBosses).not.toHaveBeenCalled();
+  });
+
+  it('apaga el escribiendo al terminar el turno, una sola vez', async () => {
+    await canal.showTyping(REF);
+    canal.terminarTyping(REF);
+    canal.terminarTyping(REF);
+
+    expect(realtime.emitToClient).toHaveBeenCalledTimes(2);
+    expect(realtime.emitToClient).toHaveBeenLastCalledWith('cliente-1', {
+      type: TYPING,
+      data: { conversationId: 'conversacion-1', activo: false },
+    });
+  });
+
+  it('no manda el fin de escribiendo si nunca se encendio', () => {
+    canal.terminarTyping(REF);
+    expect(realtime.emitToClient).not.toHaveBeenCalled();
+  });
+
+  it('trata un evento sin `activo` como que sigue escribiendo', () => {
+    expect(estaEscribiendo({})).toBe(true);
+    expect(estaEscribiendo({ activo: true })).toBe(true);
+    expect(estaEscribiendo({ activo: false })).toBe(false);
   });
 
   it('entrega el historial anterior al turno sin los avisos del sistema', async () => {

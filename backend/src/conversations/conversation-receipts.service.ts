@@ -40,6 +40,12 @@ import {
   RECEIPT_STATUS,
   ReceiptStatusEvent,
 } from './conversation-events';
+import {
+  hayCobroPendiente,
+  METODOS_CON_COMPROBANTE,
+  SERVICIO_CERRADO,
+  VENTANA_ANALISIS_MS,
+} from './comprobante-pendiente';
 import { aMensajeDelChat, type MensajeDelChat } from './conversations.service';
 import { UploadReceiptDto } from './dto/upload-receipt.dto';
 import { Conversation } from './entities/conversation.entity';
@@ -79,9 +85,6 @@ interface ComprobanteRecibido {
   cobro: CobroPendiente;
 }
 
-/** Estados de un servicio que ya no admiten comprobante. */
-const SERVICIO_CERRADO = ['cancelado', 'finalizado'];
-
 /**
  * Comprobantes de transferencia del chat web.
  *
@@ -100,12 +103,8 @@ const SERVICIO_CERRADO = ['cancelado', 'finalizado'];
 export class ConversationReceiptsService {
   private readonly logger = new Logger(ConversationReceiptsService.name);
 
-  /**
-   * Cuanto se considera vivo un analisis en `PROCESANDO`. Igual que en
-   * Telegram: el analizador corta a los 60 s, asi que tres minutos solo los
-   * pasa un analisis que se quedo colgado.
-   */
-  static readonly VENTANA_ANALISIS_MS = 3 * 60 * 1000;
+  /** Ver `VENTANA_ANALISIS_MS` en `comprobante-pendiente.ts`. */
+  static readonly VENTANA_ANALISIS_MS = VENTANA_ANALISIS_MS;
 
   constructor(
     @InjectDataSource() private readonly dataSource: DataSource,
@@ -347,23 +346,25 @@ export class ConversationReceiptsService {
     }
 
     const estado = estadoDelComprobante(resultado);
+    // Si el comprobante llego con la reserva en borrador, el jefe pudo
+    // aceptarla mientras se analizaba: el servicio se mira de nuevo para que
+    // la foto no quede suelta (al aceptar solo se enlaza lo que ya habia).
+    const servicioId =
+      cobro.servicioId ?? (await this.servicioDeLaConversacion(conversation));
     // El servicio que lo esperaba se entera en cuanto la foto no esta
     // descartada; asi el equipo puede confirmar el CEP desde el panel.
-    if (
-      cobro.servicioId &&
-      (estado === 'recibido' || estado === 'en_revision')
-    ) {
+    if (servicioId && (estado === 'recibido' || estado === 'en_revision')) {
       await enlazarComprobanteAServicio(
         {
           servicios: this.serviciosRepository,
           validaciones: this.validacionesRepository,
         },
         this.realtime,
-        cobro.servicioId,
+        servicioId,
         validation.id,
         (error) =>
           this.logger.error(
-            `No se pudo enlazar el comprobante ${validation.id} al servicio ${cobro.servicioId}: ${describeError(error)}`,
+            `No se pudo enlazar el comprobante ${validation.id} al servicio ${servicioId}: ${describeError(error)}`,
           ),
       ).catch((error: unknown) =>
         this.logger.error(
@@ -374,6 +375,23 @@ export class ConversationReceiptsService {
 
     await this.contarResultado(recibido, estado, resultado);
     return estado;
+  }
+
+  private async servicioDeLaConversacion(
+    conversation: Conversation,
+  ): Promise<string | null> {
+    try {
+      const actual = await this.conversationsRepository.findOne({
+        where: { id: conversation.id },
+        select: { id: true, serviceId: true },
+      });
+      return actual?.serviceId ?? null;
+    } catch (error) {
+      this.logger.warn(
+        `No se pudo releer el servicio de la conversacion ${conversation.id}: ${describeError(error)}`,
+      );
+      return null;
+    }
   }
 
   /**
@@ -475,14 +493,14 @@ export class ConversationReceiptsService {
       ? await manager.findOne(Servicios, {
           where: {
             id: conversation.serviceId,
-            metodoPago: In(['transferencia', 'mixto']),
+            metodoPago: In([...METODOS_CON_COMPROBANTE]),
             comprobantePendiente: true,
-            estado: Not(In(SERVICIO_CERRADO)),
+            estado: Not(In([...SERVICIO_CERRADO])),
           },
           select: { id: true },
         })
       : null;
-    if (!estado.esperandoComprobante && !servicio) return null;
+    if (!hayCobroPendiente(estado, Boolean(servicio))) return null;
 
     const empleada = await manager.findOne(Empleadas, {
       where: { id: conversation.employeeId },

@@ -7,7 +7,11 @@ import { Empleadas } from '../employees/entities/employee.entity';
 import { AuthorizedBankAccounts } from '../services/entities/authorized-bank-account.entity';
 import { PaymentReceiptValidations } from '../services/entities/payment-receipt-validation.entity';
 import { Servicios } from '../services/entities/service.entity';
+import { ServicesModule } from '../services/services.module';
+import { CustomerBookingSession } from '../telegram-conversations/entities/customer-booking-session.entity';
 import { UploadModule } from '../upload/upload.module';
+import { StaffConversationsController } from './staff-conversations.controller';
+import { StaffConversationsService } from './staff-conversations.service';
 import { ConversationReceiptsService } from './conversation-receipts.service';
 import { ConversationNotifierModule } from './conversation-notifier.module';
 import { CONVERSATION_TURN_HANDLER } from './conversation-turn-handler';
@@ -33,16 +37,22 @@ import { WebTurnHandler } from './web-turn-handler';
       Servicios,
       PaymentReceiptValidations,
       AuthorizedBankAccounts,
+      // El borrador que aceptan o rechazan los jefes desde la bandeja.
+      CustomerBookingSession,
     ]),
     ConversationNotifierModule,
     BookingModule,
     AiModule,
     UploadModule,
+    // Aceptar el borrador crea el servicio con `ServicesService`. Sin ciclo:
+    // `ServicesModule` importa el notificador, no este modulo.
+    ServicesModule,
   ],
-  controllers: [ConversationsController],
+  controllers: [ConversationsController, StaffConversationsController],
   providers: [
     ConversationsService,
     ConversationReceiptsService,
+    StaffConversationsService,
     WebBookingStateStore,
     WebTurnHandler,
     { provide: CONVERSATION_TURN_HANDLER, useExisting: WebTurnHandler },

@@ -29,9 +29,34 @@ export type MessageCreatedEvent = {
   data: { conversationId: string; messageId: string };
 };
 
+/**
+ * El asistente empieza (`activo: true`) o deja (`activo: false`) de escribir.
+ * El fin llega al terminar el turno, tambien si fallo. Los eventos anteriores
+ * a este campo no lo traian: quien lo lea trata su ausencia como `true`
+ * (`estaEscribiendo`), y el navegador lo apaga solo a los 10 s por si el fin
+ * no llegara.
+ */
 export type TypingEvent = {
   type: typeof TYPING;
-  data: { conversationId: string };
+  data: { conversationId: string; activo: boolean };
+};
+
+export function estaEscribiendo(data: { activo?: boolean | null }): boolean {
+  return data.activo !== false;
+}
+
+/**
+ * Una persona del equipo tomo o devolvio la conversacion. Solo va a los
+ * jefes: el modo no se le expone al cliente, que se entera por el aviso del
+ * `sistema` que acompaña al cambio.
+ */
+export type ConversationModeChangedEvent = {
+  type: typeof CONVERSATION_MODE_CHANGED;
+  data: {
+    conversationId: string;
+    mode: 'AI_ACTIVE' | 'HUMAN_ACTIVE';
+    humanOwnerId: string | null;
+  };
 };
 
 /**

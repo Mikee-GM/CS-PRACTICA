@@ -38,8 +38,9 @@ import {
 } from './dto/upload-receipt.dto';
 
 /**
- * Chat web visto por el cliente. Las rutas del jefe (toma de control,
- * respuesta humana) iran en su propio controlador: aqui todo es `cliente`.
+ * Chat web visto por el cliente. Las rutas del equipo (toma de control,
+ * respuesta humana, aceptar o rechazar el borrador) viven en
+ * `StaffConversationsController`: aqui todo es `cliente`.
  *
  * Abrir un chat y enviar un mensaje responden 201 cuando crean algo y 200
  * cuando devuelven lo que ya existia (chat abierto o reintento del mismo
@@ -76,6 +77,16 @@ export class ConversationsController {
       );
     res.status(creada ? HttpStatus.CREATED : HttpStatus.OK);
     return conversation;
+  }
+
+  @Get(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('cliente')
+  get(
+    @GetUser() actor: Usuarios,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<ResumenDeConversacion> {
+    return this.conversationsService.getForClient(actor.id, id);
   }
 
   @Get(':id/messages')

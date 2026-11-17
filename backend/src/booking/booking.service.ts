@@ -265,6 +265,10 @@ export class BookingService {
     // Con la conversacion en manos de una persona la IA no contesta: lo que
     // escriba el cliente ya lo ve el equipo en el panel.
     if (t.estado.entregadaAlEquipo) return;
+    // Con el borrador ya convertido en servicio la IA tampoco contesta, como
+    // en Telegram (`iaActiva: false` al aceptar): seguir la reserva desde aqui
+    // abriria otra encima de la aceptada. Del servicio se ocupa el equipo.
+    if (t.estado.lifecycle === 'SERVICE_CREATED') return;
 
     const mensaje = capClientMessage(stripControlMarkers(t.inbound.text ?? ''));
     const pin = pinDe(t.inbound.attachments);

@@ -12,6 +12,13 @@ import { Clientes } from '../clients/entities/client.entity';
 import { describeError } from '../common/errors/error-message';
 import { Empleadas } from '../employees/entities/employee.entity';
 import { RealtimeEventsService } from '../realtime/realtime.service';
+import {
+  admiteComprobante,
+  joinServicioQueEsperaComprobante,
+  lateralUltimoComprobante,
+  METODOS_CON_COMPROBANTE,
+  SERVICIO_CERRADO,
+} from './comprobante-pendiente';
 import { MESSAGE_CREATED, MessageCreatedEvent } from './conversation-events';
 import {
   CONVERSATION_TURN_HANDLER,
@@ -64,6 +71,12 @@ export type ResumenDeConversacion = {
     hasAttachment: boolean;
     createdAt: Date;
   } | null;
+  /**
+   * El cliente puede mandar ahora el comprobante de su transferencia. Es el
+   * mismo criterio con el que `POST /conversations/:id/receipt` lo acepta
+   * (`admiteComprobante`): si es `false`, la subida responderia 409.
+   */
+  comprobantePendiente: boolean;
 };
 
 export type MensajeDelChat = {
@@ -99,15 +112,20 @@ type FilaResumen = {
   last_body: string | null;
   last_has_attachment: boolean | null;
   last_created_at: Date | null;
+  state: unknown;
+  servicio_espera_comprobante: boolean;
+  comprobante_estado: string | null;
+  comprobante_created_at: Date | null;
 };
 
-type FilaMensaje = {
+export type FilaMensaje = {
   id: string;
   conversation_id: string;
   sender: MessageSender;
   body: string;
   attachment: MessageAttachment | null;
   client_message_id: string | null;
+  receipt_validation_id: string | null;
   created_at: Date;
 };
 
@@ -139,6 +157,18 @@ export class ConversationsService {
   async listForClient(usuarioId: string): Promise<ResumenDeConversacion[]> {
     const clienteId = await this.resolveClienteId(usuarioId);
     return this.queryResumenes(clienteId);
+  }
+
+  /**
+   * Una sola conversacion, para la cabecera del chat sin cargar la bandeja.
+   * Ajena o inexistente responde 404, como el resto de rutas.
+   */
+  async getForClient(
+    usuarioId: string,
+    conversationId: string,
+  ): Promise<ResumenDeConversacion> {
+    const clienteId = await this.resolveClienteId(usuarioId);
+    return this.resumen(clienteId, conversationId);
   }
 
   /**
@@ -205,25 +235,13 @@ export class ConversationsService {
     const clienteId = await this.resolveClienteId(usuarioId);
     await this.findOwned(clienteId, conversationId);
 
-    const limit = query.limit ?? DEFAULT_MESSAGES_PAGE;
-    // Se pide uno de mas para saber si queda otra pagina sin un COUNT aparte.
-    const filas: FilaMensaje[] = await this.dataSource.query(
-      `SELECT m.id, m.conversation_id, m.sender, m.body, m.attachment,
-              m.client_message_id, m.created_at
-       FROM messages m
-       WHERE m.conversation_id = $1
-         AND ($2::uuid IS NULL OR (m.created_at, m.id) < (
-               SELECT c.created_at, c.id FROM messages c
-               WHERE c.id = $2::uuid AND c.conversation_id = $1))
-       ORDER BY m.created_at DESC, m.id DESC
-       LIMIT $3`,
-      [conversationId, query.cursor ?? null, limit + 1],
+    const { filas, nextCursor } = await leerPaginaDeMensajes(
+      this.dataSource,
+      conversationId,
+      query,
     );
-
-    const hayMas = filas.length > limit;
-    const pagina = hayMas ? filas.slice(0, limit) : filas;
     return {
-      items: pagina.map((fila) =>
+      items: filas.map((fila) =>
         aMensajeDelChat({
           id: fila.id,
           conversationId: fila.conversation_id,
@@ -234,7 +252,7 @@ export class ConversationsService {
           createdAt: fila.created_at,
         }),
       ),
-      nextCursor: hayMas ? pagina[pagina.length - 1].id : null,
+      nextCursor,
     };
   }
 
@@ -397,7 +415,11 @@ export class ConversationsService {
               m.id AS last_id, m.sender AS last_sender,
               LEFT(m.body, ${PREVIEW_LENGTH + 1}) AS last_body,
               (m.attachment IS NOT NULL) AS last_has_attachment,
-              m.created_at AS last_created_at
+              m.created_at AS last_created_at,
+              c.state,
+              (sc.id IS NOT NULL) AS servicio_espera_comprobante,
+              rc.estado AS comprobante_estado,
+              rc.created_at AS comprobante_created_at
        FROM conversations c
        INNER JOIN empleadas e ON e.id = c.employee_id
        LEFT JOIN LATERAL (
@@ -407,11 +429,19 @@ export class ConversationsService {
          ORDER BY created_at DESC, id DESC
          LIMIT 1
        ) m ON true
+       ${joinServicioQueEsperaComprobante('sc', 'c', '$4', '$5')}
+       ${lateralUltimoComprobante('rc', 'c')}
        WHERE c.client_id = $1
          AND ($2::uuid IS NULL OR c.id = $2::uuid)
        ORDER BY c.last_message_at DESC NULLS LAST, c.created_at DESC
        LIMIT $3`,
-      [clienteId, conversationId ?? null, MAX_CONVERSATIONS_LISTED],
+      [
+        clienteId,
+        conversationId ?? null,
+        MAX_CONVERSATIONS_LISTED,
+        [...METODOS_CON_COMPROBANTE],
+        [...SERVICIO_CERRADO],
+      ],
     );
     return filas.map((fila) => ({
       id: fila.id,
@@ -433,6 +463,17 @@ export class ConversationsService {
             createdAt: fila.last_created_at as Date,
           }
         : null,
+      comprobantePendiente: admiteComprobante({
+        status: fila.status,
+        estado: fila.state,
+        servicioLoEspera: Boolean(fila.servicio_espera_comprobante),
+        ultimoComprobante: fila.comprobante_created_at
+          ? {
+              estado: fila.comprobante_estado,
+              createdAt: fila.comprobante_created_at,
+            }
+          : null,
+      }),
     }));
   }
 
@@ -490,6 +531,37 @@ export class ConversationsService {
 }
 
 const CONVERSACION_NO_ENCONTRADA = 'Conversación no encontrada';
+
+/**
+ * Una pagina de mensajes, comun al cliente y al equipo: cada uno decide antes
+ * si puede ver la conversacion y despues que deja ver de cada fila.
+ */
+export async function leerPaginaDeMensajes(
+  dataSource: DataSource,
+  conversationId: string,
+  query: ListMessagesDto,
+): Promise<{ filas: FilaMensaje[]; nextCursor: string | null }> {
+  const limit = query.limit ?? DEFAULT_MESSAGES_PAGE;
+  // Se pide uno de mas para saber si queda otra pagina sin un COUNT aparte.
+  const filas: FilaMensaje[] = await dataSource.query(
+    `SELECT m.id, m.conversation_id, m.sender, m.body, m.attachment,
+            m.client_message_id, m.receipt_validation_id, m.created_at
+     FROM messages m
+     WHERE m.conversation_id = $1
+       AND ($2::uuid IS NULL OR (m.created_at, m.id) < (
+             SELECT c.created_at, c.id FROM messages c
+             WHERE c.id = $2::uuid AND c.conversation_id = $1))
+     ORDER BY m.created_at DESC, m.id DESC
+     LIMIT $3`,
+    [conversationId, query.cursor ?? null, limit + 1],
+  );
+  const hayMas = filas.length > limit;
+  const pagina = hayMas ? filas.slice(0, limit) : filas;
+  return {
+    filas: pagina,
+    nextCursor: hayMas ? pagina[pagina.length - 1].id : null,
+  };
+}
 
 export function aMensajeDelChat(message: {
   id: string;

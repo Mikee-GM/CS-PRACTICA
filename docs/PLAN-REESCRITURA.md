@@ -466,3 +466,50 @@ Pendiente:
 - `ERROR_VALIDACION` no se puede confirmar desde el panel.
 - Una imagen puede quedar huerfana en R2 si dos reintentos llegan a la vez.
 - `cuentasParaTransferir` repite el formato de `bankTransferDetails`.
+
+### Fase 2, paso 8 (lado del equipo en el chat web)
+
+- `StaffConversationsController` (`/staff/conversations`), separado del del
+  cliente: todas las rutas con `JwtAuthGuard` + `RolesGuard` +
+  `@Roles('admin','jefe')`; las que escriben, ademas `CsrfGuard` y limite de
+  ritmo. Bandeja (`GET`, con `estado` y `q`; sin `estado`, todo menos
+  `cerrada`), mensajes con coordenadas del pin, `take-over`, `release`,
+  `messages`, `accept` y `reject`.
+- Alcance (`conversations/alcance-del-jefe.ts`): el admin ve todo; un jefe, las
+  modelos de las que es principal o secundario y, si ninguno de los dos puede
+  atender (`puedeAtender`, ahora en `services/puede-atender.ts`), cualquiera.
+  Fuera de alcance, 404.
+- Toma de control con un UPDATE condicionado: de dos jefes gana uno y el otro
+  recibe 409 con quien la tiene; el admin fuerza con `forzar`. Aviso `sistema`
+  al cliente ("Una persona del equipo continua esta conversacion contigo.").
+  `conversation_mode_changed` solo va a los jefes.
+- Devolver el control quita `entregadaAlEquipo` con version optimista, retrocede
+  el cursor hasta la ultima respuesta que no sea del cliente y lanza
+  `procesarPendientes`: la IA contesta lo que quedo sin respuesta.
+- Mensaje del equipo: solo en `HUMAN_ACTIVE` y por quien la tomo (o un admin),
+  idempotente, sin emojis, guardado como `jefe`.
+- Aceptar: `booking/aceptacion-de-borrador.ts`, extraido de `acceptBookingDraft`
+  por delegacion (los specs de Telegram no cambian). La web no supone un cliente
+  de Telegram. Enlaza `service_id`, pasa a `con_servicio`, enlaza el ultimo
+  comprobante vigente al servicio (y el analisis que termine despues lo enlaza
+  tambien), deja el estado en `SERVICE_CREATED` y avisa al cliente. Con servicio
+  la IA ya no contesta; la bandeja marca `cliente_sin_respuesta`. Un jefe de
+  relevo se queda con el servicio.
+- Rechazar: borrador `CANCELLED` con el motivo en `metadata.rechazo`; la
+  conversacion no se cierra (vuelve a `activa`, sin borrador, reserva reiniciada
+  conservando la entrega al equipo) y aviso neutro al cliente.
+- Cliente: `GET /conversations/:id`; `comprobantePendiente` en el resumen, con el
+  mismo criterio que la subida (`conversations/comprobante-pendiente.ts`);
+  `typing` lleva `activo` y el turno lo apaga al terminar, tambien con error.
+
+Pendiente:
+
+- Probar contra Postgres real los UPDATE en CTE, los `::text[]` sobre enums, el
+  LATERAL del comprobante y el ILIKE; probar las rutas de punta a punta.
+- La cancelacion del cliente con la reserva en revision sigue solo avisando; el
+  equipo la resuelve con `reject`.
+- El comprobante de una solicitud rechazada queda sin servicio; falta decidir el
+  reembolso.
+- Un jefe de relevo que no actuo no recibe los SSE de esas conversaciones.
+- La bandeja trae 200 como mucho y ordena por atencion despues del LIMIT.
+- Frontend del panel del equipo (paso 11).
