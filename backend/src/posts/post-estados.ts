@@ -14,12 +14,13 @@ export const MAX_CAPTION = 2000;
  * Transiciones permitidas. `aprobado -> pendiente` es la edicion de un post
  * publicado: vuelve a revision y se oculta, pero conserva sus likes porque la
  * fila es la misma. `archivado` es terminal: archivar es el "borrar" de la
- * modelo para lo ya publicado, y desarchivar sin revision lo devolveria al
- * feed sin que nadie lo vea antes.
+ * modelo para lo ya publicado o en revision (un pendiente puede ser un
+ * aprobado editado, con sus likes), y desarchivar sin revision lo devolveria
+ * al feed sin que nadie lo vea antes.
  */
 const TRANSICIONES: Record<PostStatus, readonly PostStatus[]> = {
   borrador: ['pendiente'],
-  pendiente: ['aprobado', 'rechazado'],
+  pendiente: ['aprobado', 'rechazado', 'archivado'],
   rechazado: ['borrador'],
   aprobado: ['archivado', 'pendiente'],
   archivado: [],

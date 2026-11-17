@@ -668,3 +668,45 @@ Pendiente:
   contador tras el trigger; probar las rutas de punta a punta.
 - `EmployeesService.findAllActive` sigue aplicando el criterio de visibilidad en
   memoria: unificarlo con `modelo-visible.ts`.
+
+### Fase 3, B3
+
+API de la modelo para sus posts, desde el portal (`/employee-portal/posts`).
+
+- `PostsService` (exportado para B5): `crearBorrador`, `editarCaption`,
+  `agregarMedia`, `quitarMedia`, `reordenarMedia`, `enviar`, `borrar`,
+  `listarDeLaModelo`, `obtener` y `modeloDelPost`. No conoce al actor: recibe la
+  `employeeId` (obligatoria) y un post ajeno responde 404 como uno inexistente;
+  el alcance lo decide quien llama.
+- Toda transicion es un UPDATE condicionado al estado leido y comprobado con
+  RETURNING (409 a quien pierde la carrera). Texto y media bloquean la fila del
+  post (`FOR UPDATE`); `enviar` es un solo UPDATE que exige estado y media.
+- Editar (texto o media) aplica `siguienteAlEditar`: un aprobado vuelve a
+  pendiente con `submitted_at` nuevo y conserva likes y `published_at` (B5 debe
+  aprobar con `COALESCE(published_at, now())`); un rechazado vuelve a borrador y
+  conserva el motivo hasta reenviarse.
+- `enviar` acepta borrador y rechazado (este como `rechazado -> borrador ->
+  pendiente`, incluso sin cambios) y limpia el motivo de rechazo.
+- Borrar: borrador y rechazado se borran con su media en R2; pendiente y
+  aprobado se archivan (se anadio `pendiente -> archivado` a la maquina de
+  estados); archivado es idempotente. La lista de la modelo no muestra archivados.
+- Media: una por peticion (multipart `file`, `poster` obligatorio en video,
+  `width`/`height`/`durationMs`); el tipo lo deciden los bytes. Topes comprobados
+  antes de subir y otra vez con el post bloqueado; si el INSERT falla se borra de
+  R2 lo subido. Reordenar es un UPDATE en transaccion con el UNIQUE de posicion
+  diferido.
+- `EmployeePostsController` con `PortalAuthGuard` y sin `RolesGuard`: la barrera
+  de rol es `findByUserId` en cada ruta (404 si la cuenta no es de una empleada).
+
+Contrato: `PostDeLaModelo = { id, caption, status, rejectionReason, submittedAt,
+publishedAt, createdAt, likeCount, media: [{ id, kind, url, posterUrl, width,
+height, durationMs, position }] }`. `GET /` (cursor uuid, limit 1-50),
+`POST /` `{ caption }`, `PATCH /:id`, `POST /:id/media` (multipart), `DELETE
+/:id/media/:mediaId`, `PUT /:id/media/order` `{ ids }`, `POST /:id/submit`,
+`DELETE /:id`.
+
+Pendiente:
+
+- Probar contra Postgres real `FOR UPDATE`, `SET CONSTRAINTS` por nombre, el
+  `unnest ... WITH ORDINALITY`, la cascada al borrar y los CHECKs.
+- Multer aplica un solo `fileSize` (20 MB) a `file` y `poster`.

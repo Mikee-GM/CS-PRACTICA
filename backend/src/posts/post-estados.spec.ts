@@ -22,9 +22,10 @@ describe('post-estados', () => {
       expect(puedeTransicionar('borrador', 'pendiente')).toBe(false);
     });
 
-    it('resuelve la revision de un pendiente', () => {
+    it('resuelve la revision de un pendiente o lo archiva', () => {
       expect(puedeTransicionar('pendiente', 'aprobado')).toBe(true);
       expect(puedeTransicionar('pendiente', 'rechazado')).toBe(true);
+      expect(puedeTransicionar('pendiente', 'archivado')).toBe(true);
     });
 
     it('devuelve un rechazado a borrador', () => {
@@ -54,7 +55,6 @@ describe('post-estados', () => {
         ['borrador', 'aprobado'],
         ['borrador', 'archivado'],
         ['pendiente', 'borrador'],
-        ['pendiente', 'archivado'],
         ['rechazado', 'aprobado'],
         ['aprobado', 'rechazado'],
         ['aprobado', 'borrador'],
