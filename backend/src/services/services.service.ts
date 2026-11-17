@@ -45,6 +45,7 @@ import {
 import { DisciplineService } from '../discipline/discipline.service';
 import { explicarFaltaDeChoferes } from '../drivers/diagnostico-de-reparto';
 import { momentoDeTurno, sqlTurnoVigente } from '../drivers/turno-vigente';
+import { sqlUbicacionFresca } from '../drivers/ubicacion-fresca';
 import { AuthorizedBankAccounts } from './entities/authorized-bank-account.entity';
 import { SaveBankAccountDto } from './dto/bank-account.dto';
 import { ConfirmReceiptCepDto } from './dto/confirm-receipt-cep.dto';
@@ -2825,14 +2826,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       data: servicio,
     });
 
-    // Notificar a la empleada por Telegram si tiene telegramChatId y usa el app
+    // Notificar a la empleada por Telegram si tiene telegramChatId. `modo_bot`
+    // ya no la excluye: todas usan la plataforma.
     const empUser = servicio.empleada?.usuario;
-    // Si modoBot es false, la empleada no usa el app: se salta la notificacion
-    // de Telegram. El servicio sigue adelante normalmente; el jefe le avisa
-    // por otros medios (WhatsApp, llamada, etc.).
-    const empleadaUsaBot = servicio.empleada?.modoBot !== false;
     if (
-      empleadaUsaBot &&
       empUser &&
       empUser.telegramChatId &&
       empUser.telegramChatId !== '111111111'
@@ -2917,37 +2914,19 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         uberLink = this.buildUberLinkForTrip(servicio, 'ida');
       }
     } else if (!deferTransport && viajeGuardado) {
-      // Si todos los choferes registrados tienen modoBot=false, no hay ninguno
-      // que use el app: se trata el viaje como Uber automatico en lugar de
-      // intentar un despacho que siempre fallaria.
-      const hayChoferConBot = await this.choferesRepository
-        .createQueryBuilder('chofer')
-        .where('chofer.modo_bot = :mb', { mb: true })
-        .andWhere('chofer.disponible = :d', { d: true })
-        .getCount();
-
-      if (hayChoferConBot === 0) {
-        this.logger.log(
-          `[dispatchViaje] Todos los choferes tienen modoBot=false. ` +
-            `Viaje ${viajeGuardado.id} registrado como Uber automatico.`,
+      /*
+       * Antes, si todos los choferes tenian `modo_bot` en falso, el viaje pasaba
+       * solo a Uber sin ofrecerse a nadie. Ya no: todos usan la plataforma, y
+       * si no hay chofer elegible el reparto avisa al jefe, que decide si lo
+       * cambia a Uber.
+       */
+      try {
+        await this.dispatchViaje(viajeGuardado.id);
+      } catch (dispatchErr) {
+        this.logger.error(
+          'Error al iniciar despacho de choferes por proximidad:',
+          dispatchErr,
         );
-        // Marca el viaje como Uber y actualiza el servicio
-        await this.viajesRepository.update(viajeGuardado.id, {
-          estado: 'aceptado',
-        });
-        await this.serviciosRepository.update(servicio.id, {
-          transporteAgendado: 'uber',
-        });
-        uberLink = this.buildUberLinkForTrip(servicio, 'ida');
-      } else {
-        try {
-          await this.dispatchViaje(viajeGuardado.id);
-        } catch (dispatchErr) {
-          this.logger.error(
-            'Error al iniciar despacho de choferes por proximidad:',
-            dispatchErr,
-          );
-        }
       }
     }
 
@@ -4434,9 +4413,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       // aviso y por eso no puede ser requisito para recibir una oferta.
       .andWhere('chofer.ubicacionLat IS NOT NULL')
       .andWhere('chofer.ubicacionLng IS NOT NULL')
-      // Solo choferes que usan el app: los que tienen modoBot=false no
-      // reciben ofertas de viaje por Telegram.
-      .andWhere('chofer.modo_bot = :modoBot', { modoBot: true });
+      // Una posicion vieja ordena mal por cercania: se le ofreceria el viaje
+      // a quien ya no esta ahi. `modo_bot` ya no cuenta: todos los choferes
+      // reciben la oferta en la plataforma.
+      .andWhere(sqlUbicacionFresca('chofer'));
     query.andWhere(
       `NOT EXISTS (
         SELECT 1 FROM disciplinary_sanctions ds

@@ -10,6 +10,7 @@ import {
 import { Usuarios } from '../../users/entities/user.entity';
 import { Viajes } from '../../trips/entities/trip.entity';
 import { ColumnNumericTransformer } from '../../common/transformers/column-numeric.transformer';
+import { MINUTOS_DE_UBICACION_FRESCA } from '../ubicacion-fresca';
 
 @Index('idx_choferes_disponible', ['disponible'], {})
 @Index('choferes_pkey', ['id'], { unique: true })
@@ -18,6 +19,18 @@ import { ColumnNumericTransformer } from '../../common/transformers/column-numer
 export class Choferes {
   @ApiPropertyOptional()
   sancionada?: boolean;
+
+  /**
+   * Si su posicion ya no cuenta para el reparto: no tiene, o es de hace mas de
+   * `MINUTOS_DE_UBICACION_FRESCA`. No es columna; la calcula PostgreSQL al
+   * listar, con la misma condicion que aplica el reparto, para que el jefe vea
+   * por que un chofer "disponible" no recibe ofertas.
+   */
+  @ApiPropertyOptional({
+    description: `True si la ubicacion falta o es de hace mas de ${MINUTOS_DE_UBICACION_FRESCA} minutos y el reparto la ignora`,
+    example: false,
+  })
+  ubicacionVieja?: boolean;
 
   @Column('uuid', {
     primary: true,
@@ -50,16 +63,14 @@ export class Choferes {
   disponible: boolean;
 
   /**
-   * Indica si este chofer usa el app de Telegram normalmente.
-   *
-   * Cuando es false el viaje se registra directamente como Uber sin notificar
-   * a nadie: util durante la fase de simulacion en produccion donde los choferes
-   * aun no han sido incorporados. Se puede cambiar desde el panel de admin.
+   * Heredado de la etapa de Telegram: con todos los choferes en false el viaje
+   * pasaba solo a Uber. Desde la Fase 5 el reparto ya no lo lee, porque todos
+   * reciben la oferta en la plataforma. La columna sigue hasta la limpieza de
+   * la Fase 6.
    */
   @Column('boolean', { name: 'modo_bot', default: () => 'true' })
   @ApiProperty({
-    description:
-      'Si true, el chofer recibe ofertas de viaje normalmente. Si false, el viaje se despacha como Uber automatico.',
+    description: 'Sin efecto desde la Fase 5; se conserva hasta la Fase 6.',
     example: true,
   })
   modoBot: boolean;

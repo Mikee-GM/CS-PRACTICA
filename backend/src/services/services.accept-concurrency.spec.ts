@@ -94,13 +94,9 @@ describe('ServicesService.aceptar (concurrencia)', () => {
       dispatchTimeouts: new Map(),
       serviciosRepository,
       viajesRepository,
-      choferesRepository: {
-        createQueryBuilder: jest.fn(() => ({
-          where: jest.fn().mockReturnThis(),
-          andWhere: jest.fn().mockReturnThis(),
-          getCount: jest.fn().mockResolvedValue(1),
-        })),
-      },
+      // Vacio a proposito: aceptar ya no cuenta choferes con `modo_bot` antes
+      // de despachar. Si volviera a consultarlos, estas pruebas reventarian.
+      choferesRepository: {},
       usuariosRepository: {},
       conversationsRepository: {},
       bankAccountsRepository: {},

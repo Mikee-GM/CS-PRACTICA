@@ -11,6 +11,7 @@ import {
   explicarFaltaDeChoferes,
   type ContextoDelReparto,
 } from './diagnostico-de-reparto';
+import { sqlUbicacionFresca } from './ubicacion-fresca';
 import { CreateDriverDto } from './dto/create-driver.dto';
 import { UpdateDriverDto } from './dto/update-driver.dto';
 import { Choferes } from './entities/driver.entity';
@@ -255,8 +256,8 @@ export class DriversService {
     });
     if (drivers.length === 0) return drivers;
     const ids = drivers.map((d) => d.id);
-    const sanctionedRows: Array<{ subject_id: string }> =
-      await this.dataSource.query(
+    const [sanctionedRows, conUbicacionFresca] = await Promise.all([
+      this.dataSource.query(
         `SELECT DISTINCT subject_id
          FROM disciplinary_sanctions
          WHERE subject_type = 'driver'
@@ -265,10 +266,13 @@ export class DriversService {
            AND (type = 'permanent_ban' OR ends_at > now())
            AND subject_id = ANY($1::uuid[])`,
         [ids],
-      );
+      ) as Promise<Array<{ subject_id: string }>>,
+      this.idsConUbicacionFresca(ids),
+    ]);
     const sanctionedSet = new Set(sanctionedRows.map((r) => r.subject_id));
     return drivers.map((d) => {
       d.sancionada = sanctionedSet.has(d.id);
+      d.ubicacionVieja = !conUbicacionFresca.has(d.id);
       return d;
     });
   }
@@ -283,7 +287,31 @@ export class DriversService {
       throw new NotFoundException(`Chofer con ID ${id} no encontrado`);
     }
 
+    const conUbicacionFresca = await this.idsConUbicacionFresca([chofer.id]);
+    chofer.ubicacionVieja = !conUbicacionFresca.has(chofer.id);
     return chofer;
+  }
+
+  /**
+   * Que choferes tienen una posicion que el reparto todavia acepta.
+   *
+   * Se pregunta a PostgreSQL con la misma condicion del reparto en vez de
+   * comparar `ultimaUbicacionAt` aqui: asi el jefe ve exactamente el corte que
+   * se aplica, con el mismo reloj, y no una aproximacion que puede discrepar
+   * por un desfase entre el backend y la base.
+   */
+  private async idsConUbicacionFresca(ids: string[]): Promise<Set<string>> {
+    if (ids.length === 0) return new Set();
+    const filas: Array<{ id: string }> = await this.dataSource.query(
+      `SELECT c.id
+       FROM choferes c
+       WHERE c.id = ANY($1::uuid[])
+         AND c.ubicacion_lat IS NOT NULL
+         AND c.ubicacion_lng IS NOT NULL
+         AND ${sqlUbicacionFresca('c')}`,
+      [ids],
+    );
+    return new Set(filas.map((fila) => fila.id));
   }
 
   /**
@@ -390,9 +418,11 @@ export class DriversService {
       .andWhere('usuario.activo = :usuarioActivo', { usuarioActivo: true })
       // Fuera de jornada no entra al reparto, aunque siga marcado disponible.
       .andWhere('usuario.enJornada = :enJornada', { enJornada: true })
-      .andWhere('usuario.telegramChatId IS NOT NULL')
+      // Mismas condiciones que el reparto: Telegram ya no se exige y la
+      // posicion tiene que ser reciente.
       .andWhere('chofer.ubicacionLat IS NOT NULL')
       .andWhere('chofer.ubicacionLng IS NOT NULL')
+      .andWhere(sqlUbicacionFresca('chofer'))
       .select([
         'chofer.id',
         'chofer.nombre',

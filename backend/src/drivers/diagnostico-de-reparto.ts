@@ -1,6 +1,10 @@
 import type { Logger } from '@nestjs/common';
 
 import { momentoDeTurno, sqlTurnoVigenteNumerado } from './turno-vigente';
+import {
+  MINUTOS_DE_UBICACION_FRESCA,
+  sqlUbicacionFresca,
+} from './ubicacion-fresca';
 
 /**
  * Por qué el reparto no encontró ningún chofer.
@@ -66,9 +70,14 @@ export async function explicarFaltaDeChoferes(
       WHERE ds.subject_type = 'driver' AND ds.subject_id = c.id
         AND ds.status = 'active' AND ds.starts_at <= now()
         AND (ds.type = 'permanent_ban' OR ds.ends_at > now()))`;
-    const base = `u.activo AND u.en_jornada AND c.disponible
-                  AND u.telegram_chat_id IS NOT NULL
+    /*
+     * Telegram ya no es escalon: el reparto dejo de exigirlo y el diagnostico
+     * lo seguia contando, asi que culpaba a un chat sin vincular de una lista
+     * vacia que no tenia nada que ver.
+     */
+    const conUbicacion = `u.activo AND u.en_jornada AND c.disponible
                   AND c.ubicacion_lat IS NOT NULL AND c.ubicacion_lng IS NOT NULL`;
+    const base = `${conUbicacion} AND ${sqlUbicacionFresca('c')}`;
 
     const [conteo]: Array<Record<string, string>> = await db.query(
       `SELECT
@@ -76,9 +85,8 @@ export async function explicarFaltaDeChoferes(
          COUNT(*) FILTER (WHERE u.activo)::int AS activos,
          COUNT(*) FILTER (WHERE u.activo AND u.en_jornada)::int AS en_jornada,
          COUNT(*) FILTER (WHERE u.activo AND u.en_jornada AND c.disponible)::int AS disponibles,
-         COUNT(*) FILTER (WHERE u.activo AND u.en_jornada AND c.disponible
-                          AND u.telegram_chat_id IS NOT NULL)::int AS con_telegram,
-         COUNT(*) FILTER (WHERE ${base})::int AS con_ubicacion,
+         COUNT(*) FILTER (WHERE ${conUbicacion})::int AS con_ubicacion,
+         COUNT(*) FILTER (WHERE ${base})::int AS con_ubicacion_reciente,
          COUNT(*) FILTER (WHERE ${base} AND ${sinSancion})::int AS sin_sancion,
          COUNT(*) FILTER (WHERE ${base} AND ${sinSancion}
                           AND ${turnoVigente})::int AS en_turno,
@@ -95,13 +103,30 @@ export async function explicarFaltaDeChoferes(
         `${conteo.total} choferes: ${conteo.activos} con cuenta activa, ` +
         `${conteo.en_jornada} dentro de su jornada, ` +
         `${conteo.disponibles} no ocupados, ` +
-        `${conteo.con_telegram} con Telegram vinculado, ` +
         `${conteo.con_ubicacion} con ubicacion registrada, ` +
+        `${conteo.con_ubicacion_reciente} con ubicacion de los ultimos ` +
+        `${MINUTOS_DE_UBICACION_FRESCA} minutos, ` +
         `${conteo.sin_sancion} sin sancion activa, ` +
         `${conteo.en_turno} dentro de un turno suyo, ` +
         `${conteo.sin_ofertar} a los que no se les ha ofrecido ya este viaje. ` +
         'El primer numero que cae a cero es la causa.',
     );
+
+    if (
+      Number(conteo.con_ubicacion) > 0 &&
+      Number(conteo.con_ubicacion_reciente) === 0
+    ) {
+      /*
+       * Tambien merece su linea: en la ficha el chofer tiene ubicacion, y nada
+       * hace sospechar que es de hace horas. Casi siempre es un portal cerrado
+       * o sin permiso de ubicacion.
+       */
+      logger.warn(
+        `Todos los choferes con ubicacion quedaron fuera porque es de hace mas de ` +
+          `${MINUTOS_DE_UBICACION_FRESCA} minutos. El portal la manda mientras esta ` +
+          'abierto y con permiso de ubicacion.',
+      );
+    }
 
     if (Number(conteo.sin_sancion) > 0 && Number(conteo.en_turno) === 0) {
       /*
