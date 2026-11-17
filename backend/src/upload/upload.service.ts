@@ -12,6 +12,8 @@ import {
 } from '@aws-sdk/client-s3';
 import { randomUUID } from 'crypto';
 import { describeError } from '../common/errors/error-message';
+import type { PostMediaKind } from '../posts/entities/post-media.entity';
+import { MAX_VIDEO_BYTES } from '../posts/post-estados';
 
 // Exportado para que las rutas que reciben evidencia corten la subida en
 // Multer con el mismo tope, antes de cargarla entera en memoria.
@@ -57,7 +59,7 @@ const IMAGE_EXTENSIONS: Record<string, string> = {
   'image/webp': 'webp',
 };
 
-function sniffImageContentType(buffer: Buffer): string | null {
+export function sniffImageContentType(buffer: Buffer): string | null {
   if (
     buffer.length >= 3 &&
     buffer[0] === 0xff &&
@@ -84,6 +86,63 @@ function sniffImageContentType(buffer: Buffer): string | null {
   }
   return null;
 }
+
+const VIDEO_EXTENSIONS: Record<string, string> = {
+  'video/mp4': 'mp4',
+  'video/webm': 'webm',
+};
+
+/**
+ * Marcas ISO BMFF que los navegadores reproducen como MP4. Se cotejan contra
+ * la marca principal del `ftyp` y, en un MOV, contra las compatibles.
+ */
+const MP4_BRANDS = new Set(['isom', 'iso2', 'avc1', 'mp41', 'mp42', 'M4V ']);
+
+/**
+ * Tipo real de un video por sus primeros bytes, o `null` si no es MP4 ni
+ * WebM. Un MOV (`qt  `) solo pasa si declara una marca compatible con MP4: el
+ * que graba un iPhone en HEVC lleva solo `qt  ` y la mayoria de navegadores no
+ * lo reproduce, asi que se rechaza aunque el navegador lo anuncie como video.
+ */
+export function sniffVideoContentType(buffer: Buffer): string | null {
+  if (
+    buffer.length >= 4 &&
+    buffer[0] === 0x1a &&
+    buffer[1] === 0x45 &&
+    buffer[2] === 0xdf &&
+    buffer[3] === 0xa3
+  ) {
+    return 'video/webm';
+  }
+  if (buffer.length < 12 || buffer.toString('ascii', 4, 8) !== 'ftyp') {
+    return null;
+  }
+  const majorBrand = buffer.toString('ascii', 8, 12);
+  if (MP4_BRANDS.has(majorBrand)) return 'video/mp4';
+  if (majorBrand !== 'qt  ') return null;
+
+  // Caja ftyp: tamaño (4) + 'ftyp' (4) + marca (4) + version (4) y despues
+  // las marcas compatibles de 4 en 4 hasta el final de la caja.
+  const boxEnd = Math.min(buffer.readUInt32BE(0), buffer.length);
+  for (let offset = 16; offset + 4 <= boxEnd; offset += 4) {
+    if (MP4_BRANDS.has(buffer.toString('ascii', offset, offset + 4))) {
+      return 'video/mp4';
+    }
+  }
+  return null;
+}
+
+/** Resultado de subir una media de post (o el poster de un video). */
+export type PostMediaUpload = {
+  url: string;
+  kind: PostMediaKind;
+  mimeType: string;
+  bytes: number;
+};
+
+// El id va en la ruta del objeto; sin esta forma fija podria colar `../`.
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 @Injectable()
 export class UploadService {
@@ -156,6 +215,90 @@ export class UploadService {
       );
     }
     return sniffed;
+  }
+
+  /**
+   * Sube una foto o un video de un post a `posts/<employeeId>/<uuid>.<ext>`.
+   *
+   * El tipo sale solo de los bytes; no se acepta el mimetype del navegador ni
+   * siquiera como pista, porque lo aprobado se sirve desde el bucket publico.
+   * Si los bytes no corresponden al `kind` pedido se rechaza. La key lleva un
+   * uuid y nunca se reescribe, por eso el objeto se marca inmutable y la CDN
+   * lo cachea un año. Para borrar, `deleteFile(url)`.
+   */
+  async uploadPostMedia(input: {
+    buffer: Buffer;
+    employeeId: string;
+    kind: PostMediaKind;
+  }): Promise<PostMediaUpload> {
+    if (!input.buffer?.length) {
+      throw new BadRequestException('El archivo recibido está vacío');
+    }
+    const isVideo = input.kind === 'video';
+    const maxBytes = isVideo ? MAX_VIDEO_BYTES : UPLOAD_MAX_BYTES;
+    if (input.buffer.length > maxBytes) {
+      throw new BadRequestException(
+        `El archivo supera el límite de ${Math.floor(maxBytes / (1024 * 1024))} MB`,
+      );
+    }
+
+    const mimeType = isVideo
+      ? sniffVideoContentType(input.buffer)
+      : sniffImageContentType(input.buffer);
+    if (!mimeType) {
+      throw new BadRequestException(
+        isVideo
+          ? 'Solo se aceptan videos MP4 o WebM'
+          : 'Solo se aceptan imágenes JPEG, PNG o WEBP',
+      );
+    }
+    const extension = isVideo
+      ? VIDEO_EXTENSIONS[mimeType]
+      : IMAGE_EXTENSIONS[mimeType];
+    const key = `posts/${this.assertEmployeeId(input.employeeId)}/${randomUUID()}.${extension}`;
+
+    try {
+      await this.s3Client.send(
+        new PutObjectCommand({
+          Bucket: this.bucketName,
+          Key: key,
+          Body: input.buffer,
+          ContentType: mimeType,
+          CacheControl: 'public, max-age=31536000, immutable',
+        }),
+      );
+    } catch (error) {
+      this.logger.error(
+        `Error subiendo media de post a R2: ${describeError(error)}`,
+      );
+      throw new InternalServerErrorException(
+        'No fue posible almacenar el archivo en la nube',
+      );
+    }
+    return {
+      url: `${this.publicUrl}/${key}`,
+      kind: input.kind,
+      mimeType,
+      bytes: input.buffer.length,
+    };
+  }
+
+  /**
+   * Poster de un video: el fotograma que genera el navegador. Es una imagen
+   * mas, con las mismas reglas y la misma carpeta que la media del post.
+   */
+  uploadPostPoster(input: {
+    buffer: Buffer;
+    employeeId: string;
+  }): Promise<PostMediaUpload> {
+    return this.uploadPostMedia({ ...input, kind: 'imagen' });
+  }
+
+  private assertEmployeeId(employeeId: string): string {
+    if (!UUID_PATTERN.test(employeeId)) {
+      throw new BadRequestException('Identificador de modelo no válido');
+    }
+    return employeeId.toLowerCase();
   }
 
   async uploadEvidence(input: {

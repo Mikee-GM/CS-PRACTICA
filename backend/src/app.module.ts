@@ -42,6 +42,7 @@ import { UserPreferencesModule } from './user-preferences/user-preferences.modul
 import { NotificationsModule } from './notifications/notifications.module';
 import { TeamChannelModule } from './team-channel/team-channel.module';
 import { ConversationsModule } from './conversations/conversations.module';
+import { PostsModule } from './posts/posts.module';
 
 @Module({
   imports: [
@@ -215,6 +216,7 @@ import { ConversationsModule } from './conversations/conversations.module';
     NotificationsModule,
     TeamChannelModule,
     ConversationsModule,
+    PostsModule,
   ],
   controllers: [AppController],
   providers: [

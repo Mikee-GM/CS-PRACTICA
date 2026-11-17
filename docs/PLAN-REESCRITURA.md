@@ -539,3 +539,42 @@ tope de video.
   reforzada siguen pendientes: esta fase no las cierra.
 - Pasos: B1 migracion y entidades, B2 subida de media, B3 API de la modelo, B4
   API del cliente, B5 API del jefe, B6 avisos, F0-F4 frontend, I1 integracion.
+
+### Fase 3, B1 y B2
+
+Modelo de datos del feed y subida de media. Sin servicios ni rutas todavia.
+
+- Nuevo modulo `posts` (`PostsModule`, registrado en `AppModule`) con las
+  entidades `Post` (`posts`), `PostMedia` (`post_media`) y `PostLike`
+  (`post_likes`). Migracion `1811002000000-AddFeedPosts`, idempotente y con
+  `down` completo.
+- `posts`: modelo (RESTRICT), autor (`author_user_id` SET NULL, `author_role`
+  con CHECK `empleada|jefe|admin`), `caption` <= 2000, `status`
+  (`borrador|pendiente|aprobado|rechazado|archivado`), fechas de envio, revision,
+  publicacion y archivo, `reviewed_by` (SET NULL) y `like_count`. CHECKs:
+  rechazado exige motivo; aprobado exige `published_at` (no `reviewed_by`, para
+  que borrar a un jefe que aprobo posts no falle). Indices parciales para el
+  feed general y por modelo, la cola de revision y la lista de la modelo.
+- `post_media`: `kind` (`imagen|video`), `url`, `poster_url` (solo video),
+  `mime_type` y `bytes` deducidos de los bytes, `width`/`height`, `duration_ms`
+  informado por el navegador y no verificado, y `position` con
+  `UNIQUE (post_id, position) DEFERRABLE INITIALLY DEFERRED`.
+- `post_likes`: llave primaria `(post_id, client_id)`. El trigger
+  `trg_post_likes_like_count` suma o resta `posts.like_count`; TypeORM no inserta
+  ni actualiza esa columna.
+- `posts/post-estados.ts`: `puedeTransicionar` (el paso a pendiente exige al
+  menos una media), `siguienteAlEditar` (aprobado -> pendiente conservando
+  likes, rechazado -> borrador, pendiente sigue pendiente), `esVisibleEnFeed` y
+  los topes de media y caption.
+- `UploadService`: `sniffVideoContentType` (MP4 y WebM por bytes; MOV solo con
+  marca compatible), `uploadPostMedia` y `uploadPostPoster` a
+  `posts/<employeeId>/<uuid>.<ext>` con `Cache-Control` inmutable.
+- Los posts de jefe o admin encadenan borrador -> pendiente -> aprobado en una
+  transaccion (B5); no hay transicion directa.
+
+Pendiente:
+
+- Ejecutar `migration:run`, `migration:revert` y `migration:run` contra una base
+  real: trigger, cascada, UNIQUE diferido, CHECKs e indices.
+- WebM se reconoce solo por la cabecera EBML: un Matroska que no sea WebM pasa
+  como `video/webm`.
