@@ -91,7 +91,7 @@ import { TransportOperationsService } from '../transport-operations/transport-op
 import { randomUUID } from 'crypto';
 import { DisciplineService } from '../discipline/discipline.service';
 import { describeError } from '../common/errors/error-message';
-import { kilometrosEntre, metrosEntre } from '../common/geo';
+import { metrosEntre } from '../common/geo';
 import { TelegramCallbackGuard } from './telegram-callback-guard';
 import {
   RegistroManualEnCurso,
@@ -110,7 +110,6 @@ import {
   APP_LOCALE,
   desdeHoraDelNegocio,
 } from '../common/locale';
-import { multiplyMoney, roundMoney, sumMoney } from '../common/money';
 import { interpretarFechaEscrita } from '../common/fecha-escrita';
 import { TelegramOnboardingService } from './telegram-onboarding.service';
 import { EmployeeOnboardingService } from '../employee-onboarding/employee-onboarding.service';
@@ -126,7 +125,36 @@ import {
   transitionBookingStatus,
   type BookingStatus,
   type GlobalBookingIntent,
-} from './telegram-booking-lifecycle';
+} from '../booking/booking-lifecycle';
+import {
+  buildModelKeys,
+  detectGroupServiceIntent,
+  detectOpenEndedDuration,
+  extractHireDuration,
+  extractHirePaymentMethod,
+} from '../booking/extractores-de-reserva';
+import {
+  datosDeReserva,
+  montoEsperadoDeTransferencia,
+  type DatosDeReserva,
+} from '../booking/datos-de-reserva';
+import {
+  fueraDeCobertura,
+  normalizarTextoDeLugar,
+  ubicacionMencionadaEn,
+  ubicacionPorNombre,
+} from '../booking/ubicaciones';
+
+// La logica pura de reserva vive en `booking/`. Se reexporta desde aqui porque
+// las pruebas y modulos de Telegram la importan de este archivo.
+export {
+  buildModelKeys,
+  detectGroupServiceIntent,
+  detectOpenEndedDuration,
+  extractHireDuration,
+  extractHirePaymentMethod,
+};
+export type { DatosDeReserva };
 
 interface SessionData {
   step?:
@@ -376,32 +404,6 @@ interface SessionData {
 
 export type { SessionData as TelegramSessionData };
 
-/**
- * Todo lo que la conversacion con el cliente decidio y que hace falta para
- * crear su servicio.
- *
- * `finalizeBooking` lo leia directo de `ctx.session`, y eso funcionaba solo
- * mientras quien cerraba la reserva era el propio cliente. Cuando un
- * comprobante pasa a revision manual, la reserva la cierra el JEFE al pulsar
- * "Aprobar" desde su grupo, con su contexto y su sesion: alli no hay ubicacion
- * preestablecida, ni cargo de transporte, ni trio, ni cita programada, y el
- * servicio nacia sin nada de eso --sin cobrarle el transporte que se le habia
- * cotizado y sin el historial de la conversacion adjunto--.
- */
-export interface DatosDeReserva {
-  presetLocationId: string | null;
-  locationNameSnapshot: string | null;
-  locationAddressSnapshot: string | null;
-  customerTransportCharge: number;
-  duracionIndefinida: boolean;
-  trioConfirmado: boolean;
-  trioNombre: string | null;
-  trioTarifaCombinada: number | null;
-  tipoAgenda: 'inmediato' | 'programado';
-  fechaProgramada: string | null;
-  bookingSessionId: string | null;
-}
-
 export function isPreServiceHumanTakeover(
   session: Pick<SessionData, 'humanTakeover' | 'iaActiva'> | undefined,
 ): boolean {
@@ -462,22 +464,6 @@ function normalizedName(value: unknown): string {
 /** Lee un campo de texto del JSON que devuelve el modelo sin fiarse del tipo. */
 function readModelString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
-}
-
-/**
- * Asigna a cada compañera una clave corta (M1, C2…) para nombrarla dentro del
- * prompt. El modelo nunca ve un identificador interno: todo lo que entra en el
- * prompt puede acabar en el chat si alguien consigue sacarla de personaje, y un
- * UUID en pantalla es una fuga que no aporta nada a la conversación.
- */
-export function buildModelKeys<T extends { id: string; nombre: string }>(
-  models: T[],
-  prefix: string,
-): { clave: string; model: T }[] {
-  return models.map((model, index) => ({
-    clave: `${prefix}${index + 1}`,
-    model,
-  }));
 }
 
 export function validateReceiptAnalysis(
@@ -632,74 +618,6 @@ export function validateReceiptAnalysis(
   return { valid: true, amount };
 }
 
-/**
- * Horas del servicio a partir de lo que escribio el cliente.
- *
- * Un numero suelto solo cuenta si el mensaje entero es ese numero, que es como
- * se responde a "¿cuantas horas?". Metido en una frase hay que exigir la
- * unidad: antes cualquier cifra entre 1 y 24 se tomaba como la duracion, asi
- * que "carrera 15", "a las 10" o "somos 2" cambiaban en silencio las horas
- * pactadas y el total a cobrar.
- */
-export function extractHireDuration(text: string): number | undefined {
-  if (/\d+[.,]\d+/.test(text)) {
-    return undefined;
-  }
-
-  const soloNumero = text.trim().match(/^(\d+)$/);
-  if (soloNumero) {
-    const hours = parseInt(soloNumero[1], 10);
-    if (hours >= 1 && hours <= 24) return hours;
-    return undefined;
-  }
-
-  // Se recorren todas las cifras con unidad, no solo la primera: en "llego a
-  // las 9, quiero 3 horas" la que vale es la segunda.
-  for (const match of text.matchAll(
-    /\b(\d+)\s*(?:h|hr|hrs|hora|horas|horita|horitas|hra|hras)[a-z]*\b/gi,
-  )) {
-    const hours = parseInt(match[1], 10);
-    if (hours >= 1 && hours <= 24) return hours;
-  }
-
-  const normalized = text.toLowerCase().trim();
-  const wordDurations: Record<string, number> = {
-    una: 1,
-    un: 1,
-    uno: 1,
-    dos: 2,
-    tres: 3,
-    cuatro: 4,
-    cinco: 5,
-    seis: 6,
-    siete: 7,
-    ocho: 8,
-    nueve: 9,
-    diez: 10,
-    once: 11,
-    doce: 12,
-  };
-  const word = Object.keys(wordDurations).find(
-    (candidate) =>
-      normalized === candidate ||
-      new RegExp(
-        `\\b${candidate}\\s+(?:h|hr|hrs|hora|horas|horita|horitas)\\b`,
-      ).test(normalized),
-  );
-  return word ? wordDurations[word] : undefined;
-}
-
-export function extractHirePaymentMethod(
-  text: string,
-): SessionData['metodoPago'] | undefined {
-  const normalized = text.toLowerCase();
-  if (/\bmixto\b/.test(normalized)) return 'mixto';
-  if (/\befectivo\b/.test(normalized)) return 'efectivo';
-  if (/\btarjeta\b/.test(normalized)) return 'tarjeta';
-  if (/\btransferencia\b/.test(normalized)) return 'transferencia';
-  return undefined;
-}
-
 /** A historical service may be changed only by an explicit service-change request. */
 export function shouldChangeExistingServicePayment(
   text: string,
@@ -742,75 +660,6 @@ export function shouldResetClosedBookingOnMessage(
   return (
     chatType === 'private' &&
     ['SERVICE_CREATED', 'CANCELLED', 'ABANDONED'].includes(bookingStatus ?? '')
-  );
-}
-
-export function detectGroupServiceIntent(
-  text: string,
-): 'grupal' | 'incierta' | 'individual' {
-  const normalized = text
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .toLowerCase();
-  const chicas =
-    '(chicas?|empleadas?|modelos?|nenas?|amigas?|mujeres|mujer|viejas?)';
-  if (
-    /\bservicios?\s+grupal(es)?\b/.test(normalized) ||
-    /\b(orgia|gangbang|despedida\s+de\s+soltero)\b/.test(normalized) ||
-    new RegExp(
-      `\\b(grupo\\s+de\\s+${chicas}|mas\\s+de\\s+dos\\s+${chicas}|(tres|cuatro|cinco|3|4|5)\\s+${chicas})\\b`,
-    ).test(normalized) ||
-    new RegExp(`\\b(tres|cuatro|cinco|3|4|5)\\s+${chicas}\\b`).test(normalized)
-  )
-    return 'grupal';
-  if (
-    new RegExp(
-      `\\b(varias\\s+${chicas}|otra\\s+${chicas}\\s+mas|dos\\s+${chicas}|un\\s+par\\s+de\\s+${chicas}|mas\\s+${chicas})\\b`,
-    ).test(normalized) ||
-    /\b(varias\s+a\s+la\s+vez|con\s+una\s+amiga\s+tuya)\b/.test(normalized)
-  )
-    return 'incierta';
-  return 'individual';
-}
-
-/** Sustantivos a los que puede referirse "abierto" cuando habla de duracion. */
-const DURACION_SUSTANTIVO =
-  '(?:servicio|tiempo|duracion|horas?|rato|plan|cita|encuentro)';
-
-/**
- * Detecta que el cliente quiere un servicio de duración abierta / indefinida.
- *
- * "Abierto" solo cuenta junto a un sustantivo de duración. Suelto es la palabra
- * mas ambigua de esta conversacion —"¿el motel esta abierto?", "¿eres
- * abierta?"— y como esto se evalua en cada mensaje, bastaba una de esas para
- * borrar las horas que el cliente ya habia pactado y pasar el servicio a
- * indefinido sin que nadie lo pidiera.
- */
-export function detectOpenEndedDuration(text: string): boolean {
-  const normalized = text
-    .normalize('NFD')
-    .replace(/\p{Diacritic}/gu, '')
-    .toLowerCase();
-
-  // Estas no necesitan contexto: no aparecen en esta conversacion hablando de
-  // otra cosa.
-  if (
-    /\b(indefinid[ao]s?|indeterminad[ao]s?|ilimitad[ao]s?)\b/.test(normalized)
-  )
-    return true;
-
-  if (
-    new RegExp(
-      `\\b${DURACION_SUSTANTIVO}\\s+(?:\\w+\\s+){0,2}?abiert[ao]s?\\b`,
-    ).test(normalized) ||
-    new RegExp(`\\babiert[ao]s?\\s+(?:de\\s+)?${DURACION_SUSTANTIVO}\\b`).test(
-      normalized,
-    )
-  )
-    return true;
-
-  return /\b(sin\s+(limite|hora\s+de\s+salida|tiempo\s+definido)|el\s+tiempo\s+que\s+sea|hasta\s+que\s+(se\s+acabe|nos\s+cansemos|yo\s+diga|amanezca)|no\s+se\s+cuantas\s+horas|las\s+que\s+salgan)\b/.test(
-    normalized,
   );
 }
 
@@ -1465,14 +1314,7 @@ export class TelegramBookingUpdate {
       return null;
     }
 
-    const distanciaKm = kilometrosEntre(
-      area.centroLat,
-      area.centroLng,
-      lat,
-      lng,
-    );
-    if (distanciaKm <= area.radioKm) return null;
-    return { ciudad: area.ciudad, distanciaKm };
+    return fueraDeCobertura(area, lat, lng);
   }
 
   /**
@@ -3441,90 +3283,24 @@ export class TelegramBookingUpdate {
   }
 
   /**
-   * Busca entre los moteles activos el que nombra la marca `[DATA]`.
-   *
-   * Coincide en los dos sentidos porque el modelo tanto puede devolver el
-   * nombre corto ("Montecarlo" de "Motel Montecarlo") como añadirle palabras.
+   * El motel activo que nombra la marca `[DATA]`. El emparejamiento vive en
+   * `booking/ubicaciones`; aqui solo se leen las ubicaciones, y no se leen si
+   * no hay nombre que buscar.
    */
   private async buscarUbicacionPorNombre(nombre: unknown) {
     if (typeof nombre !== 'string' || !nombre.trim()) return null;
-    const buscado = nombre.toLowerCase().trim();
     const activas = await this.transportOperations.activeLocations();
-    return (
-      activas.find(
-        (loc) =>
-          loc.name.toLowerCase().includes(buscado) ||
-          buscado.includes(loc.name.toLowerCase().trim()),
-      ) || null
-    );
+    return ubicacionPorNombre(activas, nombre);
   }
 
   /**
-   * Busca el motel que el propio cliente nombró en la conversación.
-   *
-   * Aquí no sirve la búsqueda de arriba, que compara un nombre contra otro:
-   * lo que se recorre son frases enteras del cliente. Hacen falta dos cosas.
-   *
-   * Una, quedarse con las palabras que distinguen al motel: en la base están
-   * guardados como "Motel Montecarlo" y el cliente escribe "Montecarlo" a
-   * secas, así que exigir el nombre completo no encontraría nada.
-   *
-   * Y dos, que esas palabras aparezcan enteras. Sin eso, un motel llamado
-   * "Real" se daría por elegido en un "de verdad realmente me interesa".
-   *
-   * Los mensajes llegan del más reciente al más antiguo: si el cliente cambió
-   * de opinión, vale el último que dijo.
+   * El motel que el propio cliente nombro en la conversacion, con los textos
+   * del mas reciente al mas antiguo. Ver `ubicacionMencionadaEn`.
    */
-  private static readonly PALABRAS_GENERICAS_DE_LUGAR = new Set([
-    'motel',
-    'hotel',
-    'moteles',
-    'suites',
-    'suite',
-    'villa',
-    'villas',
-  ]);
-
   private async buscarUbicacionMencionadaPorElCliente(textos: string[]) {
-    const normalizar = (texto: string): string =>
-      texto
-        .normalize('NFD')
-        .replace(/\p{Diacritic}/gu, '')
-        .toLowerCase()
-        .trim();
-
-    const candidatos = textos.map(normalizar).filter(Boolean);
-    if (!candidatos.length) return null;
-
-    const contienePalabra = (texto: string, palabra: string): boolean => {
-      const escapada = palabra.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      return new RegExp(
-        `(^|[^\\p{L}\\p{N}])${escapada}([^\\p{L}\\p{N}]|$)`,
-        'u',
-      ).test(texto);
-    };
-
+    if (!textos.some((texto) => normalizarTextoDeLugar(texto))) return null;
     const activas = await this.transportOperations.activeLocations();
-    const conSusPalabras = activas.map((loc) => ({
-      loc,
-      palabras: normalizar(loc.name)
-        .split(/[^\p{L}\p{N}]+/u)
-        .filter(
-          (palabra) =>
-            palabra.length >= 4 &&
-            !TelegramBookingUpdate.PALABRAS_GENERICAS_DE_LUGAR.has(palabra),
-        ),
-    }));
-
-    for (const texto of candidatos) {
-      const encontrada = conSusPalabras.find(
-        ({ palabras }) =>
-          palabras.length > 0 &&
-          palabras.every((palabra) => contienePalabra(texto, palabra)),
-      );
-      if (encontrada) return encontrada.loc;
-    }
-    return null;
+    return ubicacionMencionadaEn(activas, textos);
   }
 
   /**
@@ -5114,31 +4890,15 @@ export class TelegramBookingUpdate {
   }
 
   /**
-   * Cuanto tiene que decir el comprobante de una reserva.
-   *
-   * Se calculaba a mano en el unico sitio donde se pedia, con la tarifa base de
-   * la modelo y sin el transporte: en un servicio en trio el cliente podia
-   * transferir la mitad de lo cotizado y el comprobante se aprobaba igual, y
-   * con ubicacion externa se colaba sin el cargo de transporte que el propio
-   * bot le acababa de sumar en el mensaje del precio.
-   *
-   * En pago mixto solo se espera la parte transferida: el resto y el transporte
-   * se pagan en efectivo, y asi se le dijo al cliente.
+   * Cuanto tiene que decir el comprobante de una reserva. La regla vive en
+   * `booking/datos-de-reserva`; ahi esta explicado por que incluye el
+   * transporte y la tarifa del trio.
    */
   private montoEsperadoDeTransferencia(
     session: SessionData,
     empleada: Empleadas,
   ): number {
-    if (session.metodoPago === 'mixto' && session.mixedTransferAmount) {
-      return roundMoney(session.mixedTransferAmount);
-    }
-    const tarifaPorHora =
-      session.trioCombinedRatePerHour ?? Number(empleada.precioBaseHora);
-    const horas = session.duracionPactadaHoras ?? 1;
-    return sumMoney([
-      multiplyMoney(tarifaPorHora, horas),
-      session.customerTransportCharge ?? 0,
-    ]);
+    return montoEsperadoDeTransferencia(session, empleada.precioBaseHora);
   }
 
   /**
@@ -6865,20 +6625,7 @@ export class TelegramBookingUpdate {
 
   /** Lo que la sesion del cliente sabe de su propia reserva. */
   private datosDeReservaDeSesion(session?: SessionData): DatosDeReserva {
-    return {
-      presetLocationId: session?.presetLocationId ?? null,
-      locationNameSnapshot: session?.locationNameSnapshot ?? null,
-      locationAddressSnapshot: session?.locationAddressSnapshot ?? null,
-      customerTransportCharge: Number(session?.customerTransportCharge ?? 0),
-      duracionIndefinida: Boolean(session?.duracionIndefinida),
-      trioConfirmado: session?.trioStatus === 'confirmed',
-      trioNombre: session?.trioSelectedEmployeeName ?? null,
-      trioTarifaCombinada: session?.trioCombinedRatePerHour ?? null,
-      tipoAgenda:
-        session?.tipoAgenda === 'programado' ? 'programado' : 'inmediato',
-      fechaProgramada: session?.fechaProgramada ?? null,
-      bookingSessionId: session?.bookingSessionId ?? null,
-    };
+    return datosDeReserva(session);
   }
 
   async finalizeBooking(

@@ -1,10 +1,10 @@
 /**
  * Reglas puras del ciclo de vida de una solicitud de cliente.
  *
- * La conversación de Telegram es permanente; una booking session representa
- * únicamente un intento de crear un servicio. Este módulo no conoce Telegraf,
- * TypeORM ni la IA: decide intención y transiciones para que los manejadores
- * no puedan saltarse el dominio por accidente.
+ * La conversación con el cliente es permanente, sea por Telegram o por la web;
+ * una booking session representa únicamente un intento de crear un servicio.
+ * Este módulo no conoce Telegraf, TypeORM ni la IA: decide intención y
+ * transiciones para que ningún canal pueda saltarse el dominio por accidente.
  */
 
 export const BOOKING_STATUSES = [

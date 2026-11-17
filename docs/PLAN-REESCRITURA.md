@@ -172,3 +172,42 @@ Pendiente:
   `migration:run` antes de desplegar. `Conversation` importa
   `CustomerBookingSession` desde `telegram-conversations`; moverlo al extraer
   el modulo `booking`.
+
+### Fase 2, paso 3 (tanda A)
+
+Nuevo modulo `booking/`, independiente del canal. Se movio solo logica pura,
+por delegacion: `TelegramBookingUpdate` conserva sus metodos y firmas y los
+specs de Telegram no se modificaron.
+
+- `booking/booking-lifecycle.ts` (antes `telegram/telegram-booking-lifecycle.ts`,
+  que queda como reexport) con su spec.
+- `booking/chat-channel.ts`: contratos `ConversationRef`, `InboundMessage`,
+  `ChatChannel` y `BookingStateStore<T>` (version optimista; `save` rechaza con
+  `ConflictoDeVersionError`). Solo tipos, sin implementaciones.
+- `booking/booking.errors.ts`: `LimiteDiarioDeIaError`, `ConflictoDeVersionError`.
+- `booking/extractores-de-reserva.ts`: `extractHireDuration`,
+  `extractHirePaymentMethod`, `detectGroupServiceIntent`,
+  `detectOpenEndedDuration`, `buildModelKeys` (reexportados desde el handler).
+- `booking/ubicaciones.ts`: `fueraDeCobertura`, `ubicacionPorNombre`,
+  `ubicacionMencionadaEn`; el handler sigue leyendo area y ubicaciones y delega.
+- `booking/datos-de-reserva.ts`: `DatosDeReserva`, `BorradorDeReserva`,
+  `datosDeReserva` y `montoEsperadoDeTransferencia`.
+- `BookingAiService.callModel` (en `BookingModule`): identifica al cliente por
+  `clienteId`, cuenta la llamada en una sola sentencia atomica con el dia en
+  hora de Mexico y hace cumplir `MAX_DAILY_AI_CALLS` lanzando
+  `LimiteDiarioDeIaError` antes de llamar al proveedor. Telegram
+  (`TelegramBookingService.getGroqResponse`) delega con
+  `aplicarLimiteDiario: false`: hasta ahora el limite nunca se aplicaba y
+  cortarlo en Telegram seria un cambio de comportamiento.
+- Efecto lateral: el contador de Telegram cambia de dia a medianoche de Mexico
+  y no a la del servidor; nadie lee ese contador fuera de este servicio.
+
+Pendiente:
+
+- Probar contra una base real la sentencia del contador (no habia Docker),
+  sobre todo `AT TIME ZONE $3` y `$2::int IS NULL`.
+- Registrar `BookingModule` en `AppModule` cuando lo use el modulo web (hoy
+  llega a traves de `TelegramModule`).
+- Decidir como responde el canal web a `LimiteDiarioDeIaError`.
+- `telegram/telegram-booking-lifecycle.ts` ya no tiene importadores; se puede
+  borrar.

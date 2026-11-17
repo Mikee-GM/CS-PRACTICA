@@ -26,6 +26,7 @@ import { LoyaltyModule } from '../loyalty/loyalty.module';
 import { TelegramSession } from './entities/telegram-session.entity';
 import { buildSessionKey } from './telegram-session.key';
 import { AiModule } from '../ai/ai.module';
+import { BookingModule } from '../booking/booking.module';
 import { Viajes } from '../trips/entities/trip.entity';
 
 import { ExtrasCatalogo } from '../catalog-extras/entities/catalog-extra.entity';
@@ -81,6 +82,7 @@ import {
     AuthModule,
     LoyaltyModule,
     AiModule,
+    BookingModule,
     EmployeeOnboardingModule,
     forwardRef(() => ServicesModule),
     // El avance de un viaje lo resuelve DriverTripsService; ese modulo

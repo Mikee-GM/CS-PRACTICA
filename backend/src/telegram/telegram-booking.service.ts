@@ -1,7 +1,6 @@
 import { Injectable, Inject, forwardRef, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ConfigService } from '@nestjs/config';
 import { Usuarios } from '../users/entities/user.entity';
 import { Clientes } from '../clients/entities/client.entity';
 import { Empleadas } from '../employees/entities/employee.entity';
@@ -10,7 +9,7 @@ import { ExtrasCatalogo } from '../catalog-extras/entities/catalog-extra.entity'
 import { ExtrasServicio } from '../service-extras/entities/service-extra.entity';
 import { ServicesService } from '../services/services.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
-import { AiProviderService } from '../ai/ai-provider.service';
+import { BookingAiService } from '../booking/booking-ai.service';
 
 @Injectable()
 export class TelegramBookingService {
@@ -32,42 +31,30 @@ export class TelegramBookingService {
     @Inject(forwardRef(() => ServicesService))
     readonly servicesService: ServicesService,
     readonly loyaltyService: LoyaltyService,
-    private readonly aiProviderService: AiProviderService,
-    private readonly configService: ConfigService,
+    private readonly bookingAiService: BookingAiService,
   ) {}
 
+  /**
+   * Llamada a la IA de la conversacion de reserva por Telegram.
+   *
+   * La llamada y el contador viven en `BookingAiService`, que identifica al
+   * cliente por su id; aqui solo se traduce el chat de Telegram a ese id. El
+   * limite diario no se aplica en este canal (ver `OpcionesDeLlamadaIa`), asi
+   * que Telegram sigue contando las llamadas sin cortar ninguna, como antes.
+   */
   async getGroqResponse(
     systemPrompt: string,
     history: { role: 'user' | 'model'; parts: { text: string }[] }[],
     clientTelegramId?: string,
   ): Promise<string> {
+    let clienteId: string | undefined;
     if (clientTelegramId) {
       try {
         const client = await this.clientesRepository.findOne({
           where: { telegramChatId: clientTelegramId },
+          select: { id: true },
         });
-
-        if (client) {
-          const today = new Date();
-          const lastCall = client.lastAiCallAt
-            ? new Date(client.lastAiCallAt)
-            : null;
-
-          // Comprobar si el día, mes o año cambiaron en la zona horaria del servidor
-          const isDifferentDay =
-            !lastCall ||
-            today.getDate() !== lastCall.getDate() ||
-            today.getMonth() !== lastCall.getMonth() ||
-            today.getFullYear() !== lastCall.getFullYear();
-
-          if (isDifferentDay) {
-            client.aiCallsToday = 0;
-          }
-
-          client.aiCallsToday = (client.aiCallsToday || 0) + 1;
-          client.lastAiCallAt = today;
-          await this.clientesRepository.save(client);
-        }
+        clienteId = client?.id;
       } catch (err) {
         this.logger.warn(
           'Error registrando llamada de IA para el cliente:',
@@ -76,14 +63,9 @@ export class TelegramBookingService {
       }
     }
 
-    const formattedHistory = history.map((msg) => ({
-      role: msg.role === 'model' ? 'assistant' : 'user',
-      content: msg.parts?.[0]?.text || '',
-    }));
-
-    return this.aiProviderService.generateChatResponse(
-      systemPrompt,
-      formattedHistory,
-    );
+    return this.bookingAiService.callModel(systemPrompt, history, {
+      clienteId,
+      aplicarLimiteDiario: false,
+    });
   }
 }

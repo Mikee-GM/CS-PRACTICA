@@ -7,9 +7,9 @@ import {
   registerLoopFailure,
   shouldExpireUncontractedBooking,
   transitionBookingStatus,
-} from './telegram-booking-lifecycle';
+} from './booking-lifecycle';
 
-describe('telegram booking lifecycle', () => {
+describe('booking lifecycle', () => {
   it.each([
     ['quiero otro servicio', 'START_NEW_BOOKING'],
     ['1hr bb', 'PROVIDE_EXPECTED_DATA'],
