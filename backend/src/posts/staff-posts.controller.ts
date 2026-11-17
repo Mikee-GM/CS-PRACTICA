@@ -149,7 +149,7 @@ export class StaffPostsController {
    * Una foto o un video por peticion, con el mismo multipart que el portal de
    * la modelo (`file`; `poster` si es video; `width`, `height`, `durationMs`).
    */
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @Post(':id/media')
   @HttpCode(HttpStatus.CREATED)
   @UseGuards(JwtAuthGuard, RolesGuard, CsrfGuard)

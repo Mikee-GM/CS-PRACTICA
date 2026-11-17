@@ -268,3 +268,55 @@ describe("middleware: area del cliente", () => {
     });
   });
 });
+
+describe("middleware: publicaciones de la modelo", () => {
+  const original = global.fetch;
+  afterEach(() => {
+    global.fetch = original;
+  });
+
+  it("el matcher cubre /empleada/posts", () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { config } = require("./middleware") as {
+      config: { matcher: string[] };
+    };
+
+    expect(config.matcher).toEqual(expect.arrayContaining(["/empleada/posts"]));
+  });
+
+  /*
+   * Mismo trato que los ajustes del portal: la pagina decide la sesion por su
+   * cuenta, y el middleware solo renueva el acceso caducado para que una
+   * subida no acabe en el login a mitad de camino.
+   */
+  it("con el acceso caducado renueva y guarda las cookies nuevas", async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers({
+        "set-cookie": "access_token=nuevo; Path=/; HttpOnly",
+      }),
+    }) as unknown as typeof fetch;
+
+    const respuesta = await middleware(
+      peticion("/empleada/posts", { refresh_token: "s:refresco.firma" }),
+    );
+
+    expect(respuesta.headers.get("location")).toBeNull();
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.objectContaining({ pathname: `${BACKEND_API_PREFIX}/auth/refresh` }),
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(respuesta.headers.get("set-cookie")).toMatch(/access_token=nuevo/);
+  });
+
+  it("con sesion vigente no consulta al backend ni redirige", async () => {
+    global.fetch = jest.fn() as unknown as typeof fetch;
+
+    const respuesta = await middleware(
+      peticion("/empleada/posts", { access_token: "s:valor.firma" }),
+    );
+
+    expect(respuesta.headers.get("location")).toBeNull();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+});

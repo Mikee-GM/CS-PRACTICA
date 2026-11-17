@@ -784,3 +784,43 @@ Pendiente:
 - La URL del aviso `post_pending` es `/jefe/publicaciones`: la cola del jefe
   (F4) debe vivir ahi.
 - La lista del jefe carga todas las modelos para calcular el alcance.
+
+### Fase 3, F3
+
+Portal de la modelo para sus publicaciones (`/empleada/posts`).
+
+- Ruta con sesion propia (como el historial), enlace "Publicaciones" en la barra
+  del portal y entrada en el `matcher` del middleware (solo renueva sesion).
+- Logica pura probada en `lib/employee-posts.ts`: etiquetas de estado, acciones
+  por estado, avisos de edicion de un publicado y de borrado (eliminar frente a
+  archivar), traduccion de errores, limites previos a subir, portada y orden.
+- Lecturas en `lib/data/employee-posts.ts` y acciones en
+  `lib/actions/employee-posts.ts` (archivo propio con `apiFetch`).
+- Media: una por Server Action, en serie, con estado por archivo, barra de
+  "Subidos N de M", reintentar y descartar. Fotos comprimidas con `comprimirFoto`;
+  videos validados en el navegador (duracion del metadato, peso), portada
+  capturada en canvas y `width`/`height`/`durationMs` leidos del video. Video y
+  portada tienen que caber juntos en 20 MiB.
+- `next.config.ts`: `experimental.middlewareClientMaxBodySize: "20mb"`. El
+  middleware cortaba en silencio a 10 MB el cuerpo de las rutas de su matcher, y
+  la Server Action recibia el multipart truncado. Afecta a todo el matcher: una
+  peticion grande puede ocupar hasta 20 MB de memoria.
+- Se sube a 30/min el limite de `POST .../media` (modelo y equipo): con 10 por
+  minuto, subir diez archivos y reintentar uno daba 429.
+- UI en `components/empleada/posts/`: lista con miniaturas, estado, motivo y me
+  gusta; el editor sustituye a la lista; orden con botones subir y bajar de 44 px;
+  confirmacion previa al primer cambio de un publicado; `DialogoConfirmacion`
+  movido a `components/ui` (el del chat web lo reexporta). El borrador se crea
+  al guardar el texto o subir el primer archivo.
+
+Pendiente:
+
+- Verificacion en navegador y contra backend real: portada de video en iOS y
+  Android, WebM con duracion `Infinity`, videos de 10 a 20 MB de punta a punta,
+  413 y error de cuerpo de la Server Action, dialogos en Safari y app instalada.
+- Un video de 20 MB exactos no cabe con su portada: el tope practico es de unos
+  19,9 MB, hasta las URLs prefirmadas.
+- Sin texto alternativo por foto. El dominio publico de R2 en `remotePatterns`
+  sigue pendiente.
+- Cancelar la confirmacion tras elegir archivos en un publicado no libera sus
+  vistas previas hasta recargar.

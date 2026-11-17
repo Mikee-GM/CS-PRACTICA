@@ -8,6 +8,14 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: "20mb",
     },
+    /*
+     * El middleware copia el cuerpo de toda peticion que case con su `matcher`
+     * y, por defecto, lo corta en 10 MB sin error: la Server Action recibe un
+     * multipart truncado. Las paginas del portal estan en el matcher y suben
+     * videos de hasta 20 MB (publicaciones del feed), asi que se iguala al
+     * limite de las Server Actions.
+     */
+    middlewareClientMaxBodySize: "20mb",
   },
   eslint: {
     ignoreDuringBuilds: true,

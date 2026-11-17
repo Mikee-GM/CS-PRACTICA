@@ -446,6 +446,9 @@ export const config = {
     "/empleada/historial",
     "/empleada/servicio",
     "/empleada/ajustes",
+    // Publicaciones del feed: renueva como los ajustes. Sube media por Server
+    // Action, de ahi `middlewareClientMaxBodySize` en next.config.ts.
+    "/empleada/posts",
     "/chofer/portal",
     "/chofer/servicio",
     "/chofer/ajustes",

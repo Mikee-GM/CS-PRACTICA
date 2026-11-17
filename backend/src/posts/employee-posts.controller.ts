@@ -102,7 +102,7 @@ export class EmployeePostsController {
    * video; `width`, `height` y `durationMs` opcionales). El tipo lo deciden
    * los bytes en el servicio, no el mimetype declarado.
    */
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @Post(':id/media')
   @HttpCode(201)
   @UseInterceptors(
