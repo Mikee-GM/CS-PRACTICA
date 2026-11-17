@@ -351,3 +351,35 @@ Pendiente:
   volveria a contestar).
 - Frontend: boton de ubicacion y los eventos `typing` y
   `conversation_status_changed`.
+
+### Fase 2, paso 9b (avisos del chofer propio y vocabulario web)
+
+- `drivers/driver-trips.service.ts` avisa por el chat web de la llegada con
+  chofer propio (`avisarLlegadaAlCliente`, con el texto de la IA compartido por
+  `unaVez`) y del cierre del regreso (`cerrarServicioDeRegreso`). Telegram no
+  cambia; el web se intenta si la ficha tiene `usuarioId`. El notificador entra
+  `@Optional()` al final del constructor y `DriversModule` importa
+  `ConversationNotifierModule` directo. Un fallo del aviso no deshace el viaje.
+- `ai/vocabulario-vetado.ts` (`PALABRAS_VETADAS_WEB`, `palabrasVetadasEn`) es la
+  lista unica de lo que no se dice en el chat web; el prompt web la enumera
+  desde ahi. Compara palabras completas, sin mayusculas ni acentos.
+- `avisarAlChatWeb` pasa todo texto por `textoWebSeguro`: sin emojis ni
+  Markdown, "la empleada"/"la modelo" pasan al nombre artistico o a "quien te
+  atiende", y desaparece la presentacion como asistente de la agencia. Si aun asi
+  queda algo vetado, usa el respaldo del sitio; si tampoco, quita las frases que
+  lo dicen, y si no queda nada no manda el aviso. Es la unica salida hacia
+  `notifyClient` fuera de `conversations/`.
+- Un spec recorre el texto base de los 17 avisos web y redacciones hostiles de la
+  IA, y falla con cualquier palabra vetada o emoji.
+
+Pendiente:
+
+- Sin cubrir: comprobante rechazado y cotizacion grupal (`group-services`),
+  encuesta de calificacion (falta pantalla web) y cuenta final de un servicio
+  abierto (paso 7). En `transport-operations/` y `liquidations/` no hay avisos
+  al cliente.
+- Si alguien llama a `ConversationNotifier.notifyClient` sin pasar por
+  `avisarAlChatWeb` (por ejemplo desde `booking/`), ese texto no pasa por el
+  filtro de vocabulario.
+- Al comparar sin acentos, "modelo" con tilde cuenta como "modelo".
+- Probar contra una base real los avisos del chofer propio.

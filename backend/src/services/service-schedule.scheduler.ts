@@ -230,6 +230,7 @@ export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
         }
 
         // 3. Notificar al Cliente mediante la IA
+        const respaldoRecordatorio = `Hola amor, te confirmo que todo está listo para nuestra cita de las ${horaStr}, ya me estoy preparando.`;
         const redactarRecordatorio = unaVez(() =>
           this.aiMessageService.generate(
             'appointment_reminder',
@@ -237,7 +238,7 @@ export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
               employeeName:
                 service.empleada?.nombreArtistico || 'Tu anfitriona',
             },
-            `Hola amor, te confirmo que todo está listo para nuestra cita de las ${horaStr}, ya me estoy preparando.`,
+            respaldoRecordatorio,
           ),
         );
         if (service.cliente?.telegramChatId) {
@@ -260,6 +261,7 @@ export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
           this.logger,
           service,
           redactarRecordatorio,
+          { respaldo: respaldoRecordatorio },
         );
       }
     }

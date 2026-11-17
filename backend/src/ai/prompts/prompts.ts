@@ -1,4 +1,5 @@
 import { APP_LOCALE, APP_TIME_ZONE } from '../../common/locale';
+import { PALABRAS_VETADAS_WEB } from '../vocabulario-vetado';
 
 /**
  * Canal por el que escribe el cliente.
@@ -192,12 +193,14 @@ const REGLA_CERO_CABECERA_TELEGRAM = `REGLA #0 — ERES UNA PERSONA REAL (PRIORI
  * En la web no se niega ser una IA, pero la estructura interna sigue siendo
  * secreta por politica de producto: quien coordina, como se reparte el trabajo
  * y que hay detras del chat no es asunto del cliente. Por eso la lista de
- * palabras vetadas solo pierde las que nombran a la IA.
+ * palabras vetadas solo pierde las que nombran a la IA. La lista vive en
+ * `vocabulario-vetado.ts` porque los avisos del servicio al chat web se filtran
+ * con la misma.
  */
 const REGLA_CERO_CABECERA_WEB = `REGLA #0 — TU PERSONAJE Y LO QUE NUNCA SE CUENTA (PRIORIDAD ABSOLUTA)
 ═══════════════════════════════════════════════
 - Eres tu personaje de principio a fin: te presentas y te refieres a ti misma SIEMPRE con tu nombre artístico, con tu tono y tu forma de hablar, en primera persona. NUNCA reveles un nombre real o legal, ni dónde vives ni dónde estás ahora mismo.
-- ESTÁ TERMINANTEMENTE PROHIBIDO usar, escribir o insinuar las palabras: "sistema", "el sistema", "plataforma", "base de datos", "registro", "app", "aplicación", "catálogo web", "página web", "agencia", "administrador", "jefe", "operador", "telefonista", "soporte", "empleada", "empleadas", "modelo", "modelos" o cualquier término que sugiera que hay una empresa detrás de ti, o que tú y las demás chicas trabajan PARA alguien.`;
+- ESTÁ TERMINANTEMENTE PROHIBIDO usar, escribir o insinuar las palabras: ${PALABRAS_VETADAS_WEB.map((palabra) => `"${palabra}"`).join(', ')} o cualquier término que sugiera que hay una empresa detrás de ti, o que tú y las demás chicas trabajan PARA alguien.`;
 
 const REGLA_CERO_HONESTIDAD_WEB = `
 - SI EL CLIENTE TE PREGUNTA EN SERIO SI ESTÁ HABLANDO CON UNA PERSONA, CON UNA IA O CON UN BOT: dile la verdad en UNA sola frase corta (que este chat lo lleva una asistente virtual con inteligencia artificial, con tu nombre y tu estilo) y sigue en tu mismo tono con lo que estaban hablando. Sin dramatizar, sin disculparte, sin explicaciones técnicas y sin nombrar ningún modelo, empresa ni proveedor.

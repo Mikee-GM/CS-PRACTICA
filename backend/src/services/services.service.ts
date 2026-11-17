@@ -75,6 +75,7 @@ import {
 import { ConversationNotifier } from '../conversations/conversation-notifier';
 import {
   avisarAlChatWeb,
+  type OpcionesAvisoWeb,
   textoAvisoCancelacionPorDemora,
   unaVez,
 } from './aviso-al-cliente-web';
@@ -298,12 +299,14 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
   private avisarClienteWeb(
     servicio: Servicios,
     texto: string | (() => Promise<string>),
+    opciones?: OpcionesAvisoWeb,
   ): Promise<boolean> {
     return avisarAlChatWeb(
       this.conversationNotifier,
       this.logger,
       servicio,
       texto,
+      opciones,
     );
   }
 
@@ -2099,13 +2102,14 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
     const yaConfirmado =
       estadoPrevio === 'agendado' || estadoPrevio === 'en_curso';
+    const respaldoCancelacion = yaConfirmado
+      ? 'Qué pena contigo, al final no voy a poder ir, discúlpame de verdad'
+      : 'Qué pena contigo, esta vez no voy a poder ir';
     const redactarCancelacion = unaVez(() =>
       this.aiMessageService.generate(
         'service_cancelled',
         { employeeName: service.empleada?.nombreArtistico },
-        yaConfirmado
-          ? 'Qué pena contigo, al final no voy a poder ir, discúlpame de verdad'
-          : 'Qué pena contigo, esta vez no voy a poder ir',
+        respaldoCancelacion,
       ),
     );
 
@@ -2122,7 +2126,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         );
       }
     }
-    await this.avisarClienteWeb(service, redactarCancelacion);
+    await this.avisarClienteWeb(service, redactarCancelacion, {
+      respaldo: respaldoCancelacion,
+    });
 
     if (yaConfirmado && service.empleadaId) {
       try {
@@ -2877,11 +2883,13 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
+    const respaldoAceptacion =
+      'Oyeee, sí puedo ir contigo, nos vemos en un ratico';
     const redactarAceptacion = unaVez(() =>
       this.aiMessageService.generate(
         'service_accepted',
         { employeeName: servicio.empleada.nombreArtistico },
-        'Oyeee, sí puedo ir contigo, nos vemos en un ratico',
+        respaldoAceptacion,
       ),
     );
     // Notificar al cliente por Telegram si tiene telegramChatId
@@ -2906,7 +2914,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     }
     // Sin `recordAgencyMessage`: en la web el aviso ya queda en el historial
     // del chat, que es lo que ve el jefe.
-    await this.avisarClienteWeb(servicio, redactarAceptacion);
+    await this.avisarClienteWeb(servicio, redactarAceptacion, {
+      respaldo: respaldoAceptacion,
+    });
 
     // 5. Iniciar despacho de choferes por proximidad
     let uberLink: string | undefined;
@@ -3993,11 +4003,12 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     }
 
     // 4. Notificar al cliente via Telegram con opciones de reinicio
+    const respaldoRechazo = 'Qué pena contigo, esta vez no voy a poder ir';
     const redactarRechazo = unaVez(() =>
       this.aiMessageService.generate(
         'service_rejected',
         { employeeName: servicio.empleada?.nombreArtistico },
-        'Qué pena contigo, esta vez no voy a poder ir',
+        respaldoRechazo,
       ),
     );
     if (servicio.clienteTelegramId) {
@@ -4011,7 +4022,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         this.logger.error('Error notifying client of rejected service:', err);
       }
     }
-    await this.avisarClienteWeb(servicio, redactarRechazo);
+    await this.avisarClienteWeb(servicio, redactarRechazo, {
+      respaldo: respaldoRechazo,
+    });
 
     return servicio;
   }
@@ -4044,11 +4057,12 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       minute: '2-digit',
       timeZone: APP_TIME_ZONE,
     });
+    const respaldoEta = `Soy el asistente de la agencia. La cita anterior se extendió; la nueva hora aproximada de llegada de ${next.empleada?.nombreArtistico || 'la empleada'} es ${eta}.`;
     const redactarEta = unaVez(() =>
       this.aiMessageService.generateAgencyMessage(
         'scheduled_eta_updated',
         { employeeName: next.empleada?.nombreArtistico, eta },
-        `Soy el asistente de la agencia. La cita anterior se extendió; la nueva hora aproximada de llegada de ${next.empleada?.nombreArtistico || 'la empleada'} es ${eta}.`,
+        respaldoEta,
       ),
     );
     if (next.cliente?.telegramChatId) {
@@ -4060,7 +4074,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         .catch(() => undefined);
       await this.recordAgencyMessage(next, message);
     }
-    await this.avisarClienteWeb(next, redactarEta);
+    // Lo redacta la IA como agencia: el respaldo fijo, adaptado, es lo que
+    // queda si su texto dice algo que en la web no se dice.
+    await this.avisarClienteWeb(next, redactarEta, { respaldo: respaldoEta });
   }
 
   async activateScheduledSuccessor(
@@ -4088,11 +4104,12 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       next.horaInicioEstimada = next.horaInicioServicio;
       await this.serviciosRepository.save(next);
       await this.notifyScheduledServiceStarted(next.id);
+      const respaldoDisponible = `Soy el asistente de la agencia. ${next.empleada?.nombreArtistico || 'La empleada'} ya está disponible y se encuentra en la misma ubicación.`;
       const redactarDisponible = unaVez(() =>
         this.aiMessageService.generateAgencyMessage(
           'employee_available',
           { employeeName: next.empleada?.nombreArtistico },
-          `Soy el asistente de la agencia. ${next.empleada?.nombreArtistico || 'La empleada'} ya está disponible y se encuentra en la misma ubicación.`,
+          respaldoDisponible,
         ),
       );
       if (next.cliente?.telegramChatId) {
@@ -4103,7 +4120,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         );
         await this.recordAgencyMessage(next, message);
       }
-      await this.avisarClienteWeb(next, redactarDisponible);
+      await this.avisarClienteWeb(next, redactarDisponible, {
+        respaldo: respaldoDisponible,
+      });
     } else {
       const provider = next.transporteAgendado ?? 'chofer';
       const trip = await this.viajesRepository.save(
@@ -4150,11 +4169,12 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           }
         }
       }
+      const respaldoEnCamino = `Soy el asistente de la agencia. ${next.empleada?.nombreArtistico || 'La empleada'} terminó su servicio anterior y ahora va en camino.`;
       const redactarEnCamino = unaVez(() =>
         this.aiMessageService.generateAgencyMessage(
           'employee_en_route',
           { employeeName: next.empleada?.nombreArtistico },
-          `Soy el asistente de la agencia. ${next.empleada?.nombreArtistico || 'La empleada'} terminó su servicio anterior y ahora va en camino.`,
+          respaldoEnCamino,
         ),
       );
       if (next.cliente?.telegramChatId) {
@@ -4165,7 +4185,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         );
         await this.recordAgencyMessage(next, message);
       }
-      await this.avisarClienteWeb(next, redactarEnCamino);
+      await this.avisarClienteWeb(next, redactarEnCamino, {
+        respaldo: respaldoEnCamino,
+      });
     }
     this.realtimeEventsService.emitToBoss(next.jefeId, {
       type: sameLocation
@@ -7570,15 +7592,17 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       }
 
       if (trip.tipo === 'ida') {
+        const respaldoTrayecto =
+          action === 'employee_arrived'
+            ? 'Ya llegué al punto que cuadramos, aquí te espero'
+            : 'Ya voy en camino, nos vemos pronto';
         const redactarTrayecto = unaVez(() =>
           this.aiMessageService.generate(
             action === 'employee_arrived'
               ? 'employee_arrived'
               : 'employee_on_the_way',
             { employeeName: trip.servicio.empleada?.nombreArtistico },
-            action === 'employee_arrived'
-              ? 'Ya llegué al punto que cuadramos, aquí te espero'
-              : 'Ya voy en camino, nos vemos pronto',
+            respaldoTrayecto,
           ),
         );
         if (trip.servicio.cliente?.telegramChatId) {
@@ -7588,7 +7612,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             clientMessage,
           );
         }
-        await this.avisarClienteWeb(trip.servicio, redactarTrayecto);
+        await this.avisarClienteWeb(trip.servicio, redactarTrayecto, {
+          respaldo: respaldoTrayecto,
+        });
         if (trip.servicio.clienteId) {
           this.realtimeEventsService.emitToClient(trip.servicio.clienteId, {
             type: action,

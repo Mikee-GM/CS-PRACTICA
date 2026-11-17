@@ -5,6 +5,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -19,6 +20,8 @@ import { AiMessageService } from '../ai/ai-message.service';
 import { ServicesService } from '../services/services.service';
 import { TelegramService } from '../telegram/telegram.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ConversationNotifier } from '../conversations/conversation-notifier';
+import { avisarAlChatWeb, unaVez } from '../services/aviso-al-cliente-web';
 
 /** Lo que la modelo tiene de margen antes de que se le cuente la espera. */
 const ESPERA_MS = 600_000;
@@ -58,6 +61,13 @@ export class DriverTripsService {
     private readonly telegram: TelegramService,
     @Inject(forwardRef(() => ServicesService))
     private readonly servicesService: ServicesService,
+    /*
+     * Los avisos al cliente que reservo por la web. Opcional y al final por la
+     * misma razon que en `ServicesService`: sin el, el canal web no existe y
+     * Telegram sigue igual.
+     */
+    @Optional()
+    private readonly conversationNotifier?: ConversationNotifier,
   ) {}
 
   /**
@@ -607,22 +617,38 @@ export class DriverTripsService {
    * sale el de reserva, porque el cliente tiene que enterarse igual.
    */
   private async avisarLlegadaAlCliente(trip: Viajes): Promise<void> {
-    const chatId = trip.servicio?.cliente?.telegramChatId;
-    if (!chatId) return;
+    const servicio = trip.servicio;
+    if (!servicio) return;
 
-    try {
-      const mensaje = await this.aiMessages.generate(
+    const respaldo = 'Ya llegué al punto que cuadramos, aquí te espero';
+    // Una sola redaccion para los dos canales: el cliente que tiene ambos lee
+    // lo mismo y la IA se paga una vez.
+    const redactar = unaVez(() =>
+      this.aiMessages.generate(
         'employee_arrived',
-        { employeeName: trip.servicio?.empleada?.nombreArtistico },
-        'Ya llegué al punto que cuadramos, aquí te espero',
-      );
-      await this.telegram.sendMessage(chatId, mensaje);
-    } catch (err) {
-      this.logger.error(
-        `No se pudo avisar al cliente de la llegada (chat ${chatId}):`,
-        err,
-      );
+        { employeeName: servicio.empleada?.nombreArtistico },
+        respaldo,
+      ),
+    );
+
+    const chatId = servicio.cliente?.telegramChatId;
+    if (chatId) {
+      try {
+        await this.telegram.sendMessage(chatId, await redactar());
+      } catch (err) {
+        this.logger.error(
+          `No se pudo avisar al cliente de la llegada (chat ${chatId}):`,
+          err,
+        );
+      }
     }
+    await avisarAlChatWeb(
+      this.conversationNotifier,
+      this.logger,
+      servicio,
+      redactar,
+      { respaldo },
+    );
   }
 
   /**
@@ -668,14 +694,21 @@ export class DriverTripsService {
     const servicio = trip.servicio;
     if (!servicio) return;
 
+    const textoCompletado =
+      'El servicio quedó completado: la empleada llegó a su destino.';
     if (servicio.cliente?.telegramChatId) {
       await this.telegram
-        .sendMessage(
-          servicio.cliente.telegramChatId,
-          'El servicio quedó completado: la empleada llegó a su destino.',
-        )
+        .sendMessage(servicio.cliente.telegramChatId, textoCompletado)
         .catch(() => undefined);
     }
+    // En la web sale el mismo aviso nombrandola a ella en vez de "la
+    // empleada" (lo adapta `avisarAlChatWeb`).
+    await avisarAlChatWeb(
+      this.conversationNotifier,
+      this.logger,
+      servicio,
+      textoCompletado,
+    );
 
     await this.servicesService
       .sendFinalReceiptAndAward(servicio.id)

@@ -16,6 +16,7 @@ import { ServicesModule } from '../services/services.module';
 import { TransportOperationsModule } from '../transport-operations/transport-operations.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { AiModule } from '../ai/ai.module';
+import { ConversationNotifierModule } from '../conversations/conversation-notifier.module';
 
 @Module({
   imports: [
@@ -31,6 +32,9 @@ import { AiModule } from '../ai/ai.module';
     TransportOperationsModule,
     NotificationsModule,
     AiModule,
+    // Directo y no por `ConversationsModule`, por el mismo ciclo que evita
+    // `ServicesModule`: el notificador solo depende de la base.
+    ConversationNotifierModule,
   ],
   controllers: [DriversController, DriverPortalController],
   providers: [DriversService, DriverTripsService],
