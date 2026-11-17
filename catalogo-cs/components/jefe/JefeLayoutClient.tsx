@@ -26,6 +26,16 @@ const links = [
   { href: "/jefe/retos", label: "Retos", corto: "Retos", icon: Trophy },
 ];
 
+/*
+ * Los chats web son la otra bandeja de "Hoy": comparten su entrada en la barra
+ * y su marco a pantalla completa en vez de ocupar una septima celda.
+ */
+const BANDEJAS_DE_HOY = new Set(["/jefe", "/jefe/chats-web"]);
+
+function esActivo(href: string, pathname: string | null): boolean {
+  return href === "/jefe" ? BANDEJAS_DE_HOY.has(pathname ?? "") : pathname === href;
+}
+
 export default function JefeLayoutClient({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -63,7 +73,7 @@ export default function JefeLayoutClient({ children }: { children: React.ReactNo
         </div>
         <nav className="flex-1 space-y-2 p-4">
           {links.map(({ href, label, icon: Icon }) => {
-            const active = pathname === href;
+            const active = esActivo(href, pathname);
             return (
               <Link key={href} href={href} className={`flex items-center gap-3 px-4 py-4 text-xs font-semibold uppercase tracking-[0.12em] transition-colors ${active ? "bg-[#C5A55A] text-black" : "text-zinc-400 hover:bg-zinc-900 hover:text-white"}`}>
                 <Icon size={17} /> {label}
@@ -95,7 +105,7 @@ export default function JefeLayoutClient({ children }: { children: React.ReactNo
         </header>
         <main
           className={
-            pathname === "/jefe"
+            BANDEJAS_DE_HOY.has(pathname ?? "")
               ? "w-full max-w-none p-2 sm:p-3 lg:p-4"
               : "mx-auto max-w-7xl p-4 sm:p-6 lg:p-10"
           }
@@ -107,7 +117,7 @@ export default function JefeLayoutClient({ children }: { children: React.ReactNo
           con etiquetas cortas; Cerrar sesión permanece en la cabecera. */}
       <nav className="fixed inset-x-0 bottom-0 z-50 grid grid-cols-6 gap-0.5 border-t border-zinc-800 bg-[#050505]/95 px-1 pt-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
         {links.map(({ href, corto, icon: Icon }) => (
-          <Link key={href} href={href} className={`flex h-[52px] min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-0.5 text-[9px] font-semibold ${pathname === href ? "bg-[#C5A55A]/10 text-[#C5A55A]" : "text-zinc-500"}`}>
+          <Link key={href} href={href} className={`flex h-[52px] min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-0.5 text-[9px] font-semibold ${esActivo(href, pathname) ? "bg-[#C5A55A]/10 text-[#C5A55A]" : "text-zinc-500"}`}>
             <Icon size={19} /> <span className="max-w-full truncate">{corto}</span>
           </Link>
         ))}

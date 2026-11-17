@@ -10,6 +10,7 @@ import {
   debeMostrarComprobante,
   enlazaConLoConocido,
   esOptimista,
+  estaEscribiendo,
   marcarEnvio,
   mezclarMensajes,
   ESTADOS_DEL_COMPROBANTE,
@@ -31,7 +32,10 @@ import { useCanalCliente, type EventoDelChat } from "./useCanalCliente";
 
 const ESTADOS: readonly EstadoConversacion[] = ["activa", "en_revision", "con_servicio", "cerrada"];
 
-/** Cuanto dura "escribiendo" sin otro aviso: el backend no manda el fin. */
+/**
+ * Cuanto dura "escribiendo" sin otro aviso. El backend ya manda el fin
+ * (`activo: false`); esto queda de respaldo por si ese evento se pierde.
+ */
 const DURACION_ESCRIBIENDO_MS = 10_000;
 
 /** Paginas como maximo al rellenar un hueco tras una caida del canal. */
@@ -87,6 +91,9 @@ export default function VistaChat({
   );
   const [errorDeEnvio, setErrorDeEnvio] = useState("");
   const [analisis, setAnalisis] = useState<Record<string, EstadoDelComprobante>>({});
+  const [comprobantePendiente, setComprobantePendiente] = useState(
+    conversacion.comprobantePendiente,
+  );
 
   const mensajesRef = useRef(mensajes);
   mensajesRef.current = mensajes;
@@ -98,6 +105,8 @@ export default function VistaChat({
   const seguirAlFinal = useRef(true);
   const sincronizando = useRef<Promise<void> | null>(null);
   const repetirSincronizacion = useRef(false);
+  const releyendoResumen = useRef(false);
+  const repetirResumen = useRef(false);
 
   const irAlFinal = useCallback((suave: boolean) => {
     const zona = zonaRef.current;
@@ -200,6 +209,37 @@ export default function VistaChat({
     }
   }, [pedirPagina]);
 
+  /**
+   * Relee el resumen (estado y comprobante pendiente). Es una foto del
+   * servidor: tras un aviso del sistema, un comprobante analizado o un cambio
+   * de estado, lo que dijo al abrir ya puede no valer. Un fallo aqui no se
+   * muestra: lo que hay en pantalla sigue siendo usable y el siguiente evento
+   * vuelve a intentarlo.
+   */
+  const releerResumen = useCallback(async (): Promise<void> => {
+    if (releyendoResumen.current) {
+      repetirResumen.current = true;
+      return;
+    }
+    releyendoResumen.current = true;
+    try {
+      do {
+        repetirResumen.current = false;
+        const respuesta = await pedirConSesion(`/api/conversations/${conversationId}`, {
+          cache: "no-store",
+        });
+        if (!respuesta.ok) return;
+        const resumen = (await respuesta.json()) as ResumenDeConversacion;
+        if (ESTADOS.includes(resumen.status)) setStatus(resumen.status);
+        setComprobantePendiente(Boolean(resumen.comprobantePendiente));
+      } while (repetirResumen.current);
+    } catch {
+      // Sin red: se reintenta con el siguiente evento o al volver a la pestaña.
+    } finally {
+      releyendoResumen.current = false;
+    }
+  }, [conversationId]);
+
   const alEvento = useCallback(
     (evento: EventoDelChat) => {
       if (evento.data?.conversationId !== conversationId) return;
@@ -217,14 +257,22 @@ export default function VistaChat({
             }));
           }
           void sincronizar();
+          void releerResumen();
           break;
         }
         case "message_created":
           void sincronizar();
+          // Un aviso del sistema puede pedir (o dar por recibido) el comprobante.
+          void releerResumen();
           break;
         case "typing":
-          setEscribiendo(true);
           if (escribiendoTimer.current) clearTimeout(escribiendoTimer.current);
+          escribiendoTimer.current = null;
+          if (!estaEscribiendo(evento.data)) {
+            setEscribiendo(false);
+            break;
+          }
+          setEscribiendo(true);
           escribiendoTimer.current = setTimeout(
             () => setEscribiendo(false),
             DURACION_ESCRIBIENDO_MS,
@@ -233,15 +281,19 @@ export default function VistaChat({
         case "conversation_status_changed": {
           const nuevo = evento.data?.status as EstadoConversacion | undefined;
           if (nuevo && ESTADOS.includes(nuevo)) setStatus(nuevo);
+          void releerResumen();
           break;
         }
         // `conversation_mode_changed` (IA o equipo) no se le muestra al cliente.
       }
     },
-    [conversationId, sincronizar],
+    [conversationId, sincronizar, releerResumen],
   );
 
-  const canal = useCanalCliente(alEvento, () => void sincronizar());
+  const canal = useCanalCliente(alEvento, () => {
+    void sincronizar();
+    void releerResumen();
+  });
 
   useEffect(
     () => () => {
@@ -323,6 +375,9 @@ export default function VistaChat({
   function alEnviarComprobante(mensaje: MensajeDelChat) {
     seguirAlFinal.current = true;
     setMensajes((actuales) => mezclarMensajes(actuales, [mensaje]));
+    // El resumen leido antes de subirlo todavia dice "pendiente".
+    setComprobantePendiente(false);
+    void releerResumen();
   }
 
   // El corte entre historial y lo nuevo: desde el primer mensaje que no estaba.
@@ -333,7 +388,11 @@ export default function VistaChat({
   const antiguos = mensajes.slice(0, corte);
   const nuevos = mensajes.slice(corte);
   const cerrada = status === "cerrada";
-  const mostrarComprobante = debeMostrarComprobante(status, mensajes, analisis);
+  const mostrarComprobante = debeMostrarComprobante(
+    { status, comprobantePendiente },
+    mensajes,
+    analisis,
+  );
 
   return (
     <div className="flex h-dvh flex-col bg-black">

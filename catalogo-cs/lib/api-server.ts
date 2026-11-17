@@ -31,9 +31,19 @@ type ApiFetchOptions = RequestInit & {
   loginPath?: string;
 };
 
-/** Conserva el estado HTTP para distinguir un registro ausente de un fallo. */
+/**
+ * Conserva el estado HTTP para distinguir un registro ausente de un fallo.
+ *
+ * `body` guarda el JSON del error tal cual: algunos 409 traen datos ademas del
+ * texto (por ejemplo, quien tiene tomada una conversacion) y sin el habria que
+ * adivinarlos del mensaje.
+ */
 export class ApiError extends Error {
-  constructor(message: string, public readonly status: number) {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly body?: unknown,
+  ) {
     super(message);
     this.name = "ApiError";
   }
@@ -94,8 +104,10 @@ export async function apiFetch<T>(
     }
 
     let message = `Backend request failed with ${response.status}`;
+    let errorBody: unknown;
     try {
       const body = await response.json();
+      errorBody = body;
       message = body.message ?? body.error ?? message;
       if (Array.isArray(message)) {
         message = message.join(", ");
@@ -104,7 +116,7 @@ export async function apiFetch<T>(
       // Keep the generic message when the backend returns no JSON body.
     }
 
-    throw new ApiError(message, response.status);
+    throw new ApiError(message, response.status, errorBody);
   }
 
   if (response.status === 204) {

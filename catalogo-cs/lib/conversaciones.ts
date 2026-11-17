@@ -53,6 +53,12 @@ export type ResumenDeConversacion = {
     hasAttachment: boolean;
     createdAt: string;
   } | null;
+  /**
+   * El backend acepta ahora un comprobante de esta conversacion: es el mismo
+   * criterio con el que responde a la subida, asi que con `false` esta daria
+   * 409.
+   */
+  comprobantePendiente: boolean;
 };
 
 export type PaginaDeMensajes = {
@@ -76,16 +82,18 @@ export const ESTADOS_DEL_COMPROBANTE: readonly EstadoDelComprobante[] = [
  * Un mensaje tal como se pinta. Los optimistas llevan `envio`: existen solo en
  * este navegador hasta que el servidor devuelve su version con id real.
  */
-export type MensajeEnPantalla = MensajeDelChat & {
+export type EstadoDeEnvio = {
   envio?: "enviando" | "error";
   /** Lo que hay que volver a mandar si el envio falla. */
   reintento?: { body?: string; location?: UbicacionDelMensaje };
 };
 
+export type MensajeEnPantalla = MensajeDelChat & EstadoDeEnvio;
+
 /** Prefijo de los ids provisionales; nunca coincide con un uuid del backend. */
 const PREFIJO_LOCAL = "local:";
 
-export function esOptimista(mensaje: MensajeEnPantalla): boolean {
+export function esOptimista(mensaje: Pick<MensajeDelChat, "id">): boolean {
   return mensaje.id.startsWith(PREFIJO_LOCAL);
 }
 
@@ -133,13 +141,16 @@ function compararCronologico(a: MensajeDelChat, b: MensajeDelChat): number {
  *    siempre al final, en el orden en que se escribieron: su hora sale del
  *    reloj del telefono, que puede ir adelantado o atrasado respecto al
  *    servidor, y no debe colarlos entre mensajes ya confirmados.
+ *
+ * Es generica porque el panel del equipo mezcla con las mismas reglas un
+ * mensaje mas rico (coordenadas del pin, validacion del comprobante).
  */
-export function mezclarMensajes(
-  actuales: readonly MensajeEnPantalla[],
-  delServidor: readonly MensajeDelChat[],
-): MensajeEnPantalla[] {
-  const confirmados = new Map<string, MensajeEnPantalla>();
-  const pendientes: MensajeEnPantalla[] = [];
+export function mezclarMensajes<M extends MensajeDelChat>(
+  actuales: readonly (M & EstadoDeEnvio)[],
+  delServidor: readonly M[],
+): (M & EstadoDeEnvio)[] {
+  const confirmados = new Map<string, M & EstadoDeEnvio>();
+  const pendientes: (M & EstadoDeEnvio)[] = [];
 
   for (const mensaje of actuales) {
     if (esOptimista(mensaje)) pendientes.push(mensaje);
@@ -176,7 +187,7 @@ export function marcarEnvio(
 
 /** Id del mensaje confirmado mas antiguo: el cursor para pedir la pagina previa. */
 export function cursorMasAntiguo(
-  mensajes: readonly MensajeEnPantalla[],
+  mensajes: readonly Pick<MensajeDelChat, "id">[],
 ): string | null {
   return mensajes.find((m) => !esOptimista(m))?.id ?? null;
 }
@@ -189,8 +200,8 @@ export function cursorMasAntiguo(
  * (la conexion estuvo caida un rato) y hay que seguir pidiendo hacia atras.
  */
 export function enlazaConLoConocido(
-  conocidos: readonly MensajeEnPantalla[],
-  pagina: readonly MensajeDelChat[],
+  conocidos: readonly Pick<MensajeDelChat, "id">[],
+  pagina: readonly Pick<MensajeDelChat, "id">[],
 ): boolean {
   if (conocidos.every(esOptimista)) return true;
   const ids = new Set(conocidos.map((m) => m.id));
@@ -198,51 +209,52 @@ export function enlazaConLoConocido(
 }
 
 /** Quita acentos y mayusculas para buscar palabras sin depender de la redaccion. */
-function normalizar(texto: string): string {
+export function normalizar(texto: string): string {
   return texto
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")
     .toLowerCase();
 }
 
-/** ¿Este aviso del sistema pide el comprobante de pago? */
-export function pideComprobante(mensaje: MensajeDelChat): boolean {
-  return mensaje.sender === "sistema" && normalizar(mensaje.body).includes("comprobante");
-}
-
 /**
  * Regla para ofrecer la subida del comprobante.
  *
- * El backend no expone si la reserva espera un comprobante, asi que se deduce
- * de la conversacion: se muestra cuando la conversacion no esta cerrada y el
- * ultimo aviso del sistema que menciona el comprobante es posterior al ultimo
- * comprobante que mando el cliente. Asi aparece en cuanto se pide, desaparece
- * al enviarlo y vuelve si el equipo lo rechaza y lo pide otra vez.
+ * La fuente es `comprobantePendiente` del resumen, que el backend calcula con
+ * el mismo criterio con el que acepta la subida: con el, la pantalla no ofrece
+ * nada que vaya a acabar en 409. Antes se deducia del texto de los avisos y
+ * fallaba en cuanto cambiaba la redaccion.
  *
- * Tambien vuelve si el analisis de ese ultimo comprobante salio `rechazado` o
- * `error` (evento `receipt_status`): el backend no garantiza un aviso de texto
- * en ese caso, y sin esto el cliente se quedaria sin forma de mandar otro. Ese
- * estado solo vive en esta pestaña; al recargar cuenta el texto.
- *
- * No basta con el estado `en_revision`: tambien se llega ahi pagando en
- * efectivo, y ofrecer el comprobante a quien no tiene nada que comprobar solo
- * acabaria en un 409 del servidor.
+ * El resumen es una foto del momento en que se leyo, asi que hay un refuerzo:
+ * si el analisis del ultimo comprobante del cliente llego `rechazado` o `error`
+ * por el evento `receipt_status`, se ofrece otra vez aunque el resumen aun no
+ * se haya vuelto a pedir. Sin eso el cliente se quedaria esperando sin forma de
+ * mandar otro. Quien llama pone `comprobantePendiente` en falso en cuanto sube
+ * uno, hasta releer el resumen.
  */
 export function debeMostrarComprobante(
-  status: EstadoConversacion,
-  mensajes: readonly MensajeEnPantalla[],
+  resumen: { status: EstadoConversacion; comprobantePendiente: boolean },
+  mensajes: readonly MensajeDelChat[],
   analisis: Readonly<Record<string, EstadoDelComprobante>> = {},
 ): boolean {
-  if (status === "cerrada") return false;
+  if (resumen.status === "cerrada") return false;
   for (let i = mensajes.length - 1; i >= 0; i--) {
     const mensaje = mensajes[i];
     if (mensaje.sender === "cliente" && mensaje.attachment?.type === "comprobante") {
       const resultado = analisis[mensaje.id];
-      return resultado === "rechazado" || resultado === "error";
+      if (resultado === "rechazado" || resultado === "error") return true;
+      break;
     }
-    if (pideComprobante(mensaje)) return true;
   }
-  return false;
+  return resumen.comprobantePendiente;
+}
+
+/**
+ * ¿Un evento `typing` enciende el indicador? El backend manda `activo: false`
+ * al terminar el turno; los eventos anteriores a ese campo no lo traian y
+ * significaban "empieza", asi que su ausencia cuenta como activo.
+ */
+export function estaEscribiendo(data: { activo?: unknown } | undefined): boolean {
+  return data?.activo !== false;
 }
 
 const ETIQUETAS_DE_ESTADO: Record<EstadoConversacion, string> = {

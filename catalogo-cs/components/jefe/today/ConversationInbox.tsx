@@ -1,4 +1,5 @@
 import { Search } from "lucide-react";
+import SelectorDeBandeja from "@/components/jefe/chats-web/SelectorDeBandeja";
 import ClientConversationRow from "./ClientConversationRow";
 import type { ClientConversationGroup } from "./client-inbox-model";
 
@@ -23,6 +24,11 @@ export default function ConversationInbox({
       aria-label="Conversaciones"
     >
       <header className="border-b border-zinc-800 px-3 py-3">
+        {/* Dentro de la cabecera de la lista y no en una fila propia: asi la
+            altura calculada del espacio de trabajo no cambia. */}
+        <div className="mb-3">
+          <SelectorDeBandeja actual="telegram" />
+        </div>
         <div className="flex items-baseline justify-between gap-3">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#C5A55A]">

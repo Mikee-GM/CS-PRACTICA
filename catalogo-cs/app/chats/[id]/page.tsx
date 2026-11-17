@@ -6,7 +6,7 @@ import { ErrorDeFormulario } from "@/components/cliente/Campo";
 import VistaChat from "@/components/cliente/VistaChat";
 import { getCurrentUser } from "@/lib/auth";
 import type { PaginaDeMensajes, ResumenDeConversacion } from "@/lib/conversaciones";
-import { getConversaciones, getMensajes } from "@/lib/data/conversaciones";
+import { getConversacion, getMensajes } from "@/lib/data/conversaciones";
 import { optionalSource } from "@/lib/optional-source";
 import { inicioParaRol } from "@/lib/roles";
 
@@ -45,15 +45,20 @@ export default async function ChatPage({
   if (!UUID.test(id)) notFound();
 
   /*
-   * No hay `GET /conversations/:id`: la cabecera (modelo y estado) sale de la
-   * bandeja, que ademas es la que dice si la conversacion es de este cliente.
+   * `null` es "no existe o no es tuya" (404) y `undefined` un fallo de red: el
+   * primero es una pagina no encontrada y el segundo un error con salida.
    */
-  const [conversaciones, pagina] = await Promise.all([
-    optionalSource<ResumenDeConversacion[] | null>(getConversaciones(), null, "chat"),
+  const [conversacion, pagina] = await Promise.all([
+    optionalSource<ResumenDeConversacion | null | undefined>(
+      getConversacion(id),
+      undefined,
+      "chat",
+    ),
     optionalSource<PaginaDeMensajes | null>(getMensajes(id), null, "chat (mensajes)"),
   ]);
 
-  if (!conversaciones) {
+  if (conversacion === null) notFound();
+  if (!conversacion) {
     return (
       <main className="flex min-h-dvh items-center justify-center bg-[#050505] px-4">
         <div className="w-full max-w-md space-y-4">
@@ -68,9 +73,6 @@ export default async function ChatPage({
       </main>
     );
   }
-
-  const conversacion = conversaciones.find((c) => c.id === id);
-  if (!conversacion) notFound();
 
   return (
     <VistaChat

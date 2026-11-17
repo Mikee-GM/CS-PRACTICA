@@ -8,6 +8,8 @@ export type EventoDelChat = {
     conversationId?: string;
     messageId?: string;
     status?: string;
+    /** Solo en `typing`: `false` cuando el asistente deja de escribir. */
+    activo?: boolean;
   };
 };
 

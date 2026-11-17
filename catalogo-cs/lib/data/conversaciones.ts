@@ -1,4 +1,4 @@
-import { apiFetch } from "@/lib/api-server";
+import { apiFetch, ApiError } from "@/lib/api-server";
 import type {
   PaginaDeMensajes,
   ResumenDeConversacion,
@@ -15,6 +15,26 @@ const LOGIN_CLIENTE = { loginPath: "/ingresar" } as const;
 /** Bandeja del cliente, la mas reciente primero (hasta 100). */
 export function getConversaciones(): Promise<ResumenDeConversacion[]> {
   return apiFetch<ResumenDeConversacion[]>("/conversations", LOGIN_CLIENTE);
+}
+
+/**
+ * Resumen de una conversacion del cliente (cabecera del chat y si espera
+ * comprobante). `null` si no existe o no es suya: el backend responde 404 en
+ * los dos casos para no revelar conversaciones ajenas. Cualquier otro fallo se
+ * lanza, para que la pantalla lo distinga de "no existe".
+ */
+export async function getConversacion(
+  conversationId: string,
+): Promise<ResumenDeConversacion | null> {
+  try {
+    return await apiFetch<ResumenDeConversacion>(
+      `/conversations/${encodeURIComponent(conversationId)}`,
+      LOGIN_CLIENTE,
+    );
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return null;
+    throw error;
+  }
 }
 
 /**

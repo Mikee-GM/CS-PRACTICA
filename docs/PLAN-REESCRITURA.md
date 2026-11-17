@@ -605,3 +605,33 @@ Pendiente:
 - Sin tope por imagen; decidir en F3 si se sube una media por peticion por el
   limite de 20 MB de Next.
 - Carrusel sin vuelta al principio.
+
+### Fase 2, paso 11 (panel del equipo en el chat web)
+
+- `/jefe/chats-web` (hermana de "Hoy", que es la bandeja de Telegram; se cambia
+  con `SelectorDeBandeja`) y `/admin/chats-web` (menu Operacion) con el mismo
+  `BandejaChatsWeb`. Componentes en `components/jefe/chats-web/`.
+- Bandeja con filtros por estado, busqueda, insignias de atencion en texto y
+  quien tiene el control. Conversacion con historial paginado, etiquetas
+  IA/Jefe/Cliente/Sistema, comprobante y foto en visor (`<dialog>` nativo),
+  ubicacion con enlace al mapa.
+- Tomar, devolver, aceptar y rechazar con `DialogoConfirmacion` (`<dialog>`
+  nativo; rechazar pide motivo opcional). Barra de respuesta solo con el control;
+  envio idempotente por `clientMessageId`.
+- Logica pura probada en `lib/chats-del-equipo.ts` (`accionesDisponibles`,
+  `queRecargar`, `traducirFalloDelEquipo`, `resumenDelBorrador`). `ApiError`
+  guarda el cuerpo del error.
+- Cliente: la cabecera sale de `GET /conversations/:id`; la subida de comprobante
+  se rige por `comprobantePendiente`; `typing` con `activo: false` apaga el
+  indicador.
+
+Pendiente:
+
+- Verificacion en navegador y contra un backend real (dialogos nativos en Safari
+  e iOS, alturas en la app instalada, SSE de jefes con admin, 409 reales,
+  aceptar y rechazar de punta a punta).
+- Backend: falta leer el borrador (hoy el resumen sale del aviso "Solicitud lista
+  para revision"), el nombre de quien tiene el control en la bandeja y
+  `GET /staff/conversations/:id`.
+- Los specs de `components/jefe/today` siguen sin ejecutarse por
+  `jest-environment-jsdom`; `next build` sigue cayendo por `@playwright/test`.
