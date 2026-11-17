@@ -9,10 +9,11 @@ export default function SessionKeeper() {
   const router = useRouter();
 
   useEffect(() => {
-    if (pathname === "/admin") return;
+    // El login no tiene sesion que vigilar.
+    if (pathname === "/ingresar") return;
 
     const unsubscribe = subscribeToLogout(() => {
-      router.replace("/admin");
+      router.replace("/ingresar");
       router.refresh();
     });
 

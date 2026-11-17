@@ -10,9 +10,9 @@ export const dynamic = "force-dynamic";
 
 export default async function JefeReportsPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/admin");
+  if (!user) redirect("/ingresar");
   if (user.rol === "admin") redirect("/admin/reports");
-  if (user.rol !== "jefe") redirect("/admin");
+  if (user.rol !== "jefe") redirect("/ingresar");
 
   /* El jefe no ve apelaciones: /discipline/appeals es solo de admin. */
   const [reports, sanctions, directorio] = await Promise.all([

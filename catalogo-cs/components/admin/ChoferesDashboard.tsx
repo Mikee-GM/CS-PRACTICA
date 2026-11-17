@@ -14,6 +14,7 @@ import {
   updateChoferAction,
 } from "@/lib/actions/choferes";
 import EstadoDeTelegram from "@/components/erp/estado-de-telegram";
+import RestablecerContrasena from "@/components/cuenta/RestablecerContrasena";
 import ConfirmDialog from "../ui/ConfirmDialog";
 import InputField from "../ui/InputField";
 import SearchBar from "../ui/SearchBar";
@@ -498,6 +499,12 @@ export default function ChoferesDashboard({
                     >
                       Exámenes
                     </button>
+                    {chofer.usuarioId ? (
+                      <RestablecerContrasena
+                        usuarioId={chofer.usuarioId}
+                        nombre={chofer.nombre}
+                      />
+                    ) : null}
                     <button
                       onClick={() => setConfirmDelete(chofer)}
                       className="text-[10px] font-bold tracking-widest text-zinc-500 uppercase hover:text-red-400 transition-colors"

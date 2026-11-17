@@ -9,8 +9,8 @@ export const dynamic = "force-dynamic";
 
 export default async function ClientesPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/admin");
-  if (!["admin", "jefe"].includes(user.rol)) redirect("/admin");
+  if (!user) redirect("/ingresar");
+  if (!["admin", "jefe"].includes(user.rol)) redirect("/ingresar");
 
   const pagina = await optionalSource(
     getClientes(),

@@ -13,9 +13,9 @@ describe("inicioParaRol", () => {
   });
 
   it.each([null, undefined, "", "desconocido"])(
-    "un rol ausente o desconocido (%p) va al login del panel, nunca a un area interna",
+    "un rol ausente o desconocido (%p) va al login unico, nunca a un area interna",
     (rol) => {
-      expect(inicioParaRol(rol)).toBe("/admin");
+      expect(inicioParaRol(rol)).toBe("/ingresar");
     },
   );
 });

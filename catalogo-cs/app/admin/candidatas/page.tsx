@@ -8,8 +8,8 @@ import CandidatasClient from "@/components/admin/candidatas/CandidatasClient";
 
 export default async function CandidatasPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/admin");
-  if (user.rol !== "admin") redirect("/admin");
+  if (!user) redirect("/ingresar");
+  if (user.rol !== "admin") redirect("/ingresar");
 
   const [screenings, questions] = await Promise.all([
     getCandidateScreenings(),

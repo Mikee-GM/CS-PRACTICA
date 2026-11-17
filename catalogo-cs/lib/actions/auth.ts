@@ -10,11 +10,7 @@ import {
   isRedirectError,
 } from "@/lib/auth";
 import { getApiBaseUrl } from "@/lib/api-server";
-import { destinoSeguroDelCliente } from "@/lib/destino-cliente";
-import { inicioParaRol } from "@/lib/roles";
-
-/** Los roles que tienen a donde ir. Cualquier otro no entra. */
-const INICIO_CONOCIDO = ["admin", "jefe", "empleada", "chofer", "cliente"];
+import { destinoTrasEntrar, errorAlGuardarPerfil } from "@/lib/acceso-personal";
 
 /**
  * Inicio de sesion.
@@ -36,7 +32,8 @@ const INICIO_CONOCIDO = ["admin", "jefe", "empleada", "chofer", "cliente"];
 /*
  * `siguiente` es la pantalla a la que volver tras entrar --el cliente que tocó
  * "Chatear" sin sesion-- y solo vale para el rol cliente y para sus propias
- * pantallas (`destinoSeguroDelCliente`). El personal siempre va a su inicio.
+ * pantallas (`destinoSeguroDelCliente`). El personal siempre va a su inicio,
+ * salvo que entre con una contraseña temporal: entonces va primero a cambiarla.
  */
 export async function loginAction(
   email: string,
@@ -66,16 +63,21 @@ export async function loginAction(
      * Con esto la aplicacion instalada en su telefono se arregla sola, porque
      * si caduca la sesion basta con volver a entrar.
      *
-     * El destino sale de `inicioParaRol`, que es la fuente unica: un rol
-     * desconocido acaba en el login, no en el panel.
+     * El destino sale de `destinoTrasEntrar`, la misma funcion que usa la
+     * pagina del login con la sesion ya abierta: un rol desconocido no tiene
+     * destino y no entra, y la marca de contraseña temporal manda primero a
+     * cambiarla, en la misma respuesta que trae las cookies.
      */
-    if (!data.user?.rol || !INICIO_CONOCIDO.includes(data.user.rol)) {
+    const alEntrar = destinoTrasEntrar({
+      rol: data.user?.rol,
+      debeCambiarPassword: data.user?.debeCambiarPassword,
+      siguiente,
+    });
+    if (!alEntrar) {
       return { success: false, error: "Tu cuenta no tiene acceso a la aplicación" };
     }
     await applyBackendSetCookies(response);
-    destino =
-      (data.user.rol === "cliente" ? destinoSeguroDelCliente(siguiente) : null) ??
-      inicioParaRol(data.user.rol);
+    destino = alEntrar;
   } catch (error: unknown) {
     console.error("loginAction error:", error);
     return {
@@ -115,43 +117,45 @@ export async function getMyProfileAction() {
   return getCurrentUser();
 }
 
+/**
+ * Datos propios del personal: nombre, apellido y telefono.
+ *
+ * Va a `PATCH /users/me` y no a `PATCH /users/:id`: aquel es de
+ * administracion y le respondia 403 a la modelo y al chofer. El correo y la
+ * contraseña ya no se cambian aqui: el correo es la identidad de la cuenta y
+ * lo cambia administracion, y la contraseña tiene su propio flujo, que pide la
+ * actual (`cambiarContrasenaPropiaAction`).
+ */
 export async function updateMyProfileAction(input: {
   nombre?: string;
   apellido?: string;
-  email?: string;
-  password?: string;
-}) {
+  telefono?: string;
+}): Promise<{ success: true } | { success: false; error: string }> {
+  const body: Record<string, string> = {};
+  if (input.nombre !== undefined) body.nombre = input.nombre.trim();
+  if (input.apellido !== undefined) body.apellido = input.apellido.trim();
+  if (input.telefono !== undefined) body.telefono = input.telefono.trim();
+  if (body.nombre === "" || body.apellido === "") {
+    return { success: false, error: errorAlGuardarPerfil(400) };
+  }
+
   try {
-    const user = await getCurrentUser();
-    if (!user) {
-      return { success: false, error: "Sesión no válida o expirada" };
-    }
-
-    const body: Record<string, any> = {};
-    if (input.nombre !== undefined) body.nombre = input.nombre.trim();
-    if (input.apellido !== undefined) body.apellido = input.apellido.trim();
-    if (input.email !== undefined && input.email.trim()) body.email = input.email.trim();
-    if (input.password && input.password.trim().length > 0) {
-      if (input.password.trim().length < 6) {
-        return { success: false, error: "La contraseña debe tener al menos 6 caracteres" };
+    const { apiFetch, ApiError } = await import("@/lib/api-server");
+    try {
+      await apiFetch("/users/me", {
+        method: "PATCH",
+        body: JSON.stringify(body),
+      });
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return { success: false, error: errorAlGuardarPerfil(error.status) };
       }
-      body.password = input.password.trim();
+      throw error;
     }
-
-    const { apiFetch } = await import("@/lib/api-server");
-    await apiFetch(`/users/${user.id}`, {
-      method: "PATCH",
-      body: JSON.stringify(body),
-      authenticated: true,
-    });
-
     return { success: true };
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (isRedirectError(error)) throw error;
     console.error("updateMyProfileAction error:", error);
-    return {
-      success: false,
-      error: error.message || "Error al actualizar los datos de perfil",
-    };
+    return { success: false, error: errorAlGuardarPerfil(null) };
   }
 }

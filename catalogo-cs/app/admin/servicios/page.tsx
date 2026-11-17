@@ -11,7 +11,7 @@ export default async function AdminServicesControlPage({
   searchParams: Promise<{ weekStart?: string; employeeId?: string }>;
 }) {
   const user = await getCurrentUser();
-  if (!user) redirect("/admin");
+  if (!user) redirect("/ingresar");
   if (user.rol !== "admin") redirect("/");
   const data = await getWeeklyServiceHistory(await searchParams);
   return (

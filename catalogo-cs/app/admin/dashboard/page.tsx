@@ -58,7 +58,7 @@ const OVERVIEW_VACIO = {
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/admin");
+  if (!user) redirect("/ingresar");
 
   const contexto = "el centro de mando";
   const { startDate, endDate } = getOperationalWeek();

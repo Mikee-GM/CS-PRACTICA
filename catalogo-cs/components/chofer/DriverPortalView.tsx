@@ -159,11 +159,11 @@ export default function DriverPortalView({
           <div className="max-w-4xl mx-auto mt-2 flex items-center justify-end gap-2">
             <Link
               href="/chofer/ajustes"
-              aria-label="Configurar avisos"
+              aria-label="Ajustes: avisos y seguridad"
               className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400 transition-colors hover:border-[#C5A55A] hover:text-[#C5A55A]"
             >
               <Bell size={14} />
-              Avisos
+              Ajustes
             </Link>
             <CerrarSesion />
           </div>

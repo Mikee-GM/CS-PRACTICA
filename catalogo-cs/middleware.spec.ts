@@ -320,3 +320,141 @@ describe("middleware: publicaciones de la modelo", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 });
+
+describe("middleware: login unico y cambio de contraseña obligatorio", () => {
+  const original = global.fetch;
+  afterEach(() => {
+    global.fetch = original;
+  });
+
+  function destino(respuesta: Response): string | null {
+    const ubicacion = respuesta.headers.get("location");
+    return ubicacion
+      ? new URL(ubicacion, "https://colombia-sexys.test").pathname
+      : null;
+  }
+
+  /** El backend responde a `/auth/me` con este cuerpo. */
+  function backendResponde(cuerpo: Record<string, unknown>) {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(cuerpo),
+    }) as unknown as typeof fetch;
+  }
+
+  const conSesion = { access_token: "s:valor.firma" };
+
+  it.each(["/admin", "/admin/dashboard", "/admin/modelos", "/jefe", "/jefe/equipo"])(
+    "%s sin sesion manda al login unico, no al del panel",
+    async (ruta) => {
+      global.fetch = jest.fn() as unknown as typeof fetch;
+
+      const respuesta = await middleware(peticion(ruta));
+
+      expect(destino(respuesta)).toBe("/ingresar");
+    },
+  );
+
+  it("/admin con la sesion rechazada por el backend manda al login unico", async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      json: () => Promise.resolve({}),
+    }) as unknown as typeof fetch;
+
+    const respuesta = await middleware(peticion("/admin", conSesion));
+
+    expect(destino(respuesta)).toBe("/ingresar");
+  });
+
+  it.each([
+    ["admin", "/admin/dashboard"],
+    ["jefe", "/jefe"],
+    ["empleada", "/empleada/portal"],
+    ["chofer", "/chofer/portal"],
+  ])("/admin con sesion de %s lleva a su inicio", async (rol, inicio) => {
+    backendResponde({ rol, debeCambiarPassword: false });
+
+    const respuesta = await middleware(peticion("/admin", conSesion));
+
+    expect(destino(respuesta)).toBe(inicio);
+  });
+
+  it.each([
+    ["admin", "/admin"],
+    ["admin", "/admin/dashboard"],
+    ["jefe", "/jefe"],
+    ["jefe", "/jefe/servicios"],
+    ["empleada", "/chats"],
+    ["chofer", "/cuenta"],
+  ])(
+    "%s con contraseña temporal que abre %s va a la pantalla del cambio",
+    async (rol, ruta) => {
+      backendResponde({ rol, debeCambiarPassword: true });
+
+      const respuesta = await middleware(peticion(ruta, conSesion));
+
+      expect(destino(respuesta)).toBe("/cambiar-contrasena");
+    },
+  );
+
+  it("la pantalla del cambio se sirve a quien tiene la marca (sin bucle)", async () => {
+    backendResponde({ rol: "empleada", debeCambiarPassword: true });
+
+    const respuesta = await middleware(peticion("/cambiar-contrasena", conSesion));
+
+    expect(destino(respuesta)).toBeNull();
+  });
+
+  it("la pantalla del cambio sin la marca devuelve al inicio del rol", async () => {
+    backendResponde({ rol: "jefe", debeCambiarPassword: false });
+
+    const respuesta = await middleware(peticion("/cambiar-contrasena", conSesion));
+
+    expect(destino(respuesta)).toBe("/jefe");
+  });
+
+  it("la pantalla del cambio sin sesion manda al login sin preguntar al backend", async () => {
+    global.fetch = jest.fn() as unknown as typeof fetch;
+
+    const respuesta = await middleware(peticion("/cambiar-contrasena"));
+
+    expect(destino(respuesta)).toBe("/ingresar");
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("la pantalla del cambio con el backend incomunicado se sirve, no echa a nadie", async () => {
+    global.fetch = jest.fn().mockRejectedValue(new Error("ECONNREFUSED")) as unknown as typeof fetch;
+
+    const respuesta = await middleware(peticion("/cambiar-contrasena", conSesion));
+
+    expect(destino(respuesta)).toBeNull();
+  });
+
+  it("un backend sin el campo no obliga a nadie", async () => {
+    backendResponde({ rol: "admin" });
+
+    const respuesta = await middleware(peticion("/admin/dashboard", conSesion));
+
+    expect(destino(respuesta)).toBeNull();
+  });
+
+  it("el proxy de /api no se intercepta aunque haya marca: no pregunta al backend", async () => {
+    global.fetch = jest.fn() as unknown as typeof fetch;
+
+    const respuesta = await middleware(peticion("/api/users/me/password", conSesion));
+
+    expect(destinoReescrito(respuesta)).toBe(
+      `${BACKEND}${BACKEND_API_PREFIX}/users/me/password`,
+    );
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("el matcher cubre la pantalla del cambio", () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { config } = require("./middleware") as {
+      config: { matcher: string[] };
+    };
+
+    expect(config.matcher).toEqual(expect.arrayContaining(["/cambiar-contrasena"]));
+  });
+});

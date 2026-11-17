@@ -14,7 +14,7 @@ import { inicioParaRol } from "@/lib/roles";
  */
 export default async function PublicacionesAdminPage() {
   const usuario = await getCurrentUser();
-  if (!usuario) redirect("/admin");
+  if (!usuario) redirect("/ingresar");
   // El middleware ya solo deja entrar al admin en `/admin`; esto lo confirma.
   if (usuario.rol !== "admin") redirect(inicioParaRol(usuario.rol));
 

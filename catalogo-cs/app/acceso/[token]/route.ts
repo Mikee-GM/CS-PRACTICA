@@ -35,7 +35,7 @@ export async function GET(
     const data = await response.json().catch(() => ({}));
 
     if (!response.ok || !data.user) {
-      return redirectToPath("/admin?acceso=caducado");
+      return redirectToPath("/ingresar?acceso=caducado");
     }
 
     /*
@@ -53,6 +53,6 @@ export async function GET(
     return redirect;
   } catch (error) {
     console.error("Canje de acceso fallido:", error);
-    return redirectToPath("/admin?acceso=error");
+    return redirectToPath("/ingresar?acceso=error");
   }
 }

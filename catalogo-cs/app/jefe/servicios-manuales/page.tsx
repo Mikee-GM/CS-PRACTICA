@@ -14,9 +14,9 @@ export const dynamic = "force-dynamic";
  */
 export default async function JefeServiciosManualesPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/admin");
+  if (!user) redirect("/ingresar");
   if (user.rol === "admin") redirect("/admin/servicios-manuales");
-  if (user.rol !== "jefe") redirect("/admin");
+  if (user.rol !== "jefe") redirect("/ingresar");
 
   const solicitudes = await optionalSource(
     getSolicitudesManuales("pendiente"),

@@ -13,8 +13,8 @@ export default async function ClienteFichaPage({
   params: Promise<{ id: string }>;
 }) {
   const user = await getCurrentUser();
-  if (!user) redirect("/admin");
-  if (!["admin", "jefe"].includes(user.rol)) redirect("/admin");
+  if (!user) redirect("/ingresar");
+  if (!["admin", "jefe"].includes(user.rol)) redirect("/ingresar");
 
   const { id } = await params;
   /*

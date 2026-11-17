@@ -21,7 +21,7 @@ export const metadata = {
  */
 export default async function BitacoraChatPage() {
   const user = await getCurrentUser();
-  if (!user || user.rol !== "admin") redirect("/admin");
+  if (!user || user.rol !== "admin") redirect("/ingresar");
 
   const contexto = "la bitacora de chat";
   const [services, unlinkedSessions] = await Promise.all([

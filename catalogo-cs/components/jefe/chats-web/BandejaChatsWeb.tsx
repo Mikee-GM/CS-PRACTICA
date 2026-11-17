@@ -81,7 +81,7 @@ export default function BandejaChatsWeb({
       );
       if (numero !== peticion.current) return;
       if (respuesta.status === 401) {
-        window.location.assign("/admin");
+        window.location.assign("/ingresar");
         return;
       }
       if (!respuesta.ok) throw new Error(`bandeja ${respuesta.status}`);

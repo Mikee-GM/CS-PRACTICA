@@ -22,7 +22,7 @@ export const metadata: Metadata = {
  */
 export default async function EmpleadaPostsPage() {
   const sesion = await getCurrentUser();
-  if (!sesion) redirect("/admin");
+  if (!sesion) redirect("/ingresar");
   if (sesion.rol !== "empleada") redirect("/");
 
   const lectura = await getMisPublicaciones();

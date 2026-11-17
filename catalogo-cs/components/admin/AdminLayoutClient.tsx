@@ -5,7 +5,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import LoginForm from "@/components/admin/LoginForm";
 import { logoutAction, getMyProfileAction } from "@/lib/actions/auth";
 import SessionKeeper from "@/components/auth/session-keeper";
 import { broadcastLogout } from "@/lib/client-session";
@@ -118,7 +117,7 @@ const navGroups: NavGroup[] = [
   {
     title: "Control",
     items: [
-      { label: "Aplicación y avisos", href: "/admin/ajustes", icon: Settings },
+      { label: "Ajustes y seguridad", href: "/admin/ajustes", icon: Settings },
       { label: "Fotos y Contenido", href: "/admin/fotos", icon: ImageIcon },
       // Junto a "Fotos y Contenido": revisar lo que se publica en el feed.
       { label: "Publicaciones", href: "/admin/publicaciones", icon: Images },
@@ -162,7 +161,7 @@ export default function AdminLayoutClient({
     try {
       await logoutAction();
       broadcastLogout();
-      router.push("/admin");
+      router.push("/ingresar");
     } catch (e) {
       console.error(e);
     }
@@ -174,12 +173,6 @@ export default function AdminLayoutClient({
       (path !== "/admin/dashboard" && pathname?.startsWith(path + "/"))
     );
   };
-
-  const isLoginPage = pathname === "/admin";
-
-  if (isLoginPage) {
-    return <LoginForm onSuccess={(redirectTo) => router.push(redirectTo)} />;
-  }
 
   return (
     <div className="flex min-h-dvh bg-black text-white font-body overflow-hidden">

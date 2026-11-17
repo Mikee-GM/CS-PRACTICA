@@ -30,7 +30,7 @@ interface PageProps {
 export default async function ChoferServicioPage({ searchParams }: PageProps) {
   const { token } = await searchParams;
   const sesion = await getCurrentUser();
-  if (!sesion && !token) redirect("/admin");
+  if (!sesion && !token) redirect("/ingresar");
 
   const resultado = await getDriverPortalData(token);
   if (!resultado.success || !resultado.data) redirect("/chofer/portal");

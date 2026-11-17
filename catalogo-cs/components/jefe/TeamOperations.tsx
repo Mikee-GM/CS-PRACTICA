@@ -90,6 +90,7 @@ import GroupServiceOrganizer from "@/components/jefe/GroupServiceOrganizer";
 import ExternalTransportSheet from "@/components/jefe/ExternalTransportSheet";
 import UberScreenshotUploader from "@/components/jefe/uber-screenshot-uploader";
 import CanalConModelo from "@/components/jefe/CanalConModelo";
+import RestablecerContrasena from "@/components/cuenta/RestablecerContrasena";
 import {
   getCanalSinLeer,
   preguntarMotivoDeJornada,
@@ -2261,6 +2262,17 @@ function EmployeeSheet({
             </span>
           </button>
         </div>
+
+        {/* Sin correo de recuperacion, el jefe es quien le devuelve el acceso
+            a una modelo de su equipo que olvido la contraseña. */}
+        {employee.usuarioId ? (
+          <div className="mt-2.5 flex justify-center">
+            <RestablecerContrasena
+              usuarioId={employee.usuarioId}
+              nombre={employee.nombreArtistico}
+            />
+          </div>
+        ) : null}
       </div>
     </div>
   );

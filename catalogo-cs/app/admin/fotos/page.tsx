@@ -6,7 +6,7 @@ import FotosClient from "@/components/erp/fotos-client";
 
 export default async function FotosPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/admin");
+  if (!user) redirect("/ingresar");
   if (user.rol !== "admin" && user.rol !== "jefe") redirect("/admin/dashboard");
 
   const submissions = await getPhotoSubmissions();

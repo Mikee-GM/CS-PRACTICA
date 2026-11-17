@@ -21,7 +21,7 @@ export default async function LiquidacionEmpleadaPage({
   searchParams: Promise<{ start?: string; end?: string }>;
 }) {
   const user = await getCurrentUser();
-  if (!user) redirect("/admin");
+  if (!user) redirect("/ingresar");
   if (user.rol !== "admin" && user.rol !== "jefe") redirect("/admin/dashboard");
 
   const [{ id }, { start, end }] = await Promise.all([params, searchParams]);

@@ -1019,3 +1019,16 @@ Pendiente:
 - Migracion sin probar contra Postgres real.
 - `PATCH /users/:id` de un admin que cambia la clave de otro no revoca las
   sesiones de esa persona (el restablecimiento si).
+
+### Fase 5, F-acceso (frontend)
+
+- `/ingresar` es el unico login; `LoginForm` de admin se borra y `/admin` sin
+  sesion redirige ahi. El middleware y `lib/roles.ts` reparten destinos por rol.
+- `/cambiar-contrasena` (cambio forzado) y `SeccionSeguridad` en los ajustes de
+  cada rol; `RestablecerContrasena` entrega la temporal una sola vez.
+- Acciones en `lib/actions/acceso-personal.ts`.
+
+Pendiente:
+
+- Portales sin token redirigen al login (Etapa 3, B-portales).
+- Probar el flujo completo contra backend y Postgres reales.

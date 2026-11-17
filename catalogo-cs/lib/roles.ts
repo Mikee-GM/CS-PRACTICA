@@ -30,11 +30,14 @@ const INICIO_POR_ROL: Record<string, string> = {
  *
  * Un rol desconocido va al login, NO al panel de administracion: ese era el
  * valor por defecto y convertia cualquier hueco —un rol nuevo, una respuesta
- * sin `rol`— en una invitacion a la parte mas sensible del sistema.
+ * sin `rol`— en una invitacion a la parte mas sensible del sistema. El login
+ * es el unico para todos los roles (`/ingresar`); quien lo pinte con una
+ * sesion de rol desconocido tiene que quedarse en el y no volver a llamar
+ * aqui, o se redirige a si mismo (`destinoTrasEntrar` ya lo hace asi).
  */
 export function inicioParaRol(rol: string | null | undefined): string {
-  if (!rol) return "/admin";
-  return INICIO_POR_ROL[rol] ?? "/admin";
+  if (!rol) return "/ingresar";
+  return INICIO_POR_ROL[rol] ?? "/ingresar";
 }
 
 /** ¿Este rol puede entrar en esta area? */

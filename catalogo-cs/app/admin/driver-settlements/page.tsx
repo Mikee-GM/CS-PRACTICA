@@ -7,7 +7,7 @@ import DriverSettlementsClient from "@/components/erp/driver-settlements-client"
 
 export default async function DriverSettlementsPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/admin");
+  if (!user) redirect("/ingresar");
   if (user.rol !== "admin" && user.rol !== "jefe") redirect("/admin/dashboard");
 
   const { startDate, endDate } = getOperationalWeek();

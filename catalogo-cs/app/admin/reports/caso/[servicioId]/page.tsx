@@ -20,8 +20,8 @@ export default async function CasoDelServicioPage({
   params: Promise<{ servicioId: string }>;
 }) {
   const user = await getCurrentUser();
-  if (!user) redirect("/admin");
-  if (user.rol !== "admin" && user.rol !== "jefe") redirect("/admin");
+  if (!user) redirect("/ingresar");
+  if (user.rol !== "admin" && user.rol !== "jefe") redirect("/ingresar");
 
   const { servicioId } = await params;
 

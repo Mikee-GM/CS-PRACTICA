@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { ArrowLeft } from "lucide-react";
 
 import AjustesDeAvisos from "@/components/ui/AjustesDeAvisos";
@@ -21,10 +22,13 @@ import AvisosPush from "@/components/ui/AvisosPush";
 export default function PaginaDeAvisos({
   volverA,
   volverTexto = "Volver",
+  children,
 }: {
   /** A donde vuelve. Cada rol tiene su propia pantalla principal. */
   volverA: string;
   volverTexto?: string;
+  /** Mas ajustes de la cuenta, debajo de los avisos (la seccion de seguridad). */
+  children?: ReactNode;
 }) {
   return (
     <div className="mx-auto w-full max-w-lg space-y-5">
@@ -37,15 +41,17 @@ export default function PaginaDeAvisos({
           {volverTexto}
         </Link>
         <h1 className="mt-3 font-heading text-3xl font-semibold text-white">
-          Aplicación y notificaciones
+          Ajustes
         </h1>
         <p className="mt-2 text-sm text-zinc-500">
-          Instala el panel y configura qué dispositivos y avisos operativos utilizas.
+          Instala el panel, configura qué dispositivos y avisos operativos
+          utilizas y cuida el acceso a tu cuenta.
         </p>
       </div>
 
       <AvisosPush />
       <AjustesDeAvisos />
+      {children}
     </div>
   );
 }

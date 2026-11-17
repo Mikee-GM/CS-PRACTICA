@@ -15,7 +15,7 @@ export default async function ServicioDetallePage({
   params: Promise<{ id: string }>;
 }) {
   const user = await getCurrentUser();
-  if (!user) redirect("/admin");
+  if (!user) redirect("/ingresar");
 
   const { id } = await params;
   const result = await getServiceByIdAction(id);

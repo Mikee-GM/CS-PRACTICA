@@ -6,6 +6,11 @@ export type AuthUser = {
   rol: "jefe" | "empleada" | "chofer" | "admin" | "cliente";
   nombre?: string | null;
   apellido?: string | null;
+  /**
+   * Entro con una contraseña temporal (la restablecio un admin o su jefe) y
+   * tiene que poner la suya antes de usar la aplicacion. Solo el personal.
+   */
+  debeCambiarPassword?: boolean;
 };
 
 export type LoginResponse = {

@@ -116,7 +116,7 @@ export default function ConversacionChatWeb({
         { cache: "no-store" },
       );
       if (respuesta.status === 401) {
-        window.location.assign("/admin");
+        window.location.assign("/ingresar");
         return null;
       }
       if (respuesta.status === 404) {

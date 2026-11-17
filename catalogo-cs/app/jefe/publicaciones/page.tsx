@@ -15,7 +15,7 @@ import { inicioParaRol } from "@/lib/roles";
  */
 export default async function PublicacionesJefePage() {
   const usuario = await getCurrentUser();
-  if (!usuario) redirect("/admin");
+  if (!usuario) redirect("/ingresar");
   if (usuario.rol !== "jefe" && usuario.rol !== "admin") redirect(inicioParaRol(usuario.rol));
 
   const inicial = await optionalSource<ColaDePosts | null>(

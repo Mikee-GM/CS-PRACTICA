@@ -90,12 +90,15 @@ it("rechaza una pagina fallida sin devolver un snapshot parcial", async () => {
   ).toBe(false);
 });
 
-it.each<AuthUser | null>([null, { ...jefe, rol: "admin" }])(
+it.each<[AuthUser | null, string]>([
+  [null, "/ingresar"],
+  [{ ...jefe, rol: "admin" }, "/admin/dashboard"],
+])(
   "no consulta datos sin un usuario con rol jefe: %j",
-  async (user) => {
+  async (user, destino) => {
     jest.mocked(getCurrentUser).mockResolvedValue(user);
     await expect(getJefeTodaySnapshot()).rejects.toThrow("NEXT_REDIRECT");
-    expect(redirect).toHaveBeenCalledWith("/admin");
+    expect(redirect).toHaveBeenCalledWith(destino);
     expect(apiFetch).not.toHaveBeenCalled();
   },
 );

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Toaster } from "sonner";
 
+import SeccionSeguridad from "@/components/cuenta/SeccionSeguridad";
 import PaginaDeAvisos from "@/components/ui/PaginaDeAvisos";
 import { getCurrentUser } from "@/lib/auth";
 
@@ -11,11 +12,13 @@ export const metadata = {
 
 export default async function ChoferAjustesPage() {
   const sesion = await getCurrentUser();
-  if (!sesion) redirect("/admin");
+  if (!sesion) redirect("/ingresar");
 
   return (
     <div className="min-h-dvh bg-[#0B0D13] p-4 pt-[calc(1rem+env(safe-area-inset-top))] text-gray-100 sm:p-6 sm:pt-[calc(1.5rem+env(safe-area-inset-top))]">
-      <PaginaDeAvisos volverA="/chofer/portal" volverTexto="Mi portal" />
+      <PaginaDeAvisos volverA="/chofer/portal" volverTexto="Mi portal">
+        <SeccionSeguridad email={sesion.email} />
+      </PaginaDeAvisos>
       <Toaster theme="dark" position="bottom-right" richColors />
     </div>
   );

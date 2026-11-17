@@ -5,7 +5,7 @@ import { getChallengesRoster, listChallenges } from "./actions";
 
 export default async function AdminRetosPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/admin");
+  if (!user) redirect("/ingresar");
   if (user.rol !== "admin") redirect("/admin/dashboard");
 
   const [challenges, roster] = await Promise.all([

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { User, Lock, Mail, CheckCircle2, RefreshCw, X } from "lucide-react";
 import { toast } from "sonner";
 import { updateMyProfileAction } from "@/lib/actions/auth";
@@ -24,40 +25,27 @@ export default function EditProfileModal({
 }: EditProfileModalProps) {
   const [nombre, setNombre] = useState(currentUser?.nombre || "");
   const [apellido, setApellido] = useState(currentUser?.apellido || "");
-  const [email, setEmail] = useState(currentUser?.email || "");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  const email = currentUser?.email || "";
   const [saving, setSaving] = useState(false);
 
   if (!isOpen) return null;
 
+  /*
+   * Solo nombre y apellido. `PATCH /users/me` no acepta correo ni contraseña:
+   * el correo es la identidad de la cuenta, y la contraseña se cambia en
+   * Ajustes, pidiendo la actual. Antes esto mandaba una contraseña nueva sin
+   * pedir la anterior a `PATCH /users/:id`.
+   */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (password && password.length < 6) {
-      toast.error("La nueva contraseña debe tener al menos 6 caracteres");
-      return;
-    }
-
-    if (password && password !== confirmPassword) {
-      toast.error("Las contraseñas no coinciden");
-      return;
-    }
-
     setSaving(true);
     try {
-      const res = await updateMyProfileAction({
-        nombre,
-        apellido,
-        email: email.trim() ? email.trim() : undefined,
-        password: password.trim() ? password.trim() : undefined,
-      });
+      const res = await updateMyProfileAction({ nombre, apellido });
 
       if (res.success) {
         toast.success("Perfil actualizado con éxito");
         onProfileUpdated?.({ nombre, apellido, email });
-        setPassword("");
-        setConfirmPassword("");
         onClose();
       } else {
         toast.error(res.error || "Error al actualizar perfil");
@@ -79,7 +67,7 @@ export default function EditProfileModal({
             </div>
             <div>
               <h3 className="text-base font-bold text-white">Mi Perfil (Admin)</h3>
-              <p className="text-xs text-zinc-400">Actualiza tus datos y credenciales</p>
+              <p className="text-xs text-zinc-400">Actualiza tu nombre y apellido</p>
             </div>
           </div>
           <button
@@ -127,52 +115,27 @@ export default function EditProfileModal({
               </div>
               <input
                 type="email"
-                placeholder="admin@colombiasexys.com"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full rounded-xl border border-zinc-800 bg-zinc-950 pl-9 pr-3.5 py-2.5 text-white placeholder:text-zinc-600 focus:border-[#C5A55A] focus:outline-none transition-colors"
+                readOnly
+                aria-describedby="perfil-correo-ayuda"
+                className="w-full rounded-xl border border-zinc-800 bg-zinc-950/60 pl-9 pr-3.5 py-2.5 text-zinc-400 focus:border-[#C5A55A] focus:outline-none transition-colors"
               />
             </div>
           </div>
 
-          <div className="pt-2 border-t border-zinc-900 space-y-3">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
-              Cambiar Contraseña (opcional)
-            </p>
+          <p id="perfil-correo-ayuda" className="text-[11px] text-zinc-500">
+            El correo es tu usuario de acceso y no se cambia desde aquí.
+          </p>
 
-            <div>
-              <label className="text-zinc-300">Nueva Contraseña</label>
-              <div className="relative mt-1">
-                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-500">
-                  <Lock className="h-4 w-4" />
-                </div>
-                <input
-                  type="password"
-                  placeholder="Dejar en blanco para mantener la actual"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 pl-9 pr-3.5 py-2.5 text-white placeholder:text-zinc-600 focus:border-[#C5A55A] focus:outline-none transition-colors"
-                />
-              </div>
-            </div>
-
-            {password && (
-              <div>
-                <label className="text-zinc-300">Confirmar Nueva Contraseña</label>
-                <div className="relative mt-1">
-                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-500">
-                    <Lock className="h-4 w-4" />
-                  </div>
-                  <input
-                    type="password"
-                    placeholder="Repite la nueva contraseña"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full rounded-xl border border-zinc-800 bg-zinc-950 pl-9 pr-3.5 py-2.5 text-white placeholder:text-zinc-600 focus:border-[#C5A55A] focus:outline-none transition-colors"
-                  />
-                </div>
-              </div>
-            )}
+          <div className="pt-3 border-t border-zinc-900">
+            <Link
+              href="/admin/ajustes"
+              onClick={onClose}
+              className="inline-flex min-h-11 items-center gap-2 text-xs font-semibold text-[#C5A55A] underline-offset-4 hover:underline"
+            >
+              <Lock className="h-4 w-4" aria-hidden="true" />
+              Cambiar contraseña en Ajustes
+            </Link>
           </div>
 
           <div className="mt-6 flex justify-end gap-2 pt-2">

@@ -7,6 +7,7 @@ import EmployeePortalView from "@/components/empleada/EmployeePortalView";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getMyWorkShift } from "@/lib/actions/work-shift";
+import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 
 export const metadata: Metadata = {
@@ -51,7 +52,14 @@ export default async function EmployeePortalPage({ searchParams }: PageProps) {
    * arregle sola cuando caduca la sesion.
    */
   if (!sesion && !token) {
-    redirect("/admin");
+    redirect("/ingresar");
+  }
+  /*
+   * Un enlace con token que ya no vale, sin sesion propia: tambien al login.
+   * Antes se quedaba en una pantalla que mandaba a pedir otro enlace al bot.
+   */
+  if (!sesion && (!result.success || !result.data)) {
+    redirect("/ingresar");
   }
   const workShift = sesion ? await getMyWorkShift() : null;
 
@@ -61,14 +69,20 @@ export default async function EmployeePortalPage({ searchParams }: PageProps) {
         <div className="w-16 h-16 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400 mb-4">
           <AlertTriangle size={28} />
         </div>
-        <h1 className="text-xl font-bold text-red-400 mb-2">Acceso No Disponible</h1>
+        {/* Aqui solo se llega con sesion: es un fallo al cargar, no de acceso. */}
+        <h1 className="font-heading text-2xl font-semibold text-red-400 mb-2">
+          No se pudo cargar tu portal
+        </h1>
         <p className="text-sm text-gray-400 max-w-md mb-6">
           {result.error ||
-            "El enlace de acceso ha expirado o no es válido. Por favor, solicita un nuevo acceso desde el botón 'Mi Portal' en tu bot de Telegram."}
+            "Vuelve a intentarlo en unos minutos. Si el problema continúa, cierra sesión y vuelve a entrar."}
         </p>
-        <div className="text-xs text-gray-600 bg-white/5 px-4 py-2 rounded-lg border border-white/5">
-          Abre tu chat de Telegram y presiona el botón Mi Portal
-        </div>
+        <Link
+          href="/empleada/portal"
+          className="inline-flex min-h-11 items-center rounded-xl border border-[#C5A55A]/70 px-5 text-xs font-semibold uppercase tracking-[0.14em] text-[#C5A55A] transition-colors hover:bg-[#C5A55A] hover:text-black"
+        >
+          Volver a intentar
+        </Link>
       </div>
     );
   }

@@ -56,7 +56,7 @@ describe("apiFetch HTTP errors", () => {
     await expect(apiFetch("/services/test")).rejects.toMatchObject({
       digest: "NEXT_REDIRECT",
     });
-    expect(redirect).toHaveBeenCalledWith("/admin");
+    expect(redirect).toHaveBeenCalledWith("/ingresar");
   });
 
   it("keeps successful responses and authenticated no-store requests", async () => {

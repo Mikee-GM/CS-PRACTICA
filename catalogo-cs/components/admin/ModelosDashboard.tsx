@@ -14,6 +14,7 @@ import {
   updateModeloAction as updateModelo,
 } from "@/lib/actions/modelos";
 import EstadoDeTelegram from "@/components/erp/estado-de-telegram";
+import RestablecerContrasena from "@/components/cuenta/RestablecerContrasena";
 import type { Modelo, ModeloPayload } from "@/types";
 import ModelModal from "./ModelModal";
 import ConfirmDialog from "../ui/ConfirmDialog";
@@ -190,6 +191,14 @@ export default function ModelosDashboard({
             telegramChatId={modelo.telegramChatId}
           />
         </div>
+        {modelo.usuarioId ? (
+          <div className="mb-1">
+            <RestablecerContrasena
+              usuarioId={modelo.usuarioId}
+              nombre={modelo.nombre}
+            />
+          </div>
+        ) : null}
         {/* flex-wrap: con 4 acciones la fila no cabe en una tarjeta de la
             rejilla de 4 columnas y "Eliminar" se salia del borde. */}
         <div className="mt-auto flex flex-wrap items-center gap-x-3 gap-y-2 pt-3.5 border-t border-zinc-800/60">

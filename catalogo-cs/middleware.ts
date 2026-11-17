@@ -13,6 +13,12 @@ import {
 } from "@/lib/set-cookie";
 import { redirectFromRequest } from "@/lib/redirect";
 import { inicioParaRol, puedeEntrarEn } from "@/lib/roles";
+import {
+  redireccionPorCambioForzado,
+  RUTA_CAMBIO_FORZADO,
+  RUTA_LOGIN,
+  type SesionDeAcceso,
+} from "@/lib/acceso-personal";
 
 function backendUrl() {
   return process.env.BACKEND_API_URL || "http://localhost:4000";
@@ -105,21 +111,18 @@ function conCookies(
 }
 
 /**
- * Rol de la sesion, segun el backend.
+ * Rol de la sesion, segun el backend, y si tiene que cambiar la contraseña.
  *
  * Se pregunta a `/auth/me` en vez de leer el JWT aqui: el backend verifica la
  * firma y comprueba que la sesion siga viva, mientras que descodificar el token
  * en el middleware daria por bueno cualquier payload que alguien pusiera en la
  * cookie. Una decision de autorizacion no puede apoyarse en un dato sin
  * verificar.
+ *
+ * La marca del cambio obligatorio viaja en la misma respuesta, asi que
+ * imponerlo no cuesta una peticion mas en las rutas que ya preguntaban el rol.
  */
-type Sesion =
-  | { estado: "ok"; rol: string }
-  | { estado: "sin-sesion" }
-  /** El backend no contesto. No dice nada sobre si la sesion es buena. */
-  | { estado: "incomunicado" };
-
-async function rolDeLaSesion(cookieHeader: string): Promise<Sesion> {
+async function rolDeLaSesion(cookieHeader: string): Promise<SesionDeAcceso> {
   if (!cookieHeader) return { estado: "sin-sesion" };
   const destino = new URL(`${BACKEND_API_PREFIX}/auth/me`, backendUrl());
   try {
@@ -128,9 +131,18 @@ async function rolDeLaSesion(cookieHeader: string): Promise<Sesion> {
       headers: { Cookie: cookieHeader },
     });
     if (!response.ok) return { estado: "sin-sesion" };
-    const data = (await response.json()) as { rol?: unknown };
+    const data = (await response.json()) as {
+      rol?: unknown;
+      debeCambiarPassword?: unknown;
+    };
     return typeof data?.rol === "string"
-      ? { estado: "ok", rol: data.rol }
+      ? {
+          estado: "ok",
+          rol: data.rol,
+          // Solo un `true` explicito obliga: un backend sin el campo no
+          // encierra a nadie en la pantalla del cambio.
+          debeCambiarPassword: data.debeCambiarPassword === true,
+        }
       : { estado: "sin-sesion" };
   } catch {
     /*
@@ -288,41 +300,35 @@ export async function middleware(request: NextRequest) {
 
   if (isAdminRoute || isJefeRoute) {
     /*
-     * A) La ruta exacta de login.
+     * A) `/admin` a secas ya no es un login.
      *
-     * Antes se servia siempre, sin mirar la sesion: quien entraba con una
-     * cookie de acceso perfectamente valida (por ejemplo, el boton "atras" del
-     * navegador, o un enlace guardado a "/admin") veia el formulario de login
-     * en vez de terminar en su panel. El unico redirect que lo sacaba de ahi
-     * vivia del lado del cliente (LoginForm intentando refrescar la sesion), y
-     * dependia de que ese JavaScript llegara a correr.
-     *
-     * Se resuelve la sesion aqui mismo, con el mismo mecanismo de renovacion
-     * que usan las rutas protegidas, y si hay un rol valido se manda derecho a
-     * su panel. Si no hay sesion, sigue sirviendose el login como siempre.
+     * Hay un solo login para todos los roles, `/ingresar`. `/admin` sigue
+     * siendo la direccion que tiene guardada el personal --y el `start_url` de
+     * la aplicacion instalada del panel--, asi que no puede dar un 404: con
+     * sesion lleva al inicio del rol (o al cambio de contraseña obligatorio) y
+     * sin ella, al login. Se resuelve aqui y no en la pagina para no pintar el
+     * marco del panel a quien no tiene sesion.
      */
     if (pathname === "/admin") {
       const renovadas = await renovarSiHaceFalta(request);
+      if (!request.cookies.has(ACCESS_COOKIE)) {
+        return conCookies(redirectFromRequest(request, RUTA_LOGIN), renovadas);
+      }
 
       const sesion = await rolDeLaSesion(buildCookieHeader(request));
-      // Sin rol confirmado se sirve el login, como siempre: aqui no hay nada
-      // que cerrar, solo se decide si hace falta enseñarlo.
+      // Sin rol confirmado (sesion rechazada o backend incomunicado) se manda
+      // al login, que vuelve a mirar la sesion por su cuenta. Las cookies que
+      // dejo la renovacion se guardan igual en vez de desperdiciarlas.
       if (sesion.estado !== "ok") {
-        if (!renovadas) return NextResponse.next();
-        // La renovacion pudo dejar cookies nuevas aunque el rol no se haya
-        // podido confirmar (backend inestable); se guardan igual en vez de
-        // desperdiciarlas y forzar otra renovacion en la siguiente visita.
-        const sinRol = NextResponse.next({
-          request: { headers: request.headers },
-        });
-        for (const { name, value, options } of renovadas) {
-          sinRol.cookies.set(name, value, options);
-        }
-        return sinRol;
+        return conCookies(redirectFromRequest(request, RUTA_LOGIN), renovadas);
       }
 
       return conCookies(
-        redirectFromRequest(request, inicioParaRol(sesion.rol)),
+        redirectFromRequest(
+          request,
+          redireccionPorCambioForzado(pathname, sesion) ??
+            inicioParaRol(sesion.rol),
+        ),
         renovadas,
       );
     }
@@ -337,7 +343,7 @@ export async function middleware(request: NextRequest) {
      */
     const renovadas = await renovarSiHaceFalta(request);
     if (!request.cookies.has(ACCESS_COOKIE)) {
-      return redirectFromRequest(request, "/admin");
+      return redirectFromRequest(request, RUTA_LOGIN);
     }
 
     /*
@@ -352,8 +358,14 @@ export async function middleware(request: NextRequest) {
     const area = isAdminRoute ? "admin" : "jefe";
     const sesion = await rolDeLaSesion(buildCookieHeader(request));
     if (sesion.estado === "sin-sesion") {
-      return redirectFromRequest(request, "/admin");
+      return redirectFromRequest(request, RUTA_LOGIN);
     }
+    /*
+     * El cambio de contraseña obligatorio va antes que el rol: quien entra con
+     * una temporal no ve nada del panel hasta poner la suya.
+     */
+    const alCambio = redireccionPorCambioForzado(pathname, sesion);
+    if (alCambio) return conCookies(redirectFromRequest(request, alCambio), renovadas);
     /*
      * Con el backend incomunicado se deja pasar en vez de mandar al login.
      *
@@ -403,9 +415,35 @@ export async function middleware(request: NextRequest) {
     if (sesion.estado === "sin-sesion") {
       return redirectFromRequest(request, alLogin);
     }
+    // Personal con una temporal que cae aqui: directo al cambio, sin pasar
+    // antes por su inicio para que este lo vuelva a mandar.
+    const alCambio = redireccionPorCambioForzado(pathname, sesion);
+    if (alCambio) return conCookies(redirectFromRequest(request, alCambio), renovadas);
     if (sesion.estado === "ok" && sesion.rol !== "cliente") {
       return redirectFromRequest(request, inicioParaRol(sesion.rol));
     }
+    return conCookies(
+      NextResponse.next({ request: { headers: request.headers } }),
+      renovadas,
+    );
+  }
+
+  /*
+   * 4. Pantalla del cambio de contraseña obligatorio.
+   *
+   * Sin sesion va al login; sin la marca, al inicio del rol, porque no hay
+   * nada que cambiar a la fuerza. La decision es la misma funcion que usan
+   * las demas ramas, asi que no se pueden contradecir y mandarse la una a la
+   * otra en bucle.
+   */
+  if (pathname === RUTA_CAMBIO_FORZADO) {
+    const renovadas = await renovarSiHaceFalta(request);
+    if (!request.cookies.has(ACCESS_COOKIE)) {
+      return redirectFromRequest(request, RUTA_LOGIN);
+    }
+    const sesion = await rolDeLaSesion(buildCookieHeader(request));
+    const destino = redireccionPorCambioForzado(pathname, sesion);
+    if (destino) return conCookies(redirectFromRequest(request, destino), renovadas);
     return conCookies(
       NextResponse.next({ request: { headers: request.headers } }),
       renovadas,
@@ -463,5 +501,7 @@ export const config = {
     "/modelos/:path*",
     "/ingresar",
     "/registro",
+    // Cambio de contraseña obligatorio del personal (contraseña temporal).
+    "/cambiar-contrasena",
   ],
 };

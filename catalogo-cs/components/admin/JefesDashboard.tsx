@@ -12,6 +12,7 @@ import {
   type RolDeOficina,
 } from "@/lib/actions/jefes";
 import EstadoDeTelegram from "@/components/erp/estado-de-telegram";
+import RestablecerContrasena from "@/components/cuenta/RestablecerContrasena";
 import ConfirmDialog from "../ui/ConfirmDialog";
 import InputField from "../ui/InputField";
 import SearchBar from "../ui/SearchBar";
@@ -393,6 +394,10 @@ export default function JefesDashboard({
                     >
                       Editar
                     </button>
+                    <RestablecerContrasena
+                      usuarioId={jefe.id}
+                      nombre={[jefe.nombre, jefe.apellido].filter(Boolean).join(" ") || jefe.email}
+                    />
                     <button
                       onClick={() => setConfirmDelete(jefe)}
                       className="text-[10px] font-bold tracking-widest text-zinc-500 uppercase hover:text-red-400 transition-colors"

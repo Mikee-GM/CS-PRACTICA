@@ -14,9 +14,9 @@ export const dynamic = "force-dynamic";
 
 export default async function ReportsPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/admin");
+  if (!user) redirect("/ingresar");
   if (user.rol === "jefe") redirect("/jefe/reportes");
-  if (user.rol !== "admin") redirect("/admin");
+  if (user.rol !== "admin") redirect("/ingresar");
 
   const [reports, sanctions, appeals, directorio] = await Promise.all([
     optionalSource(getConductReports(), [], "disciplina"),

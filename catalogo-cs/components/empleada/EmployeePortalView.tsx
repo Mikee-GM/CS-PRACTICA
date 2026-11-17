@@ -203,11 +203,11 @@ export default function EmployeePortalView({
                     salir fuera de la pantalla. */}
                 <Link
                   href="/empleada/ajustes"
-                  aria-label="Configurar avisos"
+                  aria-label="Ajustes: avisos y seguridad"
                   className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/10 px-2.5 py-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400 transition-colors hover:border-[#C5A55A] hover:text-[#C5A55A] sm:px-3"
                 >
                   <Bell size={14} />
-                  <span className="hidden sm:inline">Avisos</span>
+                  <span className="hidden sm:inline">Ajustes</span>
                 </Link>
                 <CerrarSesion />
               </>

@@ -12,13 +12,14 @@ import type {
   Service,
 } from "@/lib/types";
 import { redirect } from "next/navigation";
+import { inicioParaRol } from "@/lib/roles";
 import type { CancellationReason } from "@/lib/cancellation-reasons";
 
 async function requireJefe() {
   const user = await getCurrentUser();
-  if (!user || user.rol !== "jefe") {
-    redirect("/admin");
-  }
+  // Sin sesion, al login; con otro rol, a su propio inicio.
+  if (!user) redirect("/ingresar");
+  if (user.rol !== "jefe") redirect(inicioParaRol(user.rol));
   return user;
 }
 

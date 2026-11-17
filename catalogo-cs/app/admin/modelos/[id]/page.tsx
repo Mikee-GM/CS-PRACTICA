@@ -21,7 +21,7 @@ export default async function ExpedienteModeloPage({
   params: Promise<{ id: string }>;
 }) {
   const user = await getCurrentUser();
-  if (!user) redirect("/admin");
+  if (!user) redirect("/ingresar");
   if (user.rol !== "admin" && user.rol !== "jefe") redirect("/admin/dashboard");
 
   const { id } = await params;

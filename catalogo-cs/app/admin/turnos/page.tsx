@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminTurnosPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/admin");
+  if (!user) redirect("/ingresar");
   if (user.rol !== "admin") redirect("/admin/dashboard");
 
   /*

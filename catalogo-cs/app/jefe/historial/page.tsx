@@ -13,7 +13,7 @@ export default async function JefeHistoryPage({
   searchParams: Promise<{ weekStart?: string; employeeId?: string }>;
 }) {
   const user = await getCurrentUser();
-  if (!user) redirect("/admin");
+  if (!user) redirect("/ingresar");
   if (user.rol !== "jefe" && user.rol !== "admin") redirect("/");
   const params = await searchParams;
   const data = await getWeeklyServiceHistory(params);

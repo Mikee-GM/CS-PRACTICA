@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 
 export default async function ServicesPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/admin");
+  if (!user) redirect("/ingresar");
 
   /*
    * Solo las listas auxiliares son opcionales. Si falla la fuente principal,

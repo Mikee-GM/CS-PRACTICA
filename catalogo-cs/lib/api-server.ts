@@ -25,8 +25,9 @@ type ApiFetchOptions = RequestInit & {
    */
   next?: NextFetchRequestConfig;
   /**
-   * Adonde mandar cuando la sesion no existe o caduco. Por defecto el login del
-   * panel; las pantallas de cliente piden el suyo.
+   * Adonde mandar cuando la sesion no existe o caduco. Por defecto el login
+   * unico de todos los roles; una pantalla puede pedir otro destino (por
+   * ejemplo, el login con `siguiente` para volver a ella).
    */
   loginPath?: string;
 };
@@ -56,7 +57,7 @@ export async function apiFetch<T>(
     headers,
     cache,
     next,
-    loginPath = "/admin",
+    loginPath = "/ingresar",
     ...options
   }: ApiFetchOptions = {},
 ): Promise<T> {

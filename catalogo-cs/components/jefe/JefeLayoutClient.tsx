@@ -56,7 +56,7 @@ export default function JefeLayoutClient({ children }: { children: React.ReactNo
   async function signOut() {
     await logoutAction();
     broadcastLogout();
-    router.replace("/admin");
+    router.replace("/ingresar");
   }
 
   /*

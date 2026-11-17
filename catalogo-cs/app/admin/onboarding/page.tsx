@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function OnboardingPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/admin");
+  if (!user) redirect("/ingresar");
   if (user.rol !== "admin") redirect("/admin/dashboard");
 
   const [screenings, staff, regulations] = await Promise.all([

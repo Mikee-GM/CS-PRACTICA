@@ -9,8 +9,8 @@ type Props = {
 
 export default async function CandidateScreeningDetailPage({ params }: Props) {
   const user = await getCurrentUser();
-  if (!user) redirect("/admin");
-  if (user.rol !== "admin") redirect("/admin");
+  if (!user) redirect("/ingresar");
+  if (user.rol !== "admin") redirect("/ingresar");
 
   const { id } = await params;
   const screening = await getCandidateScreening(id);

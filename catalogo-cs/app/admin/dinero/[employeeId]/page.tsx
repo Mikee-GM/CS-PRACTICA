@@ -27,7 +27,7 @@ export default async function FichaDineroPage({
   searchParams: Promise<{ start?: string; end?: string }>;
 }) {
   const user = await getCurrentUser();
-  if (!user) redirect("/admin");
+  if (!user) redirect("/ingresar");
   if (user.rol !== "admin" && user.rol !== "jefe") redirect("/admin/dashboard");
 
   const { employeeId } = await params;

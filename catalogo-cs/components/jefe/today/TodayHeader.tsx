@@ -58,7 +58,7 @@ export default function TodayHeader({
         </details>
         <Link
           href="/jefe/ajustes"
-          aria-label="Ajustes de avisos"
+          aria-label="Ajustes: avisos y seguridad"
           className="flex h-11 w-11 items-center justify-center rounded-xl border border-zinc-800 text-zinc-400 hover:border-[#C5A55A] hover:text-[#C5A55A]"
         >
           <Bell size={16} />

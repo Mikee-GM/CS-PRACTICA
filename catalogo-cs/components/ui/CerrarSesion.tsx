@@ -22,10 +22,10 @@ import { broadcastLogout } from "@/lib/client-session";
  */
 export default function CerrarSesion({
   className,
-  destino = "/admin",
+  destino = "/ingresar",
 }: {
   className?: string;
-  /** A donde llevar tras cerrar: el login del panel, salvo que se indique. */
+  /** A donde llevar tras cerrar: el login unico, salvo que se indique. */
   destino?: string;
 }) {
   const router = useRouter();

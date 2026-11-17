@@ -26,7 +26,7 @@ export const dynamic = "force-dynamic";
 
 export default async function TransportPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/admin");
+  if (!user) redirect("/ingresar");
 
   const [services, drivers, configuration, pendingCancellationCosts] =
     await Promise.all([

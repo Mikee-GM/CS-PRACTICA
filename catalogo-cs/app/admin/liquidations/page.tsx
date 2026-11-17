@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 export default async function LiquidationsPage() {
   const user = await getCurrentUser();
-  if (!user) redirect("/admin");
+  if (!user) redirect("/ingresar");
 
   const reference = new Date();
   const { startDate, endDate, start, end } = getOperationalWeekPeriod(reference);
