@@ -4,10 +4,13 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { randomUUID } from 'node:crypto';
 import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { describeError } from '../common/errors/error-message';
+import { RealtimeEventsService } from '../realtime/realtime.service';
 import { UploadService, sniffVideoContentType } from '../upload/upload.service';
 import type { PostMediaKind } from './entities/post-media.entity';
 import {
@@ -123,6 +126,8 @@ export class PostsService {
     private readonly dataSource: DataSource,
     @InjectRepository(Post) private readonly posts: Repository<Post>,
     private readonly uploadService: UploadService,
+    // Opcional: sin el, los avisos se omiten y las operaciones siguen igual.
+    @Optional() private readonly realtime?: RealtimeEventsService,
   ) {}
 
   async crearBorrador(
@@ -155,10 +160,11 @@ export class PostsService {
     caption: string,
   ): Promise<PostDeLaModelo> {
     const texto = normalizarCaption(caption);
-    await this.dataSource.transaction(async (manager) => {
+    const volvio = await this.dataSource.transaction(async (manager) => {
       const estado = await this.leerEstado(manager, postId, employeeId, true);
-      await this.aplicarEdicion(manager, postId, estado, estado.medias, texto);
+      return this.aplicarEdicion(manager, postId, estado, estado.medias, texto);
     });
+    if (volvio) await this.avisarPendiente(postId, employeeId);
     return this.obtener(postId, employeeId);
   }
 
@@ -195,6 +201,7 @@ export class PostsService {
       kind,
     });
     let posterUrl: string | null = null;
+    let volvio = false;
     try {
       if (kind === 'video') {
         const poster = await this.uploadService.uploadPostPoster({
@@ -204,7 +211,7 @@ export class PostsService {
         posterUrl = poster.url;
       }
 
-      await this.dataSource.transaction(async (manager) => {
+      volvio = await this.dataSource.transaction(async (manager) => {
         const estado = await this.leerEstado(manager, postId, employeeId, true);
         validarCupo(estado, kind);
         // Las posiciones van compactas desde 0, asi que la siguiente es el
@@ -227,12 +234,14 @@ export class PostsService {
             estado.medias,
           ],
         );
-        await this.aplicarEdicion(manager, postId, estado, estado.medias + 1);
+        return this.aplicarEdicion(manager, postId, estado, estado.medias + 1);
       });
     } catch (error) {
       await this.descartarArchivos([subida.url, posterUrl]);
       throw error;
     }
+    // Fuera del try: un aviso que fallara no debe borrar de R2 lo ya guardado.
+    if (volvio) await this.avisarPendiente(postId, employeeId);
     return this.obtener(postId, employeeId);
   }
 
@@ -242,38 +251,49 @@ export class PostsService {
     employeeId: string,
     mediaId: string,
   ): Promise<PostDeLaModelo> {
-    const archivos = await this.dataSource.transaction(async (manager) => {
-      const estado = await this.leerEstado(manager, postId, employeeId, true);
-      exigirEditable(estado.status);
+    const { archivos, volvio } = await this.dataSource.transaction(
+      async (manager) => {
+        const estado = await this.leerEstado(manager, postId, employeeId, true);
+        exigirEditable(estado.status);
 
-      const borradas: Array<{
-        url: string;
-        poster_url: string | null;
-        position: number;
-      }> = await manager.query(
-        `WITH borrada AS (
+        const borradas: Array<{
+          url: string;
+          poster_url: string | null;
+          position: number;
+        }> = await manager.query(
+          `WITH borrada AS (
            DELETE FROM post_media WHERE id = $1 AND post_id = $2
            RETURNING url, poster_url, position
          )
          SELECT url, poster_url, position FROM borrada`,
-        [mediaId, postId],
-      );
-      const borrada = borradas[0];
-      if (!borrada) throw new NotFoundException('Media no encontrada');
+          [mediaId, postId],
+        );
+        const borrada = borradas[0];
+        if (!borrada) throw new NotFoundException('Media no encontrada');
 
-      await manager.query(
-        `UPDATE post_media SET position = position - 1
+        await manager.query(
+          `UPDATE post_media SET position = position - 1
           WHERE post_id = $1 AND position > $2`,
-        [postId, borrada.position],
-      );
-      // Un post en revision sin media no se puede revisar: aplicarEdicion lo
-      // rechaza y la transaccion devuelve la media a su sitio.
-      await this.aplicarEdicion(manager, postId, estado, estado.medias - 1);
-      return [borrada.url, borrada.poster_url];
-    });
+          [postId, borrada.position],
+        );
+        // Un post en revision sin media no se puede revisar: aplicarEdicion lo
+        // rechaza y la transaccion devuelve la media a su sitio.
+        const vuelve = await this.aplicarEdicion(
+          manager,
+          postId,
+          estado,
+          estado.medias - 1,
+        );
+        return {
+          archivos: [borrada.url, borrada.poster_url],
+          volvio: vuelve,
+        };
+      },
+    );
     // Despues del commit: si R2 falla, la fila ya no existe y solo queda un
     // archivo huerfano, que no debe tumbar la peticion.
     await this.descartarArchivos(archivos);
+    if (volvio) await this.avisarPendiente(postId, employeeId);
     return this.obtener(postId, employeeId);
   }
 
@@ -296,7 +316,7 @@ export class PostsService {
       throw new BadRequestException('La lista trae medias repetidas');
     }
 
-    await this.dataSource.transaction(async (manager) => {
+    const volvio = await this.dataSource.transaction(async (manager) => {
       const estado = await this.leerEstado(manager, postId, employeeId, true);
       exigirEditable(estado.status);
 
@@ -315,7 +335,7 @@ export class PostsService {
       }
       // Mismo orden: no es una edicion y no debe sacar del feed un aprobado.
       if (actuales.every((fila, indice) => fila.id === pedidos[indice])) {
-        return;
+        return false;
       }
 
       await manager.query(`SET CONSTRAINTS ${UNIQUE_DE_POSICION} DEFERRED`);
@@ -326,8 +346,9 @@ export class PostsService {
           WHERE m.id = orden.id AND m.post_id = $1`,
         [postId, pedidos],
       );
-      await this.aplicarEdicion(manager, postId, estado, estado.medias);
+      return this.aplicarEdicion(manager, postId, estado, estado.medias);
     });
+    if (volvio) await this.avisarPendiente(postId, employeeId);
     return this.obtener(postId, employeeId);
   }
 
@@ -375,6 +396,7 @@ export class PostsService {
       // peticion lo cambio entre medias.
       throw cambioConcurrente();
     }
+    await this.avisarPendiente(postId, employeeId);
     return this.obtener(postId, employeeId);
   }
 
@@ -533,6 +555,8 @@ export class PostsService {
    * Aplica la regla de "editar" (`siguienteAlEditar`) despues de un cambio de
    * texto o de media: un aprobado vuelve a revision con `submitted_at` nuevo
    * para entrar a la cola por el final, un rechazado vuelve a borrador.
+   * Devuelve si el post acaba de volver a revision, para avisar a los jefes
+   * despues del commit.
    */
   private async aplicarEdicion(
     manager: Ejecutor,
@@ -540,7 +564,7 @@ export class PostsService {
     estado: EstadoDelPost,
     mediasDespues: number,
     caption?: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const siguiente = exigirEditable(estado.status);
     if (siguiente === 'pendiente' && mediasDespues < 1) throw sinMedia();
     if (
@@ -567,6 +591,43 @@ export class PostsService {
       [postId, estado.status, siguiente, caption ?? null, vuelveARevision],
     );
     if (!editados[0]) throw cambioConcurrente();
+    return vuelveARevision;
+  }
+
+  /**
+   * Avisa a los jefes de la modelo de que hay un post en la cola (`post_pending`).
+   * Sin jefes asignados, `emitToBosses` cae al canal comun de jefes.
+   *
+   * Se llama despues del commit y nunca lanza: el post ya esta en revision y
+   * un aviso perdido no justifica deshacerlo ni devolver un error a quien lo
+   * envio. `eventId` distingue cada envio a revision del mismo post, porque el
+   * puente de avisos push deduplica por evento de forma permanente.
+   */
+  private async avisarPendiente(
+    postId: string,
+    employeeId: string,
+  ): Promise<void> {
+    if (!this.realtime) return;
+    try {
+      const jefes: Array<{
+        jefe_id: string | null;
+        jefe_secundario_id: string | null;
+      }> = await this.dataSource.query(
+        `SELECT jefe_id, jefe_secundario_id FROM empleadas WHERE id = $1`,
+        [employeeId],
+      );
+      this.realtime.emitToBosses(
+        [jefes[0]?.jefe_id, jefes[0]?.jefe_secundario_id],
+        {
+          type: 'post_pending',
+          data: { postId, employeeId, eventId: randomUUID() },
+        },
+      );
+    } catch (error) {
+      this.logger.warn(
+        `No se pudo avisar del post ${postId} en revision: ${describeError(error)}`,
+      );
+    }
   }
 
   private async descartarArchivos(

@@ -36,7 +36,7 @@ import { Servicios } from '../services/entities/service.entity';
 import { ServicesService } from '../services/services.service';
 import { CustomerBookingSession } from '../telegram-conversations/entities/customer-booking-session.entity';
 import { Usuarios } from '../users/entities/user.entity';
-import { jefeAlcanzaModelo } from './alcance-del-jefe';
+import { jefeAlcanzaModelo, modelosAlAlcance } from './alcance-del-jefe';
 import {
   admiteComprobante,
   joinServicioQueEsperaComprobante,
@@ -780,28 +780,12 @@ export class StaffConversationsService {
 
   // ------------------------------------------------------------- alcance
 
-  /** `null` para el admin (todas); para un jefe, las modelos que le tocan. */
-  private async modelosAlAlcance(actor: Usuarios): Promise<string[] | null> {
-    if (actor.rol === 'admin') return null;
-    if (actor.rol !== 'jefe') return [];
-    const modelos = await this.empleadasRepository.find({
-      select: {
-        id: true,
-        jefeId: true,
-        jefeSecundarioId: true,
-        jefe: { id: true, activo: true, disponible: true, enJornada: true },
-        jefeSecundario: {
-          id: true,
-          activo: true,
-          disponible: true,
-          enJornada: true,
-        },
-      },
-      relations: { jefe: true, jefeSecundario: true },
-    });
-    return modelos
-      .filter((modelo) => jefeAlcanzaModelo(actor.id, modelo))
-      .map((modelo) => modelo.id);
+  /**
+   * `null` para el admin (todas); para un jefe, las modelos que le tocan. La
+   * regla vive en `alcance-del-jefe.ts`, compartida con la cola de posts.
+   */
+  private modelosAlAlcance(actor: Usuarios): Promise<string[] | null> {
+    return modelosAlAlcance(this.empleadasRepository, actor);
   }
 
   private async conversacionAlAlcance(

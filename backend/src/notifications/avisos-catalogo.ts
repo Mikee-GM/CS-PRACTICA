@@ -123,6 +123,12 @@ export const AVISOS_OPCIONALES: TipoDeAviso[] = [
     roles: ['jefe', 'admin'],
   },
   {
+    tipo: 'post_pending',
+    titulo: 'Publicaciones por revisar',
+    descripcion: 'Una modelo envía una publicación a la cola de revisión.',
+    roles: ['jefe', 'admin'],
+  },
+  {
     tipo: 'internal_transport_selected',
     titulo: 'Transporte interno',
     descripcion: 'Coordinacion selecciona un traslado interno.',

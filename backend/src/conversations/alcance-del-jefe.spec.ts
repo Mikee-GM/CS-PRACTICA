@@ -1,4 +1,9 @@
-import { jefeAlcanzaModelo, type ModeloConJefes } from './alcance-del-jefe';
+import {
+  jefeAlcanzaModelo,
+  modeloAlAlcance,
+  modelosAlAlcance,
+  type ModeloConJefes,
+} from './alcance-del-jefe';
 
 const atiende = (id: string) => ({
   id,
@@ -62,5 +67,62 @@ describe('jefeAlcanzaModelo', () => {
         }),
       ),
     ).toBe(true);
+  });
+});
+
+describe('modelosAlAlcance y modeloAlAlcance', () => {
+  const propia = modelo();
+  const ajena = modelo({
+    id: 'empleada-2',
+    jefeId: 'otro-principal',
+    jefeSecundarioId: null,
+    jefe: atiende('otro-principal'),
+    jefeSecundario: null,
+  });
+  const repo = () => ({
+    find: jest.fn().mockResolvedValue([propia, ajena]),
+    findOne: jest.fn(({ where }: { where: { id: string } }) =>
+      Promise.resolve([propia, ajena].find((m) => m.id === where.id) ?? null),
+    ),
+  });
+
+  it('el admin alcanza todas sin consultar; un jefe, solo las suyas; otro rol, ninguna', async () => {
+    const empleadas = repo();
+    await expect(
+      modelosAlAlcance(empleadas as never, { id: 'a', rol: 'admin' }),
+    ).resolves.toBeNull();
+    expect(empleadas.find).not.toHaveBeenCalled();
+    await expect(
+      modelosAlAlcance(empleadas as never, { id: 'principal', rol: 'jefe' }),
+    ).resolves.toEqual(['empleada-1']);
+    await expect(
+      modelosAlAlcance(empleadas as never, { id: 'x', rol: 'empleada' }),
+    ).resolves.toEqual([]);
+  });
+
+  it('una modelo concreta: admin si existe, jefe segun la regla, inexistente nunca', async () => {
+    const empleadas = repo();
+    const admin = { id: 'a', rol: 'admin' as const };
+    const jefe = { id: 'principal', rol: 'jefe' as const };
+
+    await expect(
+      modeloAlAlcance(empleadas as never, admin, 'empleada-2'),
+    ).resolves.toBe(true);
+    await expect(
+      modeloAlAlcance(empleadas as never, admin, 'no-existe'),
+    ).resolves.toBe(false);
+    await expect(
+      modeloAlAlcance(empleadas as never, jefe, 'empleada-1'),
+    ).resolves.toBe(true);
+    await expect(
+      modeloAlAlcance(empleadas as never, jefe, 'empleada-2'),
+    ).resolves.toBe(false);
+    await expect(
+      modeloAlAlcance(
+        empleadas as never,
+        { id: 'c', rol: 'cliente' },
+        'empleada-1',
+      ),
+    ).resolves.toBe(false);
   });
 });

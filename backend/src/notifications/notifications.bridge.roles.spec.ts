@@ -79,6 +79,84 @@ describe('NotificationsBridge: avisos por rol', () => {
     expect(notificar.mock.calls[0][0]).toBe('driver-user');
   });
 
+  describe('posts del feed', () => {
+    const POST = '55555555-5555-4555-8555-555555555555';
+
+    it('post_pending llega al jefe como aviso apagable, agrupado por post y sin datos de la modelo', async () => {
+      const { notificar, dispatch } = build();
+
+      await dispatch({
+        target: 'boss',
+        key: 'boss-user',
+        event: {
+          type: 'post_pending',
+          data: { postId: POST, employeeId: 'employee-profile', eventId: 'e1' },
+        },
+      });
+
+      expect(notificar).toHaveBeenCalledTimes(1);
+      expect(notificar).toHaveBeenCalledWith(
+        'boss-user',
+        expect.objectContaining({
+          titulo: 'Publicación por revisar',
+          tipo: 'post_pending',
+          tag: `post-revision-${POST}`,
+          dedupeKey: 'boss:post_pending:e1',
+        }),
+      );
+    });
+
+    it('dos envios del mismo post a revision no se deduplican entre si', async () => {
+      const { notificar, dispatch } = build();
+      for (const eventId of ['e1', 'e2']) {
+        await dispatch({
+          target: 'boss',
+          key: 'boss-user',
+          event: { type: 'post_pending', data: { postId: POST, eventId } },
+        });
+      }
+
+      const claves = notificar.mock.calls.map(
+        ([, aviso]) => (aviso as { dedupeKey: string }).dedupeKey,
+      );
+      expect(new Set(claves).size).toBe(2);
+    });
+
+    it.each([
+      ['post_approved', 'Publicación aprobada'],
+      ['post_rejected', 'Publicación no aprobada'],
+    ])('%s llega al usuario de la modelo', async (type, titulo) => {
+      const { notificar, dispatch } = build();
+
+      await dispatch({
+        target: 'employee',
+        key: 'employee-profile',
+        event: { type, data: { postId: POST, eventId: 'e9' } },
+      });
+
+      expect(notificar).toHaveBeenCalledWith(
+        'employee-user',
+        expect.objectContaining({
+          titulo,
+          url: '/empleada/portal',
+          tag: `post-decision-${POST}`,
+        }),
+      );
+    });
+
+    it('los eventos de posts no se escalan al admin', async () => {
+      const { notificar, dispatch } = build();
+
+      await dispatch({
+        target: 'jefes',
+        key: null,
+        event: { type: 'post_pending', data: { postId: POST } },
+      });
+
+      expect(notificar).not.toHaveBeenCalled();
+    });
+  });
+
   it('solo escala al admin los eventos criticos configurados', async () => {
     const { notificar, dispatch } = build();
 

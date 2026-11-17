@@ -742,3 +742,45 @@ Pendiente:
 - `ListaPosts` muestra un 403 en paginas siguientes como error generico.
 - Decision de producto: el perfil de la modelo se indexa en buscadores (solo la
   ficha publica). Revisar si se prefiere noindex.
+
+### Fase 3, B5 y B6
+
+API del equipo para los posts (`/staff/posts`) y avisos de revision.
+
+- `StaffPostsController` y `StaffPostsService` en `PostsModule`. Todas las rutas
+  con `JwtAuthGuard` + `RolesGuard` + `@Roles('admin','jefe')`; las que escriben,
+  ademas `CsrfGuard` y limite de ritmo.
+- Alcance compartido: `modelosAlAlcance` y `modeloAlAlcance` en
+  `conversations/alcance-del-jefe.ts` (sin modulos de Nest, asi que `PostsModule`
+  no depende de `ConversationsModule`). `StaffConversationsService` delega sin
+  cambiar su SQL ni sus specs. Siempre se mira la modelo del post; fuera de
+  alcance, 404.
+- Cola: `GET /staff/posts` (`estado`, `employeeId`, `cursor`, `limit` 1..50).
+  `pendiente` por `submitted_at` ascendente, los demas por `created_at`
+  descendente. `GET /staff/posts/:id`.
+- `approve` y `reject` (motivo obligatorio, 1..500) son UPDATE condicionados a
+  `pendiente`: de dos jefes gana uno y el otro recibe 409. Aprobar usa
+  `COALESCE(published_at, now())`. `archive` solo desde aprobado o pendiente.
+- Publicar como el equipo: `POST /staff/posts`, `PATCH`, media (mismo multipart
+  que la modelo), `DELETE` y `POST /:id/publish`, que en una transaccion encadena
+  `borrador|rechazado -> pendiente -> aprobado` con la fila bloqueada, exige media
+  y autor jefe/admin (un post de la modelo responde 409). Un aprobado editado
+  vuelve a pendiente y se aprueba con `approve`.
+- Avisos: `post_pending` a los jefes de la modelo al enviar y al editar un
+  aprobado; `post_approved` / `post_rejected` a la modelo. Siempre despues del
+  exito y sin lanzar. Llevan `eventId` porque el puente push deduplica por evento
+  de forma permanente. Push con textos neutros; `post_pending` es apagable.
+
+Contrato: `PostDelEquipo = { id, caption, status, rejectionReason, submittedAt,
+reviewedAt, publishedAt, createdAt, likeCount, authorRole, employee: { id,
+nombreArtistico, fotoPerfilUrl }, media: [{ id, kind, url, posterUrl, width,
+height, durationMs, position }] }`. Lista `{ items, nextCursor }`.
+
+Pendiente:
+
+- Probar contra Postgres real el `json_agg`, la tupla del cursor, `status = $1`
+  sobre el enum, `ANY($::uuid[])` y la cadena de dos UPDATE; probar las rutas de
+  punta a punta.
+- La URL del aviso `post_pending` es `/jefe/publicaciones`: la cola del jefe
+  (F4) debe vivir ahi.
+- La lista del jefe carga todas las modelos para calcular el alcance.

@@ -231,6 +231,18 @@ const AVISOS_DEL_JEFE: Record<string, AvisoDeEvento> = {
       accionDelViaje(evento) === 'employee_en_route' ||
       accionDelViaje(evento) === 'employee_arrived',
   },
+  /*
+   * Un post de una modelo entra a la cola de revision (lo envio o edito uno ya
+   * publicado). Nivel 2: el post espera oculto y nada se rompe si tarda. El
+   * texto no dice de que modelo es ni que muestra: sale en la pantalla de
+   * bloqueo.
+   */
+  post_pending: {
+    titulo: 'Publicación por revisar',
+    cuerpo: 'Hay una publicación nueva en la cola de revisión.',
+    url: '/jefe/publicaciones',
+    asunto: 'post-revision',
+  },
 };
 
 const AVISOS_DE_LA_EMPLEADA: Record<string, AvisoDeEvento> = {
@@ -323,6 +335,23 @@ const AVISOS_DE_LA_EMPLEADA: Record<string, AvisoDeEvento> = {
     url: '/empleada/servicio',
     asunto: 'panico',
     urgente: true,
+  },
+  /*
+   * Decision del equipo sobre un post. Comparten `asunto`: si llegan dos
+   * decisiones sobre el mismo post, la ultima reemplaza a la anterior. El
+   * motivo del rechazo no viaja en el aviso; se lee en el portal.
+   */
+  post_approved: {
+    titulo: 'Publicación aprobada',
+    cuerpo: 'Una publicación de tu perfil ya está visible.',
+    url: '/empleada/portal',
+    asunto: 'post-decision',
+  },
+  post_rejected: {
+    titulo: 'Publicación no aprobada',
+    cuerpo: 'Revisa el motivo en tu portal y corrígela si quieres.',
+    url: '/empleada/portal',
+    asunto: 'post-decision',
   },
 };
 
@@ -554,6 +583,8 @@ export class NotificationsBridge implements OnModuleInit {
       'servicioId',
       'requestId',
       'tripId',
+      // Los avisos de un post se agrupan por post: su revision y su decision.
+      'postId',
       // El canal de dudas no cuelga de ningun servicio: sus avisos se agrupan
       // por modelo, que es lo que los hace ser "la misma conversacion".
       'empleadaId',
