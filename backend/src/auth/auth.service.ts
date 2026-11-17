@@ -66,7 +66,9 @@ export class AuthService {
     const user = await this.usuariosRepository
       .createQueryBuilder('usuario')
       .addSelect('usuario.passwordHash')
-      .where('usuario.email = :email', { email })
+      .where('LOWER(usuario.email) = :email', {
+        email: email.trim().toLowerCase(),
+      })
       .getOne();
 
     // Se compara siempre, exista el correo o no. Sin esto, un correo

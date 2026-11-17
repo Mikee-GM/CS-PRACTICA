@@ -44,7 +44,7 @@ export interface ClientDossier {
   cliente: {
     id: string;
     nombreTelegram: string | null;
-    telegramChatId: string;
+    telegramChatId: string | null;
     primerContactoAt: Date;
     createdAt: Date;
     diasDesdePrimerContacto: number;

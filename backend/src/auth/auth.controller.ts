@@ -18,6 +18,8 @@ import { PanelAccessService } from './panel-access.service';
 import { PanelAccessDto } from './dto/panel-access.dto';
 import { PortalSessionDto } from './dto/portal-session.dto';
 import { LoginDto } from './dto/login.dto';
+import { ClientAccountsService } from '../client-accounts/client-accounts.service';
+import { RegisterClientDto } from '../client-accounts/dto/register-client.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CsrfGuard } from './guards/csrf.guard';
 import {
@@ -43,6 +45,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly panelAccessService: PanelAccessService,
+    private readonly clientAccountsService: ClientAccountsService,
   ) {}
 
   // Limite estricto: el global de 100/min no sirve de nada contra fuerza bruta
@@ -61,6 +64,28 @@ export class AuthController {
       request.headers['user-agent']?.slice(0, 128) ||
       'unknown';
     const result = await this.authService.login(loginDto, deviceId);
+    this.setAuthCookies(response, result);
+    return { user: result.user };
+  }
+
+  /**
+   * Alta de una cuenta de cliente. Abre sesion al terminar: la verificacion del
+   * correo queda pendiente y no bloquea el acceso.
+   */
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('register')
+  @HttpCode(HttpStatus.CREATED)
+  async register(
+    @Body() dto: RegisterClientDto,
+    @Req() request: Request,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const usuario = await this.clientAccountsService.register(dto);
+    const deviceId =
+      request.headers['x-device-id']?.toString().slice(0, 128) ||
+      request.headers['user-agent']?.slice(0, 128) ||
+      'unknown';
+    const result = await this.authService.issueSessionFor(usuario, deviceId);
     this.setAuthCookies(response, result);
     return { user: result.user };
   }

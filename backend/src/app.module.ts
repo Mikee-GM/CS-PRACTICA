@@ -20,6 +20,7 @@ import { ExtensionsModule } from './extensions/extensions.module';
 import { TelegramConversationsModule } from './telegram-conversations/telegram-conversations.module';
 import { EmployeePhotosModule } from './employee-photos/employee-photos.module';
 import { AuthModule } from './auth/auth.module';
+import { MailModule } from './common/mail/mail.module';
 import { ManualServicesModule } from './manual-services/manual-services.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { ApartmentsModule } from './apartments/apartments.module';
@@ -46,6 +47,7 @@ import { TeamChannelModule } from './team-channel/team-channel.module';
     AiModule,
     UploadModule,
     AuthModule,
+    MailModule,
     RealtimeModule,
     LoyaltyModule,
     ConfigModule.forRoot({

@@ -45,14 +45,14 @@ export class Usuarios {
 
   @Column('enum', {
     name: 'rol',
-    enum: ['jefe', 'empleada', 'chofer', 'admin'],
+    enum: ['jefe', 'empleada', 'chofer', 'admin', 'cliente'],
   })
   @ApiProperty({
     description: 'Rol',
-    enum: ['jefe', 'empleada', 'chofer', 'admin'],
+    enum: ['jefe', 'empleada', 'chofer', 'admin', 'cliente'],
     example: 'jefe',
   })
-  rol: 'jefe' | 'empleada' | 'chofer' | 'admin';
+  rol: 'jefe' | 'empleada' | 'chofer' | 'admin' | 'cliente';
 
   @Column('character varying', { name: 'nombre', nullable: true, length: 255 })
   @ApiPropertyOptional({ description: 'Nombre', example: 'Juan' })

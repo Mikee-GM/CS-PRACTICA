@@ -1,3 +1,4 @@
+import { Usuarios } from '../users/entities/user.entity';
 import {
   BadRequestException,
   ConflictException,
@@ -47,7 +48,7 @@ const RATING_SUBJECT_COLUMN: Record<ReportPersonType, string> = {
   employee: 'employee_id',
   driver: 'driver_id',
 };
-type Actor = { id: string; rol: 'jefe' | 'empleada' | 'chofer' | 'admin' };
+type Actor = { id: string; rol: Usuarios['rol'] };
 
 /** Un reporte que esta persona levanto contra otra, con el nombre resuelto. */
 type ReporteHecho = {

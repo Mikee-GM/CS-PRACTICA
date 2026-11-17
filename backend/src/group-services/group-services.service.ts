@@ -427,7 +427,9 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
           )
           .catch(() =>
             this.bot.telegram.sendMessage(
-              fullRequest.client.telegramChatId,
+              // Este flujo solo atiende a clientes de Telegram, que siempre
+              // traen chat; desaparece al retirar Telegram.
+              fullRequest.client.telegramChatId as string,
               caption,
               keyboard,
             ),

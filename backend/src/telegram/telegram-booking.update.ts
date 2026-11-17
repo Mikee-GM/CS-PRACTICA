@@ -11771,7 +11771,7 @@ export class TelegramBookingUpdate {
       const cl = await this.clientesRepository.findOne({
         where: { id: clientId },
       });
-      if (cl) clientLabel = cl.nombreTelegram || cl.telegramChatId;
+      if (cl) clientLabel = cl.nombreTelegram || cl.telegramChatId || 'Cliente';
     } else if (clienteNombreLibre) {
       clientLabel = clienteNombreLibre;
     }

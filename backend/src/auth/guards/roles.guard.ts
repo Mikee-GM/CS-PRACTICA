@@ -12,10 +12,13 @@ export class RolesGuard implements CanActivate {
       ROLES_KEY,
       [context.getHandler(), context.getClass()],
     );
-    if (!requiredRoles) {
-      return true;
-    }
     const { user } = context.switchToHttp().getRequest<{ user?: Usuarios }>();
+    if (!requiredRoles) {
+      // Un cliente solo entra donde la ruta lo nombra. Sin esto, cualquier
+      // metodo del personal que olvidara su @Roles quedaria abierto a las
+      // cuentas de cliente, que cualquiera puede crear registrandose.
+      return user?.rol !== 'cliente';
+    }
     if (!user) {
       return false;
     }

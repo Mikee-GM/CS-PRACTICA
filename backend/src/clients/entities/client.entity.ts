@@ -1,5 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Column, Entity, Index, OneToMany, OneToOne } from 'typeorm';
+import {
+  Column,
+  Entity,
+  Index,
+  JoinColumn,
+  OneToMany,
+  OneToOne,
+} from 'typeorm';
+import { Usuarios } from '../../users/entities/user.entity';
 import { AlertasClientes } from '../../client-alerts/entities/client-alert.entity';
 import { ConversacionesTelegram } from '../../telegram-conversations/entities/telegram-conversation.entity';
 import { Servicios } from '../../services/entities/service.entity';
@@ -21,12 +29,43 @@ export class Clientes {
   })
   id: string;
 
-  @Column('bigint', { name: 'telegram_chat_id', unique: true })
-  @ApiProperty({
+  /** Nulo en las cuentas web; desaparece al retirar Telegram. */
+  @Column('bigint', { name: 'telegram_chat_id', unique: true, nullable: true })
+  @ApiPropertyOptional({
     description: 'Telegram Chat Id',
     example: '00000000-0000-4000-8000-000000000000',
   })
-  telegramChatId: string;
+  telegramChatId: string | null;
+
+  @Column('uuid', { name: 'usuario_id', nullable: true, unique: true })
+  @ApiPropertyOptional({ description: 'Cuenta web del cliente' })
+  usuarioId: string | null;
+
+  @OneToOne(() => Usuarios, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({ name: 'usuario_id' })
+  usuario: Usuarios | null;
+
+  /** Mientras sea nulo la cuenta funciona igual: la verificacion no bloquea. */
+  @Column('timestamp with time zone', {
+    name: 'correo_verificado_at',
+    nullable: true,
+  })
+  @ApiPropertyOptional({ type: String, format: 'date-time' })
+  correoVerificadoAt: Date | null;
+
+  @Column('timestamp with time zone', {
+    name: 'mayor_de_edad_declarado_at',
+    nullable: true,
+  })
+  @ApiPropertyOptional({ type: String, format: 'date-time' })
+  mayorDeEdadDeclaradoAt: Date | null;
+
+  @Column('timestamp with time zone', {
+    name: 'terminos_aceptados_at',
+    nullable: true,
+  })
+  @ApiPropertyOptional({ type: String, format: 'date-time' })
+  terminosAceptadosAt: Date | null;
 
   @Column('integer', { name: 'ai_calls_today', default: 0 })
   @ApiProperty({ description: 'AI calls made today', example: 0 })

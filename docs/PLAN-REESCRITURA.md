@@ -57,3 +57,27 @@ ahora rompe los despliegues existentes.
   outbox y el de sesiones ya no reutilizan 811_006 y 811_005.
 - `eslint.ignoreDuringBuilds` se deja como esta: CI ya ejecuta `pnpm run lint`
   como paso propio antes del build, asi que quitarlo solo duplicaria el lint.
+
+### Fase 1 (backend)
+
+- Nuevo rol `cliente` en `usuarios`. La ficha `clientes` apunta a su cuenta con
+  `usuario_id`; `telegram_chat_id` pasa a ser opcional.
+- `POST /auth/register`: crea cuenta y ficha en una transaccion, exige declarar
+  18+ y aceptar terminos, abre sesion con las mismas cookies y CSRF. Un correo
+  repetido responde 409 (decision asumida: claridad para quien se registra a
+  cambio de revelar que el correo existe; el endpoint tiene limite de ritmo).
+- Verificacion de correo pendiente, sin bloquear el acceso:
+  `POST /client-accounts/verify-email` (POST y no GET para que una
+  previsualizacion no queme el enlace), `POST /client-accounts/resend-verification`
+  y `GET /client-accounts/me`. En la base solo vive la huella del token.
+- `Mailer` es un puerto; `LogMailer` deja el correo en el registro hasta elegir
+  proveedor.
+- `RolesGuard` niega a los clientes en toda ruta que no los nombre, para que un
+  `@Roles` olvidado en el personal no quede abierto a cuentas que cualquiera
+  puede crear.
+- El login ya no distingue mayusculas en el correo.
+- Pendiente de la fase: paginas de registro, login de cliente y
+  `/verificar-correo` en el frontend; el middleware debe conocer el rol.
+- La migracion `1811000000000-AddClientAccounts` no se ha ejecutado contra una
+  base real (Docker no estaba disponible); hay que correr
+  `corepack pnpm migration:run` antes de desplegar.

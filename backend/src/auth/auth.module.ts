@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ClientAccountsModule } from '../client-accounts/client-accounts.module';
 import { Usuarios } from '../users/entities/user.entity';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
@@ -18,6 +19,7 @@ import { ACCESS_TOKEN_TTL_SECONDS } from './auth.constants';
 @Module({
   imports: [
     TypeOrmModule.forFeature([Usuarios, AuthSession, PanelAccessToken]),
+    ClientAccountsModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     // registerAsync + getOrThrow: sin JWT_SECRET el proceso falla al arrancar,
     // en vez de firmar tokens con un secreto por defecto publicado en el repo.
