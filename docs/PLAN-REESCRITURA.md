@@ -144,3 +144,31 @@ Pendiente:
 - El prompt web conserva excusas de personaje que no tocan la identidad, como
   "ahorita andas en la calle y no puedes oir audios" ante un adjunto; revisar
   cuando existan los adjuntos del chat web.
+
+### Fase 2, paso 2 (modelo de datos del chat web)
+
+- Nuevo modulo `conversations` con las entidades `Conversation` (tabla
+  `conversations`) y `Message` (tabla `messages`), sin servicio ni endpoints
+  todavia; Telegram sigue intacto.
+- `conversations`: cliente, modelo elegida, borrador de reserva
+  (`booking_session_id`, unico), servicio, `status`
+  (`activa|en_revision|con_servicio|cerrada`), `mode`
+  (`AI_ACTIVE|HUMAN_ACTIVE`, mismo vocabulario que `customer_booking_sessions`),
+  jefe que tomo el control, `state` jsonb con `state_version` para bloqueo
+  optimista y `last_message_at`. Una sola conversacion abierta por pareja
+  cliente-modelo (indice unico parcial `WHERE status <> 'cerrada'`).
+- `messages`: remitente (`cliente|ia|jefe|sistema`), cuerpo, adjunto jsonb
+  (`MessageAttachment`), validacion de comprobante con FK y `client_message_id`
+  unico por conversacion para que un reintento no duplique. Paginacion por
+  cursor `(created_at, id)`.
+- Llaves foraneas: cliente CASCADE, modelo RESTRICT (como `servicios`),
+  borrador, servicio, jefe y validacion SET NULL; mensajes CASCADE con su
+  conversacion.
+- Migracion `1811001000000-AddWebConversations`, idempotente (`IF NOT EXISTS` y
+  enums con `duplicate_object`). `conversations.entities.spec.ts` compara los
+  metadatos de TypeORM con el texto de la migracion para que no diverjan.
+- Pendiente: la migracion no se ha ejecutado contra una base real (Docker no
+  estaba disponible); hay que correr `migration:run`, `migration:revert` y
+  `migration:run` antes de desplegar. `Conversation` importa
+  `CustomerBookingSession` desde `telegram-conversations`; moverlo al extraer
+  el modulo `booking`.
