@@ -5,7 +5,12 @@
  * hable de temas ajenos y que no reparta enlaces ni telefonos. Nada de eso es
  * una garantia: un modelo se deja convencer. Este modulo es la parte que si se
  * cumple siempre, porque no depende de lo que el modelo decida hacer.
+ *
+ * Algunas barreras dependen del canal: en Telegram el personaje niega ser una
+ * IA y en el chat web no (ver `CanalChat`). Lo que no recibe canal se comporta
+ * como en Telegram, que tiene que seguir igual hasta que se retire.
  */
+import type { CanalChat } from './prompts/prompts';
 
 /** Marcas de control que la IA puede emitir y que el backend ejecuta. */
 const CONTROL_MARKER_PATTERN =
@@ -159,7 +164,6 @@ const JAILBREAK_PATTERNS: RegExp[] = [
   /\b(system ?prompt|prompt del sistema|tus instrucciones|tu prompt)\b/,
   /\bmodo (desarrollador|dios|dan)\b|\bjailbreak\b/,
   /\bactua como\b|\bhaz de cuenta que eres\b|\bfinge ser\b/,
-  /\beres (una |un )?(ia|inteligencia artificial|bot|robot|chatbot|asistente|maquina|programa)\b/,
   /\b(chat ?gpt|openai|grok|claude|gemini|modelo de lenguaje)\b/,
   /\b(meta[- ]?)?llama\s*\d/,
   /\b(repite|repiteme|dime|muestrame|escribe) (exactamente|tal cual|literal)\b/,
@@ -194,17 +198,58 @@ const SERVICE_TOPIC_PATTERN =
   /\b(tarifa|precio|precios|costo|cuesta|vale|total|hora|horas|horita|ratico|extra|extras|transporte|traslado|pago|pagar|efectivo|tarjeta|transferencia|anticipo|deposito|motel|moteles|ubicacion|direccion|servicio|servicios|cita)\b/;
 
 /**
- * Sondas clasicas para detectar que del otro lado hay una IA. Se responden con
- * una frase enlatada en personaje sin gastar una llamada al modelo: es mas
- * barato, mas rapido y, sobre todo, no falla nunca.
+ * La pregunta directa de si del otro lado hay una IA.
+ *
+ * Va aparte de los jailbreaks porque su trato depende del canal: en Telegram
+ * se desvia como cualquier sonda, y en el chat web es una pregunta legitima que
+ * tiene que llegar al modelo para que conteste la verdad.
  */
-export function detectBotProbe(message: string): boolean {
+const IDENTITY_PATTERNS: RegExp[] = [
+  /\beres (una |un )?(ia|inteligencia artificial|bot|robot|chatbot|asistente|maquina|programa)\b/,
+];
+
+/** Intento de sacarla del personaje, leerle las instrucciones o el modelo. */
+export function detectJailbreak(message: string): boolean {
   const normalized = normalizeForMatch(message);
-  if (JAILBREAK_PATTERNS.some((pattern) => pattern.test(normalized))) {
-    return true;
-  }
+  return JAILBREAK_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+/** "¿Eres una IA?", "¿eres un bot?". */
+export function detectIdentityQuestion(message: string): boolean {
+  const normalized = normalizeForMatch(message);
+  return IDENTITY_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+/** Un encargo ajeno al servicio (traducir, calcular, escribir un poema). */
+export function detectTareaAjena(message: string): boolean {
+  const normalized = normalizeForMatch(message);
   if (SERVICE_TOPIC_PATTERN.test(normalized)) return false;
   return TASK_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+
+/**
+ * Mensajes que se responden con una frase enlatada en personaje sin gastar una
+ * llamada al modelo: es mas barato, mas rapido y, sobre todo, no falla nunca.
+ *
+ * En la web la pregunta de identidad no entra: se deja pasar al modelo para que
+ * la conteste con honestidad. Los jailbreaks y los encargos ajenos se cortan
+ * igual en los dos canales.
+ */
+export function detectSonda(
+  message: string,
+  canal: CanalChat = 'telegram',
+): boolean {
+  if (detectJailbreak(message)) return true;
+  if (canal === 'telegram' && detectIdentityQuestion(message)) return true;
+  return detectTareaAjena(message);
+}
+
+/**
+ * Sondas clasicas para detectar que del otro lado hay una IA, tal y como las
+ * trata Telegram: jailbreaks, pregunta de identidad y encargos ajenos.
+ */
+export function detectBotProbe(message: string): boolean {
+  return detectSonda(message, 'telegram');
 }
 
 const ARRIVAL_TIME_PATTERNS: RegExp[] = [
@@ -269,11 +314,30 @@ export const IN_CHARACTER_DEFLECTIONS: string[] = [
   'Eso déjaselo a otro papi, lo mío es otra cosa 😏',
 ];
 
+/**
+ * Los mismos desvios para el chat web, donde no se usan emojis nunca. Se
+ * escriben aparte, y no quitando los emojis a los de arriba, para que ningun
+ * desvio web dependa de como quede la frase tras recortarla.
+ */
+export const IN_CHARACTER_DEFLECTIONS_WEB: string[] = [
+  'Ay mor, de eso yo no sé nada, yo en lo mío',
+  'Jajaja papi, yo para eso soy un desastre',
+  'Uy no, esas cosas se me salen de las manos, cuéntame mejor de ti',
+  'Ay lindo, yo de eso ni idea',
+  'Mmm eso ni lo intento, mejor cuéntame qué andas buscando',
+  'No me pongas a pensar tanto que se me enreda la cabeza',
+  'Ay no corazón, yo soy más de otras cosas',
+  'Eso déjaselo a otro papi, lo mío es otra cosa',
+];
+
 /** Elige un desvío distinto al anterior para que no suene enlatado. */
-export function pickDeflection(previous?: string | null): string {
-  const options = IN_CHARACTER_DEFLECTIONS.filter(
-    (option) => option !== previous,
-  );
+export function pickDeflection(
+  previous?: string | null,
+  canal: CanalChat = 'telegram',
+): string {
+  const catalogo =
+    canal === 'web' ? IN_CHARACTER_DEFLECTIONS_WEB : IN_CHARACTER_DEFLECTIONS;
+  const options = catalogo.filter((option) => option !== previous);
   return options[Math.floor(Math.random() * options.length)];
 }
 
@@ -294,7 +358,7 @@ const ASSISTANT_REGISTER_PATTERNS: RegExp[] = [
   /\bno me es posible\b/,
   /\blamento no poder\b|\blo siento, pero no\b/,
   /\bcomo (asistente|ia|inteligencia artificial|modelo)\b/,
-  /\bsoy (una |un )?(ia|inteligencia artificial|asistente|bot|modelo de lenguaje)\b/,
+  /\bsoy (una |un )?modelo de lenguaje\b/,
   /\b(mis|estas) instrucciones\b/,
   /\bno (debo|puedo) hablar de (ese|este|esos) tema/,
   /\bsolo puedo (hablar|ayudar|responder)/,
@@ -302,12 +366,30 @@ const ASSISTANT_REGISTER_PATTERNS: RegExp[] = [
 ];
 
 /**
+ * Declararse IA. En Telegram es lo que no puede decir nunca; en la web es la
+ * respuesta honesta que se le pide ante la pregunta en serio, asi que alli no
+ * descarta nada. "Modelo de lenguaje" queda arriba, fuera de esta excepcion:
+ * es jerga tecnica, no la frase corta que se espera.
+ */
+const DECLARA_SER_IA_PATTERN =
+  /\bsoy (una |un )?(ia|inteligencia artificial|asistente|bot)\b/;
+
+/**
  * Detecta que la respuesta generada suena a asistente. Si aparece, se descarta
  * la respuesta entera: el cliente prefiere un desvío coqueto antes que una
  * frase que huele a política de contenido.
+ *
+ * `permitirIdentidad` deja pasar que se declare IA (chat web), pero no el
+ * registro de asistente generico ("como asistente puedo ayudarte").
  */
-export function looksLikeAssistantRegister(reply: string): boolean {
+export function looksLikeAssistantRegister(
+  reply: string,
+  opciones: { permitirIdentidad?: boolean } = {},
+): boolean {
   const normalized = normalizeForMatch(reply);
+  if (!opciones.permitirIdentidad && DECLARA_SER_IA_PATTERN.test(normalized)) {
+    return true;
+  }
   return ASSISTANT_REGISTER_PATTERNS.some((pattern) =>
     pattern.test(normalized),
   );
@@ -605,7 +687,11 @@ export function contarEmojis(texto: string): number {
 export function limitarEmojis(
   texto: string,
   mensajesDesdeElUltimo: number,
+  opciones: { canal?: CanalChat } = {},
 ): { texto: string; llevaEmoji: boolean } {
+  if (opciones.canal === 'web') {
+    return { texto: quitarEmojis(texto), llevaEmoji: false };
+  }
   if (contarEmojis(texto) === 0) {
     return { texto, llevaEmoji: false };
   }
@@ -625,6 +711,19 @@ export function limitarEmojis(
   // entero que mandar una respuesta en blanco.
   if (!resultado) return { texto, llevaEmoji: true };
   return { texto: resultado, llevaEmoji: conservados > 0 };
+}
+
+/**
+ * Quita todos los emojis: en el chat web no se usan nunca, ni con cadencia.
+ *
+ * A diferencia de `limitarEmojis`, aqui un mensaje que era solo un emoji se
+ * queda vacio en vez de pasar entero, porque la regla web no admite ninguno.
+ * Quien lo llame tiene que tratar la cadena vacia como una respuesta que no
+ * sirve (igual que hoy se trata la que suena a asistente) y desviar.
+ */
+export function quitarEmojis(texto: string): string {
+  if (contarEmojis(texto) === 0) return texto;
+  return recomponerEspacios(texto.replace(EMOJI_PATTERN, ' '));
 }
 
 /**

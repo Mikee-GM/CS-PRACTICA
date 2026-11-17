@@ -97,3 +97,50 @@ ahora rompe los despliegues existentes.
 - El build de Next compila, pero `next build` falla en el chequeo de tipos por
   `@playwright/test` y `@testing-library/react`, que no estan instalados en
   este entorno; hay que correr `pnpm install` antes de comprobarlo.
+
+### Fase 2, paso 1
+
+Prompt y barreras de la IA por canal (`CanalChat = 'telegram' | 'web'`). Todo
+lo que no recibe canal se comporta como Telegram, que no cambia: el prompt de
+Telegram se comparo byte a byte antes y despues del cambio y es identico.
+
+- `ai/prompts/prompts.ts`: `EmpleadaPromptParams.canal` (por defecto
+  `telegram`). Las reglas fijas pasan a ser una por canal
+  (`REGLAS_PERMANENTES` y `REGLAS_PERMANENTES_WEB`), cada una estable para no
+  perder la cache de prefijo. En web:
+  - La REGLA #0 conserva nombre artistico, tono y no revelar nombre real ni
+    ubicacion, deja de negar ser IA y de vetar "bot", "IA", "inteligencia
+    artificial", "asistente" y "automatico", y mantiene vetadas las palabras de
+    estructura interna (sistema, plataforma, agencia, jefe, empleada, modelo...).
+    Ante la pregunta en serio, la verdad en una frase corta y seguir en tono.
+  - Las justificaciones de los desvios ya no dependen de ocultar que es IA; el
+    comportamiento (no anunciar "no puedo", desviar con gracia, no hacer
+    encargos) es el mismo.
+  - Sin menciones a Telegram ("este chat"), sin instruccion de emojis y sin el
+    emoji del ejemplo de `[TRIO_REQUEST]`.
+- `ai/ai-guardrails.ts`: `detectBotProbe` se parte en `detectJailbreak`,
+  `detectIdentityQuestion` y `detectTareaAjena`; `detectSonda(mensaje, canal)`
+  las combina y en web deja pasar la pregunta de identidad al modelo.
+  `detectBotProbe` queda como `detectSonda(mensaje, 'telegram')`.
+  `looksLikeAssistantRegister(reply, { permitirIdentidad })` admite en web que
+  se declare IA, pero sigue descartando "como asistente...", las negativas de
+  politica y "soy un modelo de lenguaje". `IN_CHARACTER_DEFLECTIONS_WEB` y
+  `pickDeflection(previo, canal)` dan desvios sin emojis. `quitarEmojis` y
+  `limitarEmojis(..., { canal: 'web' })` eliminan todos los emojis; un mensaje
+  que era solo un emoji queda vacio y quien lo llame debe desviar.
+
+Pendiente:
+
+- Nadie usa todavia el canal web: el servicio de chat web (pasos siguientes)
+  tiene que llamar a `getHireSystemPrompt({ canal: 'web' })`, `detectSonda(m,
+  'web')`, `looksLikeAssistantRegister(r, { permitirIdentidad: true })`,
+  `pickDeflection(p, 'web')` y `limitarEmojis(t, n, { canal: 'web' })`, y tratar
+  la respuesta vacia como descartada.
+- `detectIdentityQuestion` solo reconoce "eres una IA/bot/robot/asistente...",
+  igual que antes. Formulas como "hablo con una persona?" o "eres real?" no se
+  detectan; en web no hace falta porque pasan al modelo igualmente.
+- "Eres chatgpt?" sigue tratandose como jailbreak (nombra un proveedor) tambien
+  en web y se desvia en vez de contestarse.
+- El prompt web conserva excusas de personaje que no tocan la identidad, como
+  "ahorita andas en la calle y no puedes oir audios" ante un adjunto; revisar
+  cuando existan los adjuntos del chat web.
