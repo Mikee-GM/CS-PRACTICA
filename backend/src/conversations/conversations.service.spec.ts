@@ -385,6 +385,41 @@ describe('ConversationsService', () => {
       );
     });
 
+    it('guarda el pin como adjunto de ubicacion, aunque no haya texto', async () => {
+      const guardado = mensaje({
+        body: '',
+        attachment: { type: 'ubicacion', lat: 20.59, lng: -100.39 },
+      });
+      manager.findOne
+        .mockResolvedValueOnce(conversacion())
+        .mockResolvedValueOnce(null);
+      manager.save.mockResolvedValue(guardado);
+
+      const resultado = await crearServicio(turnHandler).sendClientMessage(
+        USUARIO,
+        CONVERSACION,
+        {
+          clientMessageId: CLIENT_MESSAGE_ID,
+          location: { lat: 20.59, lng: -100.39, address: 'Centro' },
+        },
+      );
+
+      expect(manager.create).toHaveBeenCalledWith(Message, {
+        conversationId: CONVERSACION,
+        sender: 'cliente',
+        body: '',
+        attachment: {
+          type: 'ubicacion',
+          lat: 20.59,
+          lng: -100.39,
+          address: 'Centro',
+        },
+        clientMessageId: CLIENT_MESSAGE_ID,
+      });
+      // Al cliente solo le vuelve el tipo del adjunto.
+      expect(resultado.message.attachment).toEqual({ type: 'ubicacion' });
+    });
+
     it('es idempotente por clientMessageId: devuelve el existente sin duplicar ni avisar', async () => {
       const existente = mensaje({ id: 'mensaje-previo' });
       manager.findOne

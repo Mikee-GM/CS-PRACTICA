@@ -59,17 +59,13 @@ import {
   MENSAJES_ENTRE_EMOJIS,
   pickArrivalTimeReply,
   detectProhibitedRequest,
-  looksLikeAssistantRegister,
   MAX_CATALOG_PHOTO_SENDS_PER_SESSION,
   MAX_EXCLUSIVE_PHOTOS_PER_SESSION,
   MAX_TRIO_REQUESTS_PER_SESSION,
   pickDeflection,
   PROHIBITED_REPLIES,
-  sanitizeAiReply,
   shouldAdvanceBookingAfterMessage,
-  softenCommercialTone,
   stripControlMarkers,
-  stripFrontDeskOffer,
   faltaCondicionDeHigiene,
   pickRecordatorioDeHigiene,
   trimChatHistory,
@@ -144,6 +140,11 @@ import {
   ubicacionMencionadaEn,
   ubicacionPorNombre,
 } from '../booking/ubicaciones';
+import {
+  corregirRetrocesoDeDuracion,
+  evaluarMarca,
+  vestirRespuestaIa,
+} from '../booking/respuesta-ia';
 
 // La logica pura de reserva vive en `booking/`. Se reexporta desde aqui porque
 // las pruebas y modulos de Telegram la importan de este archivo.
@@ -1454,24 +1455,24 @@ export class TelegramBookingUpdate {
      * que existe y el modelo la pone sola. Se resuelve como los enlaces, los
      * telefonos y la cadencia de emojis, donde no depende de que colabore.
      */
-    const saneado = softenCommercialTone(sanitizeAiReply(responseText || ''));
-    const cleaned = stripFrontDeskOffer(saneado);
-    if (cleaned !== saneado) {
+    const vestida = vestirRespuestaIa(responseText, {
+      canal: 'telegram',
+      ultimoDesvio: session?.ultimoDesvio,
+    });
+    if (vestida.quitoMostrador) {
       this.logger.warn(
         'La IA ofrecio ayuda como un mostrador; se quita esa frase del mensaje.',
       );
     }
-    if (!cleaned || looksLikeAssistantRegister(cleaned)) {
-      const deflection = pickDeflection(session?.ultimoDesvio);
-      if (session) session.ultimoDesvio = deflection;
-      if (cleaned) {
+    if (vestida.desvio) {
+      if (session) session.ultimoDesvio = vestida.desvio;
+      if (vestida.sustituida) {
         this.logger.warn(
           'La IA respondio con tono de asistente; se sustituye por un desvio en personaje.',
         );
       }
-      return this.aplicarCadenciaDeEmojis(deflection, session);
     }
-    return this.aplicarCadenciaDeEmojis(cleaned, session);
+    return this.aplicarCadenciaDeEmojis(vestida.texto, session);
   }
 
   /**
@@ -1486,21 +1487,18 @@ export class TelegramBookingUpdate {
     text: string,
     session: SessionData,
   ): string {
-    if (!session.duracionPactadaHoras && !session.duracionIndefinida) {
-      return text;
-    }
-    const asksForDuration =
-      /\b(cu[aá]ntas?\s+horas?|cu[aá]nto\s+tiempo|qu[eé]\s+duraci[oó]n|no\s+alcanc[eé].{0,20}horas?)\b/i.test(
-        text,
-      );
-    if (!asksForDuration) return text;
+    const corregido = corregirRetrocesoDeDuracion(text, {
+      duracionFijada: Boolean(
+        session.duracionPactadaHoras || session.duracionIndefinida,
+      ),
+      ubicacionConfirmada: this.hasConfirmedLocation(session),
+    });
+    if (corregido === null) return text;
 
     this.logger.warn(
       'La IA intentó volver a pedir la duración ya confirmada; se corrige al siguiente paso.',
     );
-    return this.hasConfirmedLocation(session)
-      ? 'Perfecto mi cielo, ya tengo tu horita confirmada. ¿Cómo prefieres pagar, efectivo, tarjeta o transferencia?'
-      : 'Perfecto mi cielo, ya tengo tu horita confirmada. ¿Te paso los moteles o me mandas tu pin?';
+    return corregido;
   }
 
   /**
@@ -1556,13 +1554,14 @@ export class TelegramBookingUpdate {
     withinQuota: boolean,
     telegramId?: string,
   ): boolean {
-    if (!requestedByClient) {
+    const evaluacion = evaluarMarca(requestedByClient, withinQuota);
+    if (evaluacion === 'no_pedida') {
       this.logger.warn(
         `Se descarta la marca de ${label}: el cliente ${telegramId ?? 'desconocido'} no la pidio.`,
       );
       return false;
     }
-    if (!withinQuota) {
+    if (evaluacion === 'sin_cupo') {
       this.logger.warn(
         `Se descarta la marca de ${label}: el cliente ${telegramId ?? 'desconocido'} agoto el cupo de la conversacion.`,
       );

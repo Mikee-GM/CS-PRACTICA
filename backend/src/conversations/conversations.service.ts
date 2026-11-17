@@ -279,7 +279,8 @@ export class ConversationsService {
         manager.create(Message, {
           conversationId,
           sender: 'cliente',
-          body: dto.body,
+          body: dto.body ?? '',
+          ...(dto.location ? { attachment: adjuntoDeUbicacion(dto) } : {}),
           clientMessageId: dto.clientMessageId,
         }),
       );
@@ -505,6 +506,21 @@ function aMensajeDelChat(message: {
     attachment: message.attachment ? { type: message.attachment.type } : null,
     clientMessageId: message.clientMessageId,
     createdAt: message.createdAt,
+  };
+}
+
+/**
+ * El pin viaja como adjunto del propio mensaje y no como mensaje aparte: asi
+ * hereda su idempotencia y el turno de la reserva lo lee junto al texto que lo
+ * acompañe.
+ */
+function adjuntoDeUbicacion(dto: SendMessageDto): MessageAttachment | null {
+  if (!dto.location) return null;
+  return {
+    type: 'ubicacion',
+    lat: dto.location.lat,
+    lng: dto.location.lng,
+    ...(dto.location.address ? { address: dto.location.address } : {}),
   };
 }
 

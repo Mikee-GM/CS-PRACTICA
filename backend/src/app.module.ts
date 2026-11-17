@@ -96,6 +96,18 @@ import { ConversationsModule } from './conversations/conversations.module';
         XAI_API_KEY: Joi.string().allow('').optional(),
         BANK_ACCOUNT_DETAILS: Joi.string().allow('').optional(),
         MAX_DAILY_AI_CALLS: Joi.number().default(15),
+        // Chat web: espera para agrupar una rafaga del cliente en un solo turno
+        // de la IA, y tope de la pausa de "escribiendo" antes de responder.
+        WEB_CHAT_DEBOUNCE_MS: Joi.number()
+          .integer()
+          .min(0)
+          .max(10000)
+          .default(1500),
+        WEB_CHAT_MAX_TYPING_DELAY_MS: Joi.number()
+          .integer()
+          .min(0)
+          .max(5000)
+          .default(1500),
         // Tope de llamadas simultaneas al modelo. Sin el, un grupo de clientes
         // escribiendo a la vez se lleva un 429 en bloque.
         AI_MAX_CONCURRENT_CALLS: Joi.number().integer().min(1).default(12),

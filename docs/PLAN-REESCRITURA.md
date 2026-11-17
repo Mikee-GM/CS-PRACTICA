@@ -257,3 +257,97 @@ Pendiente:
 - El criterio de visibilidad de la modelo esta duplicado respecto al catalogo.
 - En `sse/chofer` (`PortalAuthGuard`, sin rol) un cliente recibe 404 y no 403:
   no abre canal, pero no es un rechazo explicito por rol.
+
+### Fase 2, paso 9 (avisos del servicio al chat web)
+
+- `ConversationNotifier.notifyClient({ clienteId, serviceId?, employeeId?, texto })`
+  deja el aviso como mensaje `sistema` en el chat web del cliente, actualiza
+  `last_message_at` con la fila bloqueada y emite `message_created` al cliente y
+  a los jefes de la modelo. Busca primero la conversacion del servicio (por
+  `service_id` o por el `booking_session_id` del servicio, aunque este cerrada)
+  y, si no hay, la abierta mas reciente con la modelo; sin ninguna devuelve
+  `false`. Nunca lanza.
+- Vive en `ConversationNotifierModule`, que solo depende de la base;
+  `ServicesModule` lo importa directo y `ConversationsModule` lo reexporta. Asi
+  no se forma un ciclo cuando el turno de la IA cree servicios.
+- Criterio de canales: cada aviso sale por todos los que tiene el cliente, una
+  vez por canal. Telegram no cambia; el web se intenta solo si la ficha tiene
+  `usuarioId`. Cuando el texto lo redacta la IA se pide una sola vez y se
+  comparte entre canales (`unaVez`); para la web se le quitan los emojis y el
+  Markdown de Telegram (`textoParaChatWeb`).
+- Cubiertos en `services/`: aceptacion, rechazo, cancelacion manual, cancelacion
+  por demora (texto web propio), reprogramacion, extension, fin proximo, nueva
+  hora de llegada, sucesor agendado (disponible y en camino), ida en camino o
+  llegada por Uber, y el recordatorio de 45 minutos del programador de citas.
+
+Pendiente:
+
+- Sin cubrir: llegada con chofer propio y cierre del regreso
+  (`drivers/driver-trips.service.ts`); comprobante rechazado y cotizacion
+  grupal (`group-services`); encuesta de calificacion (falta pantalla web);
+  cuenta final de un servicio abierto (depende de los comprobantes, paso 7).
+- El recordatorio de 45 minutos sigue dentro del ciclo que se apaga sin bot de
+  Telegram; hay que desacoplarlo en la fase 5.
+- Algunos textos reutilizados dicen "la empleada" o "la agencia", palabras que
+  el prompt web veta a la IA; los avisos web deben llevar vocabulario propio.
+- Al cancelar no se cierra la conversacion web, solo la sesion de Telegram.
+- Probar contra una base real la consulta del notificador.
+
+### Fase 2, paso 6 (turno de la IA en el chat web)
+
+Un mensaje del cliente recibe respuesta y la reserva avanza hasta quedar en
+revision para el jefe. Se construyo un turno web nuevo con las piezas puras de
+`booking/` y `ai/`; el turno de Telegram no se movio y sus specs no cambiaron.
+Hasta la Fase 6 hay logica parecida en dos sitios; el turno de Telegram se borra
+entonces.
+
+- `booking/booking-state.ts`: `BookingState` (subconjunto serializable de la
+  sesion de reserva), `estadoInicial`, `normalizarEstado`, `requisitoPendiente`,
+  `reiniciarReserva`.
+- `booking/respuesta-ia.ts`, extraido de Telegram por delegacion:
+  `vestirRespuestaIa`, `corregirRetrocesoDeDuracion`, `evaluarMarca`.
+- `booking/marcas-de-control.ts`: lectura de `[DATA]` y `[GROUP_*]` y su
+  corroboracion. Duracion, pago, motel y fecha solo se aplican si los dijo el
+  cliente; el pago que propone el modelo ya no cuenta por si solo (mas estricto
+  que Telegram). `[GROUP_*]` solo provoca una pregunta.
+- `booking/booking.service.ts` (`BookingService.handleClientMessage`): barreras
+  sin modelo, router global, extractores, pin con cobertura, prompt `web`,
+  historial de 24 mensajes, `BookingAiService`, filtros de salida sin emojis,
+  marcas corroboradas, loop breaker, promesa sin respaldo y cierre. Con duracion,
+  ubicacion y pago completos se cierra sin llamar al modelo: borrador en
+  `customer_booking_sessions` (con version), `booking_session_id`, `en_revision`,
+  aviso al jefe y mensaje de sistema con el total (`money.ts`). Transferencia o
+  mixto quedan "esperando comprobante".
+- Errores: `LimiteDiarioDeIaError` da un mensaje fijo sin llamar al proveedor;
+  un fallo del modelo da un mensaje neutro y `en_revision`; tras 3 seguidos, se
+  entrega al equipo.
+- `conversations/web-booking-state.store.ts` (estado con `state_version`),
+  `web-chat-channel.ts` (cada salida es un `Message`; eventos `message_created`,
+  `typing` y el nuevo `conversation_status_changed`) y `web-turn-handler.ts`,
+  registrado como `CONVERSATION_TURN_HANDLER`.
+- Concurrencia: `withAdvisoryLockPorClave` (`pg_try_advisory_lock(namespace,
+  hashtext(id))`, namespace `ADVISORY_LOCKS.conversationTurn = 811_011`, no
+  bloqueante) y un cursor `ultimoMensajeAtendidoId` en el estado. Rafagas
+  agrupadas con `WEB_CHAT_DEBOUNCE_MS` (1500 por defecto) y pausa de escritura
+  acotada por `WEB_CHAT_MAX_TYPING_DELAY_MS`.
+- `POST /conversations/:id/messages` acepta
+  `location: { lat, lng, address? }` (el cuerpo puede faltar si hay ubicacion);
+  el pin se guarda como adjunto `ubicacion` y la cobertura la decide el turno.
+
+Pendiente:
+
+- Probar contra Postgres real el `UPDATE` en CTE, el cast a
+  `conversations_status_enum`, el lock de dos enteros y las consultas del
+  cursor; probar el turno con el modelo real.
+- No portado a la web: trio, fotos, otras modelos, modelo ocupada, horarios
+  ocupados y monto del pago mixto.
+- Paso 7: comprobante y datos bancarios (`esperandoComprobante` ya queda puesto).
+- Paso 8: quitar `entregadaAlEquipo` al devolver el control a la IA; la
+  cancelacion con la reserva en revision solo avisa al equipo; comprobar que
+  aceptar un borrador web no supone un cliente de Telegram.
+- El loop breaker solo actua con la reserva arrancada; cambiar de modelo remite
+  al catalogo; el aviso del limite diario se repite con cada mensaje; la entrega
+  es al menos una vez (si el proceso cae entre responder y guardar el estado, se
+  volveria a contestar).
+- Frontend: boton de ubicacion y los eventos `typing` y
+  `conversation_status_changed`.

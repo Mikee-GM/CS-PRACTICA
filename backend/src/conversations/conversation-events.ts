@@ -14,14 +14,27 @@ export const MESSAGE_CREATED = 'message_created';
 export const CONVERSATION_MODE_CHANGED = 'conversation_mode_changed';
 export const RECEIPT_STATUS = 'receipt_status';
 export const TYPING = 'typing';
+// La conversacion cambio de estado (por ejemplo, la IA la paso a revision).
+export const CONVERSATION_STATUS_CHANGED = 'conversation_status_changed';
 
 export type ConversationEventType =
   | typeof MESSAGE_CREATED
   | typeof CONVERSATION_MODE_CHANGED
   | typeof RECEIPT_STATUS
-  | typeof TYPING;
+  | typeof TYPING
+  | typeof CONVERSATION_STATUS_CHANGED;
 
 export type MessageCreatedEvent = {
   type: typeof MESSAGE_CREATED;
   data: { conversationId: string; messageId: string };
+};
+
+export type TypingEvent = {
+  type: typeof TYPING;
+  data: { conversationId: string };
+};
+
+export type ConversationStatusChangedEvent = {
+  type: typeof CONVERSATION_STATUS_CHANGED;
+  data: { conversationId: string; status: string };
 };

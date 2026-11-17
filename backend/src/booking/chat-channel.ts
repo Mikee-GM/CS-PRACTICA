@@ -8,9 +8,11 @@
  * saber si detras hay un chat de Telegram o una pagina. Estas interfaces son
  * ese limite; cada canal aporta su implementacion.
  *
- * Solo hay tipos: las implementaciones llegan cuando se mueva el turno de
- * conversacion.
+ * Solo hay tipos: cada canal aporta su implementacion (la web, en
+ * `conversations/web-chat-channel.ts`).
  */
+
+import type { HistorialDeReserva } from './booking-ai.service';
 
 /** Canales por los que un cliente puede conversar con una modelo. */
 export type CanalDeReserva = 'telegram' | 'web';
@@ -28,6 +30,12 @@ export interface ConversationRef {
   /** El intento de reserva en curso; `null` mientras solo se conversa. */
   bookingSessionId: string | null;
   channel: CanalDeReserva;
+  /**
+   * La conversacion web concreta. Telegram no la tiene (su conversacion es el
+   * chat); la web si, y con ella el estado y los mensajes se localizan sin
+   * depender de que solo haya una conversacion abierta por pareja.
+   */
+  conversationId?: string;
 }
 
 /** Un adjunto ya resuelto por el canal: el dominio nunca baja archivos. */
@@ -36,6 +44,8 @@ export interface InboundAttachment {
   url?: string;
   lat?: number;
   lng?: number;
+  /** Direccion escrita que acompaña a un pin, si el canal la tiene. */
+  address?: string;
 }
 
 /** Un mensaje del cliente, ya traducido del formato propio del canal. */
@@ -94,6 +104,40 @@ export interface ChatChannel {
     url: string,
     caption?: string,
   ): Promise<void>;
+  /**
+   * Mensajes anteriores al turno en curso, en el formato del modelo. Un canal
+   * que ya guarda la conversacion (la web) la entrega de ahi; sin este metodo
+   * el turno solo ve el mensaje actual.
+   */
+  historialReciente?(
+    ref: ConversationRef,
+    limite: number,
+  ): Promise<HistorialDeReserva>;
+  /**
+   * Pone la conversacion delante del equipo (el jefe de la modelo): una
+   * reserva lista para revisar, una peticion de hablar con una persona, un
+   * fallo de la IA. `mensajeAlCliente`, si viene, se le deja como mensaje del
+   * sistema.
+   */
+  notificarAlEquipo?(ref: ConversationRef, aviso: AvisoAlEquipo): Promise<void>;
+}
+
+export type MotivoDeAvisoAlEquipo =
+  | 'reserva_lista'
+  | 'peticion_humana'
+  | 'servicio_grupal'
+  | 'fallo_ia'
+  | 'conversacion_atascada'
+  | 'peticion_prohibida'
+  | 'cancelacion_solicitada';
+
+export interface AvisoAlEquipo {
+  motivo: MotivoDeAvisoAlEquipo;
+  /** Para el registro: por que se le pasa, en una frase. */
+  detalle: string;
+  /** Borrador de reserva que el jefe tiene que revisar, si lo hay. */
+  bookingSessionId?: string | null;
+  mensajeAlCliente?: string;
 }
 
 /**

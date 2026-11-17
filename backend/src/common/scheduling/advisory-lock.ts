@@ -41,6 +41,51 @@ export async function withAdvisoryLock(
 }
 
 /**
+ * Igual que `withAdvisoryLock`, pero para un recurso concreto (una
+ * conversacion, un cliente) y no para un ciclo global.
+ *
+ * Usa la forma de dos enteros de Postgres: `namespace` es la clave fija del
+ * registro `ADVISORY_LOCKS` y el segundo entero sale de `hashtext(clave)`. Asi
+ * cada recurso tiene su propio lock sin registrar una constante por recurso, y
+ * el espacio de dos enteros no se pisa con el de un solo entero que usan los
+ * ciclos. Dos claves distintas pueden compartir hash; quien lo use debe tratar
+ * "no conseguido" como "reintenta luego", nunca como "ya esta hecho".
+ *
+ * Tambien es no bloqueante: esperar con `pg_advisory_lock` retendria una
+ * conexion del pool por cada peticion en cola.
+ *
+ * @returns true si esta llamada ejecuto la tarea, false si el lock lo tenia otro.
+ */
+export async function withAdvisoryLockPorClave(
+  dataSource: DataSource,
+  namespace: number,
+  clave: string,
+  task: () => Promise<void>,
+): Promise<boolean> {
+  const runner = dataSource.createQueryRunner();
+  await runner.connect();
+  try {
+    const [{ locked }]: Array<{ locked: boolean }> = await runner.query(
+      'SELECT pg_try_advisory_lock($1::int, hashtext($2)) AS locked',
+      [namespace, clave],
+    );
+    if (!locked) return false;
+
+    try {
+      await task();
+    } finally {
+      await runner.query('SELECT pg_advisory_unlock($1::int, hashtext($2))', [
+        namespace,
+        clave,
+      ]);
+    }
+    return true;
+  } finally {
+    await runner.release();
+  }
+}
+
+/**
  * Claves de los locks. Constantes explicitas para que dos ciclos distintos no
  * colisionen por accidente al derivarlas de un nombre.
  */
@@ -57,4 +102,8 @@ export const ADVISORY_LOCKS = {
   // 811_006, de modo que authCleanup y workShiftReset se excluian con ellas.
   realtimeOutboxSweep: 811_009,
   telegramSessionSweep: 811_010,
+  // Namespace, no clave fija: se combina con el id de cada conversacion en
+  // `withAdvisoryLockPorClave` para que nunca corran dos turnos de la IA a la
+  // vez sobre la misma conversacion, tampoco entre replicas.
+  conversationTurn: 811_011,
 } as const;
