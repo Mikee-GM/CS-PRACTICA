@@ -191,5 +191,24 @@ export function ErrorDeFormulario({ mensaje }: { mensaje: string }) {
   );
 }
 
+/**
+ * Confirmacion de que el formulario se guardo.
+ *
+ * La region `status` se pinta siempre, vacia cuando no hay nada que decir: un
+ * lector de pantalla solo anuncia los cambios dentro de una region viva que ya
+ * existia, no la que aparece de golpe con el texto dentro. Vacia se oculta con
+ * `sr-only` y no con `hidden`, que la sacaria del arbol de accesibilidad.
+ */
+export function ExitoDeFormulario({ mensaje }: { mensaje: string }) {
+  return (
+    <p
+      role="status"
+      className="text-xs font-medium text-[#E8D5A3] empty:sr-only"
+    >
+      {mensaje}
+    </p>
+  );
+}
+
 export const botonPrimario =
   "flex w-full items-center justify-center gap-2 rounded-lg bg-[#C5A55A] py-4 text-xs font-black uppercase tracking-[0.2em] text-black transition-all duration-300 hover:bg-[#D4AF37] hover:shadow-[0_0_20px_rgba(197,165,90,0.25)] disabled:opacity-50";

@@ -916,3 +916,29 @@ comentario), y los schedulers de borrado de mensajes y mantenimiento de sesion.
 
 Metrica de avance (debe bajar a cero fuera de las carpetas de Telegram):
 `rg -l "telegram.service|telegram.module|InjectBot|telegram-link-code|telegram-portal-buttons" backend/src --glob '!backend/src/telegram/**' --glob '!backend/src/telegram-conversations/**' --glob '!**/*.spec.ts'`
+
+### Fase 4 (frontend)
+
+- `/cuenta` pasa a ser el perfil del cliente (la ruta no cambia: middleware,
+  destinos del login y verificacion del correo ya llevan ahi). La barra
+  `NavegacionCliente` y el titulo dicen "Mi perfil".
+- Lectura con `lib/data/perfil-cliente.ts` (`GET /client-accounts/me/perfil`)
+  envuelta en `optionalSource`: un fallo de red deja aviso y `BotonReintentar`;
+  un 401 se reemite y manda a `/ingresar`.
+- Secciones: estado (`TarjetaEstado`; restringida en dorado oscuro, con texto
+  generico), calificacion (`TarjetaCalificacion`: "4,5" de 5 y "N
+  calificaciones"; sin promedio, "Aun sin calificacion suficiente" y nunca una
+  estrella vacia ni un cero), nivel (`TarjetaNivel`, sin beneficios ni
+  progreso), servicios completados y "Miembro desde" en hora de Mexico.
+- `FormNombre` y `FormContrasena` (`current-password` / `new-password`,
+  mostrar/ocultar con `aria-pressed`, campos vaciados tras el exito con aviso de
+  que se cerraron las otras sesiones). Exito en `role="status"`, error en
+  `role="alert"`.
+
+Pendiente:
+
+- Verificacion en navegador y contra el backend real.
+- El backend distingue los dos 400 del cambio de contrasena solo por el texto;
+  conviene un `code` estable.
+- Definir que limita una cuenta `restringida` y a que canal remitir.
+- No hay recuperacion de contrasena olvidada (depende del proveedor de correo).

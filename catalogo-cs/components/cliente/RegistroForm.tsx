@@ -5,15 +5,12 @@ import { useState, useTransition } from "react";
 
 import { registroAction } from "@/lib/actions/cliente-auth";
 import { esRedireccion } from "@/lib/es-redireccion";
+import { PATRON_CONTRASENA } from "@/lib/perfil-cliente";
 import Campo, {
   botonPrimario,
   CasillaObligatoria,
   ErrorDeFormulario,
 } from "./Campo";
-
-// Una letra y un numero, de 8 a 72 caracteres: lo mismo que valida el backend
-// (bcrypt solo lee los primeros 72 bytes). `pattern` exige coincidencia total.
-const PATRON_CONTRASENA = "(?=.*[A-Za-z])(?=.*\\d).{8,72}";
 
 export default function RegistroForm({
   siguiente,

@@ -63,7 +63,7 @@ export default async function ChatsPage({
                 Mis chats
               </h1>
             </div>
-            {/* "Mi cuenta" vive en la barra del area del cliente. */}
+            {/* "Mi perfil" vive en la barra del area del cliente. */}
             <Link
               href="/"
               className="inline-flex min-h-11 items-center px-3 text-xs font-medium text-zinc-400 underline-offset-4 hover:text-[#E8D5A3] hover:underline"

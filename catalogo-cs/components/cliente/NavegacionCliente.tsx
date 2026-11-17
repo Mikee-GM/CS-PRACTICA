@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation";
 const DESTINOS = [
   { href: "/feed", etiqueta: "Publicaciones", Icono: Images },
   { href: "/chats", etiqueta: "Mis chats", Icono: MessageCircle },
-  { href: "/cuenta", etiqueta: "Mi cuenta", Icono: CircleUserRound },
+  { href: "/cuenta", etiqueta: "Mi perfil", Icono: CircleUserRound },
 ] as const;
 
 /** `/chats/<id>` sigue siendo "Mis chats"; `/feed` no tiene subrutas. */
