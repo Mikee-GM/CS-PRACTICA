@@ -824,3 +824,34 @@ Pendiente:
   sigue pendiente.
 - Cancelar la confirmacion tras elegir archivos en un publicado no libera sus
   vistas previas hasta recargar.
+
+### Fase 3, F4 (cola de publicaciones del equipo)
+
+- `/jefe/publicaciones` (direccion del aviso `post_pending`) y
+  `/admin/publicaciones` (menu Control) con el mismo `ColaDePublicaciones`.
+  Componentes en `components/jefe/publicaciones/`.
+- Navegacion del jefe: sin septima celda. La cola cuelga de "Hoy" como tercera
+  entrada de `SelectorDeBandeja` (Telegram, Chats web, Publicaciones). Insignia
+  de pendientes con texto accesible en "Hoy", leida al montar, al navegar (como
+  mucho cada 30 s) y al volver a la app.
+- Cola con filtros por estado (Por revisar por defecto, del mas antiguo al mas
+  nuevo; Rechazadas, Publicadas, Archivadas), por modelo y "Cargar mas".
+- Revision con todas las medias a tamano util: fotos ampliables, video con
+  controles nativos, sin autoplay y `preload="metadata"` para comparar la
+  duracion real con la declarada. Aviso "Edicion de una publicacion ya aprobada;
+  conserva sus likes".
+- Aprobar no se deshabilita: si falta revisar alguna media, lo dice y lleva el
+  foco a ella. Foto revisada = cargada y a la vista (60 %) o abierta; video visto
+  = `video.played` cubre el 90 %. Aprobar, rechazar (motivo obligatorio, 1..500)
+  y archivar con `DialogoConfirmacion`. 409 y 404 releen la cola con aviso.
+- Tiempo real: `post_pending` relee la cola (400 ms), al reconectar y al volver.
+
+Pendiente:
+
+- Verificacion en navegador y contra un backend real.
+- Backend: no hay conteo de pendientes (la insignia pide 20 y dice "20+"), ni
+  lista de modelos al alcance del jefe, ni `bytes`/`mimeType` en la media (sin
+  peso del video), ni evento al equipo cuando otro jefe decide un post.
+- Lo revisado de cada post vive en memoria.
+- Publicar como jefe (`POST /staff/posts`, media, `/publish`) queda para un paso
+  posterior.

@@ -8,6 +8,8 @@ import { logoutAction } from "@/lib/actions/auth";
 import SessionKeeper from "@/components/auth/session-keeper";
 import ComprobarVersion from "@/components/ui/ComprobarVersion";
 import { broadcastLogout } from "@/lib/client-session";
+import { usePendientesDePublicaciones } from "@/components/jefe/publicaciones/usePendientesDePublicaciones";
+import { textoCortoDelContador, textoDelContador } from "@/lib/posts-del-equipo";
 
 // `corto` es la etiqueta de la barra inferior del movil. Con el texto largo,
 // "Registros a mano" no cabe en una columna de 78px y parte en dos lineas, que
@@ -32,13 +34,24 @@ const links = [
  */
 const BANDEJAS_DE_HOY = new Set(["/jefe", "/jefe/chats-web"]);
 
+/*
+ * La cola de publicaciones tambien cuelga de "Hoy": es trabajo por atender, se
+ * llega a ella desde el selector de arriba de las bandejas y los avisos de
+ * `post_pending` abren directo su direccion. A diferencia de los chats, usa el
+ * marco normal con scroll de pagina, asi que no entra en `BANDEJAS_DE_HOY`.
+ */
+const SECCIONES_DE_HOY = new Set([...BANDEJAS_DE_HOY, "/jefe/publicaciones"]);
+
 function esActivo(href: string, pathname: string | null): boolean {
-  return href === "/jefe" ? BANDEJAS_DE_HOY.has(pathname ?? "") : pathname === href;
+  return href === "/jefe" ? SECCIONES_DE_HOY.has(pathname ?? "") : pathname === href;
 }
 
 export default function JefeLayoutClient({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  // Las publicaciones por revisar se anuncian en "Hoy", que es donde viven.
+  const pendientes = usePendientesDePublicaciones(pathname);
+  const conPendientes = pendientes !== null && pendientes.cantidad > 0;
 
   async function signOut() {
     await logoutAction();
@@ -77,6 +90,12 @@ export default function JefeLayoutClient({ children }: { children: React.ReactNo
             return (
               <Link key={href} href={href} className={`flex items-center gap-3 px-4 py-4 text-xs font-semibold uppercase tracking-[0.12em] transition-colors ${active ? "bg-[#C5A55A] text-black" : "text-zinc-400 hover:bg-zinc-900 hover:text-white"}`}>
                 <Icon size={17} /> {label}
+                {href === "/jefe" && conPendientes ? (
+                  <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] tabular-nums tracking-normal ${active ? "bg-black text-[#E8D5A3]" : "bg-[#C5A55A] text-black"}`}>
+                    <span aria-hidden="true">{textoCortoDelContador(pendientes)}</span>
+                    <span className="sr-only">{textoDelContador(pendientes)}</span>
+                  </span>
+                ) : null}
               </Link>
             );
           })}
@@ -118,7 +137,18 @@ export default function JefeLayoutClient({ children }: { children: React.ReactNo
       <nav className="fixed inset-x-0 bottom-0 z-50 grid grid-cols-6 gap-0.5 border-t border-zinc-800 bg-[#050505]/95 px-1 pt-1.5 pb-[max(0.375rem,env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
         {links.map(({ href, corto, icon: Icon }) => (
           <Link key={href} href={href} className={`flex h-[52px] min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-0.5 text-[9px] font-semibold ${esActivo(href, pathname) ? "bg-[#C5A55A]/10 text-[#C5A55A]" : "text-zinc-500"}`}>
-            <Icon size={19} /> <span className="max-w-full truncate">{corto}</span>
+            {/* La insignia va absoluta sobre el icono: no cambia el alto de la
+                celda ni empuja la etiqueta. */}
+            <span className="relative">
+              <Icon size={19} />
+              {href === "/jefe" && conPendientes ? (
+                <span className="absolute -right-3 -top-1.5 min-w-4 rounded-full bg-[#C5A55A] px-1 text-center text-[9px] leading-4 tabular-nums text-black">
+                  <span aria-hidden="true">{textoCortoDelContador(pendientes)}</span>
+                  <span className="sr-only">{textoDelContador(pendientes)}</span>
+                </span>
+              ) : null}
+            </span>
+            <span className="max-w-full truncate">{corto}</span>
           </Link>
         ))}
       </nav>

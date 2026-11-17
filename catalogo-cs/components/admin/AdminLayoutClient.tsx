@@ -22,6 +22,7 @@ import {
   Eye,
   FileCheck,
   Image as ImageIcon,
+  Images,
   Landmark,
   Map as MapIcon,
   MapPin,
@@ -119,6 +120,8 @@ const navGroups: NavGroup[] = [
     items: [
       { label: "Aplicación y avisos", href: "/admin/ajustes", icon: Settings },
       { label: "Fotos y Contenido", href: "/admin/fotos", icon: ImageIcon },
+      // Junto a "Fotos y Contenido": revisar lo que se publica en el feed.
+      { label: "Publicaciones", href: "/admin/publicaciones", icon: Images },
       { label: "Onboarding", href: "/admin/onboarding", icon: UserPlus },
       { label: "Reportes y Disciplina", href: "/admin/reports", icon: Scale },
       { label: "Indicadores", href: "/admin/kpis", icon: TrendingUp },
