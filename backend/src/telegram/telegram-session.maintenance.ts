@@ -7,12 +7,14 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, LessThan, Repository } from 'typeorm';
 import { TelegramSession } from './entities/telegram-session.entity';
-import { withAdvisoryLock } from '../common/scheduling/advisory-lock';
+import {
+  ADVISORY_LOCKS,
+  withAdvisoryLock,
+} from '../common/scheduling/advisory-lock';
 import { describeError } from '../common/errors/error-message';
 
 const SESSION_TTL_DAYS = 30;
 const SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000; // cada 6 horas
-const SESSION_SWEEP_LOCK = 811_005;
 
 /**
  * Purga las sesiones de Telegram inactivas.
@@ -44,19 +46,23 @@ export class TelegramSessionMaintenance
 
   private async sweep(): Promise<void> {
     try {
-      await withAdvisoryLock(this.dataSource, SESSION_SWEEP_LOCK, async () => {
-        const cutoff = new Date(
-          Date.now() - SESSION_TTL_DAYS * 24 * 60 * 60 * 1000,
-        );
-        const { affected } = await this.sessions.delete({
-          updatedAt: LessThan(cutoff),
-        });
-        if (affected) {
-          this.logger.log(
-            `Purgadas ${affected} sesiones de Telegram inactivas más de ${SESSION_TTL_DAYS} días`,
+      await withAdvisoryLock(
+        this.dataSource,
+        ADVISORY_LOCKS.telegramSessionSweep,
+        async () => {
+          const cutoff = new Date(
+            Date.now() - SESSION_TTL_DAYS * 24 * 60 * 60 * 1000,
           );
-        }
-      });
+          const { affected } = await this.sessions.delete({
+            updatedAt: LessThan(cutoff),
+          });
+          if (affected) {
+            this.logger.log(
+              `Purgadas ${affected} sesiones de Telegram inactivas más de ${SESSION_TTL_DAYS} días`,
+            );
+          }
+        },
+      );
     } catch (error) {
       this.logger.warn(
         `No se pudieron purgar las sesiones de Telegram: ${describeError(

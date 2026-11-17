@@ -8,7 +8,10 @@ import { randomUUID } from 'crypto';
 import { DataSource, LessThan, Repository } from 'typeorm';
 import { InjectRepository } from '@nestjs/typeorm';
 import { describeError } from '../common/errors/error-message';
-import { withAdvisoryLock } from '../common/scheduling/advisory-lock';
+import {
+  ADVISORY_LOCKS,
+  withAdvisoryLock,
+} from '../common/scheduling/advisory-lock';
 import { RealtimeOutboxEvent } from './realtime-outbox.entity';
 
 /** Canal de Postgres por el que se avisa de que hay un evento nuevo. */
@@ -16,7 +19,6 @@ const CHANNEL = 'realtime_events';
 /** Lo entregado deja de hacer falta enseguida; se conserva un margen holgado. */
 const RETENTION_MS = 5 * 60 * 1000;
 const SWEEP_INTERVAL_MS = 60 * 1000;
-const OUTBOX_SWEEP_LOCK = 811_006;
 /** Espera antes de volver a intentar el `LISTEN` si se cae la conexion. */
 const RECONNECT_DELAY_MS = 5_000;
 
@@ -176,11 +178,15 @@ export class RealtimeBus implements OnModuleInit, OnModuleDestroy {
 
   private async sweep(): Promise<void> {
     try {
-      await withAdvisoryLock(this.dataSource, OUTBOX_SWEEP_LOCK, async () => {
-        await this.outbox.delete({
-          createdAt: LessThan(new Date(Date.now() - RETENTION_MS)),
-        });
-      });
+      await withAdvisoryLock(
+        this.dataSource,
+        ADVISORY_LOCKS.realtimeOutboxSweep,
+        async () => {
+          await this.outbox.delete({
+            createdAt: LessThan(new Date(Date.now() - RETENTION_MS)),
+          });
+        },
+      );
     } catch (error) {
       this.logger.warn(
         `No se pudo purgar el buzón de eventos: ${describeError(error)}`,

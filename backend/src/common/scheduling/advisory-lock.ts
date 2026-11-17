@@ -53,4 +53,8 @@ export const ADVISORY_LOCKS = {
   workShiftReset: 811_006,
   waitTimeoutSweep: 811_007,
   serviceOperations: 811_008,
+  // Antes estas dos se declaraban sueltas en sus archivos reutilizando 811_005 y
+  // 811_006, de modo que authCleanup y workShiftReset se excluian con ellas.
+  realtimeOutboxSweep: 811_009,
+  telegramSessionSweep: 811_010,
 } as const;
