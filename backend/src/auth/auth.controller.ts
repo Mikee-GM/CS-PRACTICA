@@ -196,6 +196,10 @@ export class AuthController {
     return { user: result.user };
   }
 
+  /**
+   * `debeCambiarPassword` le dice al frontend que muestre el cambio forzado.
+   * No es una barrera de seguridad: el resto de la API sigue respondiendo.
+   */
   @Get('me')
   @UseGuards(JwtAuthGuard)
   me(@Req() request: Request) {
@@ -206,6 +210,7 @@ export class AuthController {
       rol: user.rol,
       nombre: user.nombre ?? null,
       apellido: user.apellido ?? null,
+      debeCambiarPassword: user.debeCambiarPassword ?? false,
     };
   }
 

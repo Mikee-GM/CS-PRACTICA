@@ -70,6 +70,19 @@ export class Usuarios {
   @ApiProperty({ description: 'Activo', example: true })
   activo: boolean;
 
+  /**
+   * La contraseña actual la puso otra persona (alta o restablecimiento) y hay
+   * que cambiarla. Es una marca de UX para el frontend, no una barrera: el
+   * backend no bloquea la API mientras este en true. La proteccion real es que
+   * la temporal solo se entrega una vez y las sesiones previas se revocan.
+   */
+  @Column('boolean', { name: 'debe_cambiar_password', default: () => 'false' })
+  @ApiProperty({
+    description: 'Debe cambiar la contraseña en el proximo acceso',
+    example: false,
+  })
+  debeCambiarPassword: boolean;
+
   @Column('boolean', { name: 'disponible', default: () => 'true' })
   @ApiProperty({
     description: 'Disponible (para jefes/choferes)',

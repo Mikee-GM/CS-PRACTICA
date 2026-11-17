@@ -980,3 +980,42 @@ Pendiente:
 - Probar contra Postgres real las consultas de calificacion, servicios y
   sancion y el UPDATE de revocacion; probar las rutas de punta a punta.
 - Definir con el dueno los niveles del cliente y cambiar solo `calcularNivel`.
+
+### Fase 5, B-acceso (backend)
+
+- Migracion `1811003000000-AddMustChangePassword`: `usuarios.debe_cambiar_password
+  boolean NOT NULL DEFAULT false` (idempotente, con `down`).
+- `CuentaDelPersonalService` con tres rutas en `UsersController`, todas con
+  `JwtAuthGuard + RolesGuard + CsrfGuard` y `@Throttle`:
+  - `PATCH /users/me/password` (admin, jefe, empleada, chofer; 5/min):
+    `{ actual, nueva }`, nueva 8..72 con letra y numero y distinta de la actual;
+    204. Quita la marca y revoca las demas sesiones conservando la actual y su
+    familia.
+  - `PATCH /users/me` (10/min): `{ nombre?, apellido?, telefono? }`, lista
+    cerrada (un campo extra da 400). Email, rol y `activo` siguen siendo del
+    admin.
+  - `POST /users/:id/reset-password` (admin, jefe; 10/min): genera una temporal
+    de 14 caracteres (`crypto.randomInt`, sin caracteres ambiguos), guarda solo
+    el hash, pone la marca, revoca todas las sesiones del objetivo y devuelve
+    `{ passwordTemporal }` una sola vez (nunca en logs). Alcance: admin sobre
+    todo el personal salvo si mismo y los clientes; jefe solo sobre modelos con
+    `jefeId`/`jefeSecundarioId` = el; jefe sobre jefe o admin 403; jefe sobre
+    chofer 404 (no hay relacion chofer-jefe: solo el admin); cuenta desactivada
+    409.
+- Alta de personal (`UsersService.create`, `EmployeesService.create`,
+  `DriversService.create`) marca `debe_cambiar_password = true`; el admin
+  sembrado no.
+- `GET /auth/me` y `{ user }` de login, refresh, register, panel-access y
+  portal-session incluyen `debeCambiarPassword`. La marca es UX: el backend no
+  bloquea la API; la proteccion real es que la temporal se entrega una vez y las
+  sesiones previas se revocan.
+- Cierre de un hueco: `PATCH /users/:id` aceptaba `password` y dejaba a un jefe
+  cambiar la clave de cualquier cuenta que no fuera admin sin alcance, sin marca
+  y sin revocar sesiones. Ahora solo un admin puede, y marca el cambio forzado
+  (salvo sobre su propia cuenta).
+
+Pendiente:
+
+- Migracion sin probar contra Postgres real.
+- `PATCH /users/:id` de un admin que cambia la clave de otro no revoca las
+  sesiones de esa persona (el restablecimiento si).

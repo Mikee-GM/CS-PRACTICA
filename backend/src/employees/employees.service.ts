@@ -186,6 +186,8 @@ export class EmployeesService {
         passwordHash,
         rol: 'empleada',
         telegramChatId: telegramChatId || null,
+        // La contraseña la tecleo el admin: es temporal y se cambia al entrar.
+        debeCambiarPassword: true,
       });
       const usuarioGuardado = await manager.save(Usuarios, nuevoUsuario);
 

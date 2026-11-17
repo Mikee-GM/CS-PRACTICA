@@ -60,6 +60,9 @@ export class UserSeederService implements OnApplicationBootstrap {
         passwordHash,
         rol: 'admin',
         activo: true,
+        // La contraseña sembrada sale de la configuracion del despliegue, no
+        // de otra persona: no se fuerza su cambio.
+        debeCambiarPassword: false,
       });
 
       await this.usuariosRepository.save(adminUser);

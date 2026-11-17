@@ -30,7 +30,7 @@ type AuthTokens = {
    */
   refreshToken: string | null;
   csrfToken: string;
-  user: Pick<Usuarios, 'id' | 'email' | 'rol'>;
+  user: Pick<Usuarios, 'id' | 'email' | 'rol' | 'debeCambiarPassword'>;
 };
 
 /**
@@ -529,7 +529,17 @@ export class AuthService {
     return createHash('sha256').update(token).digest('hex');
   }
 
+  /**
+   * `debeCambiarPassword` va en la respuesta del login para que el frontend
+   * mande a la pantalla de cambio forzado sin otra peticion. Es UX: el backend
+   * no bloquea nada por esa marca.
+   */
   private publicUser(user: Usuarios) {
-    return { id: user.id, email: user.email, rol: user.rol };
+    return {
+      id: user.id,
+      email: user.email,
+      rol: user.rol,
+      debeCambiarPassword: user.debeCambiarPassword ?? false,
+    };
   }
 }

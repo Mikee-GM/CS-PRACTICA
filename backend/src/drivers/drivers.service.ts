@@ -176,6 +176,8 @@ export class DriversService {
         passwordHash,
         rol: 'chofer',
         telegramChatId: telegramChatId || null,
+        // La contraseña la tecleo el admin: es temporal y se cambia al entrar.
+        debeCambiarPassword: true,
       });
       const usuarioGuardado = await manager.save(Usuarios, nuevoUsuario);
 

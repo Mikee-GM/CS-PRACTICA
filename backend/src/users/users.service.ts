@@ -73,9 +73,12 @@ export class UsersService {
     const { password, ...rest } = createUserDto;
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
+    // La contraseña la tecleo quien da el alta: es temporal y su dueño debe
+    // cambiarla al entrar (Fase 5, B-acceso).
     const user = this.usuariosRepository.create({
       ...rest,
       passwordHash,
+      debeCambiarPassword: true,
     });
     const saved = await this.usuariosRepository.save(user);
     return this.stripSecrets(saved);
@@ -132,8 +135,20 @@ export class UsersService {
     }
 
     if (password) {
+      // Esta ruta la alcanza un jefe, y con `password` en el cuerpo podia cambiar
+      // la clave de cualquier cuenta que no fuera admin sin pasar por el alcance
+      // del restablecimiento, sin marcar el cambio forzado y sin cerrar sesiones.
+      // Para el personal a su cargo existe `POST /users/:id/reset-password`; para
+      // la cuenta propia, `PATCH /users/me/password`.
+      if (actor?.rol !== 'admin') {
+        throw new ForbiddenException(
+          'Solo un administrador puede cambiar la contraseña de otra cuenta',
+        );
+      }
       const salt = await bcrypt.genSalt(10);
       updateData.passwordHash = await bcrypt.hash(password, salt);
+      // La fija un tercero: quien entra despues debe elegir la suya.
+      if (actor.id !== id) updateData.debeCambiarPassword = true;
     }
 
     await this.usuariosRepository.update(id, updateData);
