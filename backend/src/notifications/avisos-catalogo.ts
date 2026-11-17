@@ -29,6 +29,7 @@ export const AVISO_SANCION = 'sancion';
 export const AVISO_FOTOS_SEMANALES = 'fotos_semanales';
 export const AVISO_REGISTRO_APROBADO = 'registro_aprobado';
 export const AVISO_LIQUIDACION = 'liquidacion';
+export const AVISO_RETOS = 'retos';
 
 export const AVISOS_OPCIONALES: TipoDeAviso[] = [
   {
@@ -182,6 +183,12 @@ export const AVISOS_OPCIONALES: TipoDeAviso[] = [
     titulo: 'Registros aprobados',
     descripcion: 'Aprueban un servicio que registraste a mano.',
     roles: ['empleada'],
+  },
+  {
+    tipo: AVISO_RETOS,
+    titulo: 'Retos',
+    descripcion: 'Empieza o termina un reto en el que participas.',
+    roles: ['empleada', 'chofer'],
   },
   {
     tipo: AVISO_LIQUIDACION,

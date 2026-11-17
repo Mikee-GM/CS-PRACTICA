@@ -14,14 +14,14 @@ describe('WeeklyContentScheduler', () => {
   const weeklyContentService = {
     getCurrentCycleFriday: () => SEMANA,
     getFinePolicy: jest.fn(),
+    esSemanaDeGracia: jest.fn(),
   };
-  const telegramService = { sendMessage: jest.fn() };
-  const panelAccessService = { issueLink: jest.fn() };
+  const notifications = { notificar: jest.fn() };
   const scheduleRepo = {
     find: jest.fn(),
     findOne: jest.fn(),
     save: jest.fn(),
-    create: jest.fn(),
+    create: jest.fn((valor) => valor),
   };
   const empleadasRepo = { find: jest.fn() };
   const conductReportRepo = {
@@ -44,19 +44,15 @@ describe('WeeklyContentScheduler', () => {
   ) as WeeklyContentScheduler;
   Object.assign(scheduler, {
     logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
-    configService: { get: () => '' },
     weeklyContentService,
-    // Los avisos push no intervienen en el ciclo semanal.
-    notifications: { notificar: jest.fn().mockResolvedValue(0) },
-    telegramService,
-    panelAccessService,
+    notifications,
     scheduleRepo,
     empleadasRepo,
     conductReportRepo,
     dataSource,
   });
 
-  /** Ciclo pendiente de una modelo con chat vinculado. */
+  /** Ciclo pendiente de una modelo. Ya no hace falta que tenga Telegram. */
   const pendiente = (overrides: Record<string, unknown> = {}) => ({
     id: 'sched-1',
     empleadaId: 'emp-1',
@@ -66,12 +62,12 @@ describe('WeeklyContentScheduler', () => {
     recordatorioAt: null,
     multaAplicadaAt: null,
     multaLiquidationRecordId: null,
-    empleada: {
-      nombreArtistico: 'Modelo',
-      usuario: { id: 'user-1', telegramChatId: '555' },
-    },
+    empleada: { nombreArtistico: 'Modelo', usuarioId: 'user-1' },
     ...overrides,
   });
+
+  /** El aviso de la llamada `n` a `notificar`. */
+  const aviso = (n = 0) => notifications.notificar.mock.calls[n][1];
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -79,21 +75,56 @@ describe('WeeklyContentScheduler', () => {
       maxRecordatorios: 3,
       importeMulta: 300,
     });
-    panelAccessService.issueLink.mockResolvedValue({
-      url: 'https://catalogo.example.com/acceso/abc',
-      expiresAt: new Date(),
-    });
-    telegramService.sendMessage.mockResolvedValue(undefined);
-    scheduleRepo.save.mockImplementation((valor) => Promise.resolve(valor));
+    weeklyContentService.esSemanaDeGracia.mockResolvedValue(false);
+    notifications.notificar.mockResolvedValue(1);
+    scheduleRepo.save.mockImplementation((valor) =>
+      Promise.resolve({ id: 'sched-nuevo', ...valor }),
+    );
   });
 
   /** Los handlers son privados; se llaman por nombre para no simular el reloj. */
+  const pedirFotos = () =>
+    (scheduler as any).handleFridayRequests(SEMANA) as Promise<void>;
   const enviarRecordatorios = () =>
     (scheduler as any).handleReminders(SEMANA) as Promise<void>;
   const aplicarMultas = () =>
     (scheduler as any).handleExhaustedReminders(SEMANA) as Promise<void>;
 
-  it('cuenta el recordatorio y adjunta el acceso al portal', async () => {
+  /*
+   * Decision 3 de la Fase 5: el filtro por `telegramChatId` dejaba fuera del
+   * ciclo, y de la multa, a toda modelo sin bot.
+   */
+  it('pide las fotos tambien a la modelo sin Telegram vinculado', async () => {
+    empleadasRepo.find.mockResolvedValue([
+      { id: 'emp-1', usuarioId: 'user-1', usuario: { telegramChatId: null } },
+    ]);
+    scheduleRepo.findOne.mockResolvedValue(null);
+
+    await pedirFotos();
+
+    expect(scheduleRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({ empleadaId: 'emp-1', estado: 'solicitado' }),
+    );
+    expect(notifications.notificar).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({
+        url: '/empleada/portal?seccion=fotos',
+        dedupeKey: 'fotos-solicitud:sched-nuevo',
+      }),
+    );
+  });
+
+  it('no vuelve a pedir las fotos a quien ya tiene ciclo esta semana', async () => {
+    empleadasRepo.find.mockResolvedValue([{ id: 'emp-1', usuarioId: 'u' }]);
+    scheduleRepo.findOne.mockResolvedValue(pendiente());
+
+    await pedirFotos();
+
+    expect(scheduleRepo.save).not.toHaveBeenCalled();
+    expect(notifications.notificar).not.toHaveBeenCalled();
+  });
+
+  it('cuenta el recordatorio y avisa por push hacia el portal', async () => {
     const schedule = pendiente();
     scheduleRepo.find.mockResolvedValue([schedule]);
 
@@ -101,11 +132,11 @@ describe('WeeklyContentScheduler', () => {
 
     expect(schedule.recordatoriosEnviados).toBe(1);
     expect(schedule.estado).toBe('recordatorio_enviado');
-
-    const [chatId, texto, opciones] = telegramService.sendMessage.mock.calls[0];
-    expect(chatId).toBe('555');
-    expect(texto).toContain('Recordatorio 1 de 3');
-    expect(opciones.buttons).toBeDefined();
+    expect(notifications.notificar.mock.calls[0][0]).toBe('user-1');
+    expect(aviso().titulo).toContain('1 de 3');
+    expect(aviso().url).toBe('/empleada/portal?seccion=fotos');
+    // El numero en la clave evita repetir el aviso si el guardado falla.
+    expect(aviso().dedupeKey).toBe('fotos-recordatorio:sched-1:1');
   });
 
   it('avisa cuantos avisos quedan antes de la multa', async () => {
@@ -115,9 +146,17 @@ describe('WeeklyContentScheduler', () => {
 
     await enviarRecordatorios();
 
-    const [, texto] = telegramService.sendMessage.mock.calls[0];
-    expect(texto).toContain('Recordatorio 2 de 3');
-    expect(texto).toContain('1 aviso');
+    expect(aviso().titulo).toContain('2 de 3');
+    expect(aviso().cuerpo).toContain('1 aviso');
+  });
+
+  it('en la semana de gracia el recordatorio dice que no hay multa', async () => {
+    weeklyContentService.esSemanaDeGracia.mockResolvedValue(true);
+    scheduleRepo.find.mockResolvedValue([pendiente()]);
+
+    await enviarRecordatorios();
+
+    expect(aviso().cuerpo).toContain('no hay multa');
   });
 
   it('no manda un segundo recordatorio el mismo dia', async () => {
@@ -127,7 +166,7 @@ describe('WeeklyContentScheduler', () => {
 
     await enviarRecordatorios();
 
-    expect(telegramService.sendMessage).not.toHaveBeenCalled();
+    expect(notifications.notificar).not.toHaveBeenCalled();
   });
 
   it('deja de avisar al agotar el tope configurado', async () => {
@@ -137,7 +176,18 @@ describe('WeeklyContentScheduler', () => {
 
     await enviarRecordatorios();
 
-    expect(telegramService.sendMessage).not.toHaveBeenCalled();
+    expect(notifications.notificar).not.toHaveBeenCalled();
+  });
+
+  it('cuenta el recordatorio aunque el aviso falle', async () => {
+    // Si un fallo del aviso frenara el contador, la multa no llegaria nunca.
+    notifications.notificar.mockRejectedValue(new Error('push caido'));
+    const schedule = pendiente();
+    scheduleRepo.find.mockResolvedValue([schedule]);
+
+    await enviarRecordatorios();
+
+    expect(schedule.recordatoriosEnviados).toBe(1);
   });
 
   it('aplica la multa al agotarse los avisos y la deja rastreada', async () => {
@@ -160,8 +210,24 @@ describe('WeeklyContentScheduler', () => {
     expect(insercion).toContain('INSERT INTO liquidation_records');
     expect(parametros).toContain(300);
 
-    const [, texto] = telegramService.sendMessage.mock.calls[0];
-    expect(texto).toContain('multa');
+    expect(aviso().titulo).toContain('multa');
+    expect(aviso().tipo).toBe('sancion');
+    expect(aviso().dedupeKey).toBe('fotos-multa:sched-1');
+  });
+
+  it('en la semana de gracia cierra el ciclo sin multa ni reporte', async () => {
+    weeklyContentService.esSemanaDeGracia.mockResolvedValue(true);
+    const schedule = pendiente({ recordatoriosEnviados: 3 });
+    scheduleRepo.find.mockResolvedValue([schedule]);
+
+    await aplicarMultas();
+
+    expect(dataSource.query).not.toHaveBeenCalled();
+    expect(conductReportRepo.save).not.toHaveBeenCalled();
+    expect(schedule.multaAplicadaAt).toBeNull();
+    // Cerrado: la pasada siguiente ya no lo encuentra entre los pendientes.
+    expect(schedule.estado).toBe('falta_aplicada');
+    expect(aviso().titulo).toContain('no se aplico multa');
   });
 
   it('no vuelve a multar un ciclo que ya la tiene', async () => {
@@ -183,18 +249,6 @@ describe('WeeklyContentScheduler', () => {
     await aplicarMultas();
 
     expect(dataSource.query).not.toHaveBeenCalled();
-  });
-
-  it('avisa igual aunque no se pueda emitir el pase al portal', async () => {
-    // Quedarse sin recordatorio es peor que quedarse sin el atajo.
-    panelAccessService.issueLink.mockRejectedValue(new Error('sin origen'));
-    scheduleRepo.find.mockResolvedValue([pendiente()]);
-
-    await enviarRecordatorios();
-
-    expect(telegramService.sendMessage).toHaveBeenCalledTimes(1);
-    const [, , opciones] = telegramService.sendMessage.mock.calls[0];
-    expect(opciones.buttons).toBeUndefined();
   });
 
   it('registra el incumplimiento aunque no haya quien firme la multa', async () => {

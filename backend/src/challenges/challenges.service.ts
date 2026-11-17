@@ -2,14 +2,20 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { RealtimeEventsService } from '../realtime/realtime.service';
-import { TelegramService } from '../telegram/telegram.service';
+import {
+  NotificationsService,
+  type Aviso,
+} from '../notifications/notifications.service';
+import { AVISO_RETOS } from '../notifications/avisos-catalogo';
 import { Usuarios } from '../users/entities/user.entity';
-import { APP_LOCALE } from '../common/locale';
+import { APP_LOCALE, APP_TIME_ZONE } from '../common/locale';
+import { describeError } from '../common/errors/error-message';
 import { CreateChallengeDto } from './dto/challenges.dto';
 import { ChallengeParticipant } from './entities/challenge-participant.entity';
 import {
@@ -67,6 +73,8 @@ const KPI_SOURCE: Record<
 
 @Injectable()
 export class ChallengesService {
+  private readonly logger = new Logger(ChallengesService.name);
+
   constructor(
     @InjectRepository(Challenge)
     private readonly challenges: Repository<Challenge>,
@@ -74,7 +82,7 @@ export class ChallengesService {
     private readonly participants: Repository<ChallengeParticipant>,
     private readonly dataSource: DataSource,
     private readonly realtime: RealtimeEventsService,
-    private readonly telegram: TelegramService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async createChallenge(
@@ -414,18 +422,43 @@ export class ChallengesService {
     }
   }
 
-  private async participantChatId(
+  /**
+   * Usuario de cada participante, para avisarle por push.
+   *
+   * Antes se buscaba su chat de Telegram y quien no lo tenia vinculado se
+   * quedaba sin enterarse del reto. Todo participante tiene usuario.
+   */
+  private async participantUserIds(
     type: ChallengeParticipantType,
-    participantId: string,
-  ): Promise<string | null> {
+    ids: string[],
+  ): Promise<Map<string, string>> {
     const table = type === 'employee' ? 'empleadas' : 'choferes';
-    const rows: Array<{ telegram_chat_id: string | null }> =
+    const rows: Array<{ id: string; usuario_id: string }> =
       await this.dataSource.query(
-        `SELECT u.telegram_chat_id FROM ${table} p
-         JOIN usuarios u ON u.id = p.usuario_id WHERE p.id = $1`,
-        [participantId],
+        `SELECT id, usuario_id FROM ${table} WHERE id = ANY($1::uuid[])`,
+        [ids],
       );
-    return rows[0]?.telegram_chat_id ? String(rows[0].telegram_chat_id) : null;
+    return new Map(rows.map((row) => [row.id, row.usuario_id]));
+  }
+
+  /** El portal de cada tipo de participante: ahi vive su sesion. */
+  private portalUrl(type: ChallengeParticipantType): string {
+    return type === 'employee' ? '/empleada/portal' : '/chofer/portal';
+  }
+
+  /**
+   * `notificar` no lanza, pero el ciclo del scheduler recorre varios retos y un
+   * fallo inesperado con un participante no puede cortar el de los demas.
+   */
+  private async avisar(usuarioId: string | undefined, aviso: Aviso) {
+    if (!usuarioId) return;
+    try {
+      await this.notifications.notificar(usuarioId, aviso);
+    } catch (error) {
+      this.logger.warn(
+        `No se pudo avisar del reto a ${usuarioId}: ${describeError(error)}`,
+      );
+    }
   }
 
   private metricLabel(metric: ChallengeMetric): string {
@@ -448,39 +481,42 @@ export class ChallengesService {
     return new Map(rows.map((row) => [row.id, row.name]));
   }
 
+  /*
+   * Los avisos llevan dedupe por reto y participante: si el guardado del estado
+   * fallara despues de avisar, la pasada siguiente del scheduler no los repite.
+   */
   private async notifyChallengeStarted(challengeId: string) {
     const challenge = await this.challenges.findOneBy({ id: challengeId });
     if (!challenge) return;
     const rows = await this.participants.find({ where: { challengeId } });
+    const ids = rows.map((row) => row.participantId);
     const metricLabel = this.metricLabel(challenge.metric);
     const endsAtLabel = challenge.endsAt.toLocaleDateString(APP_LOCALE, {
       day: 'numeric',
       month: 'long',
+      timeZone: APP_TIME_ZONE,
     });
-    const names = await this.participantNames(
-      challenge.participantType,
-      rows.map((row) => row.participantId),
-    );
+    const [names, userIds] = await Promise.all([
+      this.participantNames(challenge.participantType, ids),
+      this.participantUserIds(challenge.participantType, ids),
+    ]);
 
     for (const row of rows) {
-      const chatId = await this.participantChatId(
-        challenge.participantType,
-        row.participantId,
-      );
-      if (!chatId) continue;
       const opponents = rows
         .filter((other) => other.participantId !== row.participantId)
         .map((other) => names.get(other.participantId) ?? 'un participante')
         .join(', ');
-      const message =
-        `Empieza el reto "${challenge.title}"\n\n` +
-        `Compites por ${metricLabel} contra: ${opponents || 'otros participantes'}.\n` +
-        `Termina el ${endsAtLabel}.`;
-      try {
-        await this.telegram.sendMessage(chatId, message);
-      } catch {
-        // best-effort, no interrumpe el ciclo por un fallo de Telegram
-      }
+      await this.avisar(userIds.get(row.participantId), {
+        titulo: `Empieza el reto "${challenge.title}"`,
+        cuerpo:
+          `Compites por ${metricLabel} contra ${opponents || 'otros participantes'}. ` +
+          `Termina el ${endsAtLabel}.`,
+        url: this.portalUrl(challenge.participantType),
+        tag: `reto-${challenge.id}`,
+        tipo: AVISO_RETOS,
+        relatedEntityId: challenge.id,
+        dedupeKey: `reto-inicio:${challenge.id}`,
+      });
     }
   }
 
@@ -492,28 +528,26 @@ export class ChallengesService {
     if (!challenge || standings.length === 0) return;
     const metricLabel = this.metricLabel(challenge.metric);
     const winner = standings[0];
-    const resultLines = standings
-      .map(
-        (standing) =>
-          `${standing.position}. ${standing.name} — ${standing.value}`,
-      )
-      .join('\n');
+    const userIds = await this.participantUserIds(
+      challenge.participantType,
+      standings.map((standing) => standing.participantId),
+    );
+    // El push no da para la tabla entera: a cada quien su lugar y el ganador.
     for (const standing of standings) {
-      const chatId = await this.participantChatId(
-        challenge.participantType,
-        standing.participantId,
-      );
-      if (!chatId) continue;
-      const headline =
-        standing.participantId === winner.participantId
-          ? `¡Ganaste el reto "${challenge.title}"!`
-          : `El reto "${challenge.title}" terminó. Ganó ${winner.name}.`;
-      const message = `${headline}\n\nResultado final (${metricLabel}):\n${resultLines}`;
-      try {
-        await this.telegram.sendMessage(chatId, message);
-      } catch {
-        // best-effort, no interrumpe el ciclo por un fallo de Telegram
-      }
+      const gano = standing.participantId === winner.participantId;
+      await this.avisar(userIds.get(standing.participantId), {
+        titulo: gano
+          ? `Ganaste el reto "${challenge.title}"`
+          : `Termino el reto "${challenge.title}"`,
+        cuerpo: gano
+          ? `Quedaste en primer lugar en ${metricLabel} con ${standing.value}.`
+          : `Gano ${winner.name}. Quedaste en el lugar ${standing.position} de ${standings.length} en ${metricLabel} con ${standing.value}.`,
+        url: this.portalUrl(challenge.participantType),
+        tag: `reto-${challenge.id}`,
+        tipo: AVISO_RETOS,
+        relatedEntityId: challenge.id,
+        dedupeKey: `reto-fin:${challenge.id}`,
+      });
     }
   }
 

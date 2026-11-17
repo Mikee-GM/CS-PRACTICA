@@ -4,7 +4,6 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
 import {
   ADVISORY_LOCKS,
@@ -21,23 +20,15 @@ export class ChallengesScheduler implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private readonly challenges: ChallengesService,
-    private readonly configService: ConfigService,
     private readonly dataSource: DataSource,
   ) {}
 
+  /*
+   * Arranca siempre. Antes se apagaba sin token de Telegram porque los avisos
+   * del reto solo salian por el bot, y con el se apagaba tambien la activacion
+   * y el cierre de los retos, que no dependen de ningun canal.
+   */
   onModuleInit() {
-    const token = this.configService.get<string>('TELEGRAM_BOT_TOKEN', '');
-    if (
-      !token ||
-      token.includes('dummy') ||
-      token.includes('fake') ||
-      token.startsWith('123456789')
-    ) {
-      this.logger.log(
-        'Bot de Telegram deshabilitado en local; omitiendo programador de retos.',
-      );
-      return;
-    }
     this.timer = setInterval(() => void this.runCycle(), 5 * 60 * 1000);
     if (typeof this.timer?.unref === 'function') this.timer.unref();
     const initialTimer = setTimeout(() => void this.runCycle(), 15_000);

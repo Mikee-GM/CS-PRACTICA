@@ -1,7 +1,7 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { RealtimeModule } from '../realtime/realtime.module';
-import { TelegramModule } from '../telegram/telegram.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { ChallengesController } from './challenges.controller';
 import { ChallengesScheduler } from './challenges.scheduler';
 import { ChallengesService } from './challenges.service';
@@ -12,7 +12,7 @@ import { Challenge } from './entities/challenge.entity';
   imports: [
     TypeOrmModule.forFeature([Challenge, ChallengeParticipant]),
     RealtimeModule,
-    forwardRef(() => TelegramModule),
+    NotificationsModule,
   ],
   controllers: [ChallengesController],
   providers: [ChallengesService, ChallengesScheduler],

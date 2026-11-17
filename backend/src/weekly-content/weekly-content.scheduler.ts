@@ -4,39 +4,43 @@ import {
   OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import {
   ADVISORY_LOCKS,
   withAdvisoryLock,
 } from '../common/scheduling/advisory-lock';
-import { WeeklyContentService } from './weekly-content.service';
-import { NotificationsService } from '../notifications/notifications.service';
-import { AVISO_FOTOS_SEMANALES } from '../notifications/avisos-catalogo';
+import {
+  PORTAL_FOTOS_PATH,
+  WeeklyContentService,
+} from './weekly-content.service';
+import {
+  NotificationsService,
+  type Aviso,
+} from '../notifications/notifications.service';
+import {
+  AVISO_FOTOS_SEMANALES,
+  AVISO_SANCION,
+} from '../notifications/avisos-catalogo';
 import { WeeklyContentSchedule } from './entities/weekly-content-schedule.entity';
 import { Empleadas } from '../employees/entities/employee.entity';
-import { TelegramService } from '../telegram/telegram.service';
-import { botonesDePortal } from '../telegram/telegram-portal-buttons';
-import { PanelAccessService } from '../auth/panel-access.service';
 import { ConductReport } from '../discipline/entities/conduct-report.entity';
-import { APP_TIME_ZONE } from '../common/locale';
+import { APP_LOCALE, APP_TIME_ZONE } from '../common/locale';
 
-/** Destino del pase: el portal, abierto ya en la seccion de fotos. */
-const PORTAL_FOTOS_PATH = '/empleada/portal?seccion=fotos';
+const FORMATO_MONEDA = new Intl.NumberFormat(APP_LOCALE, {
+  style: 'currency',
+  currency: 'MXN',
+});
 
 @Injectable()
 export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(WeeklyContentScheduler.name);
-  private timer?: any;
+  private timer?: ReturnType<typeof setInterval>;
   private running = false;
 
   constructor(
-    private readonly configService: ConfigService,
     private readonly weeklyContentService: WeeklyContentService,
     private readonly notifications: NotificationsService,
-    private readonly telegramService: TelegramService,
-    private readonly panelAccessService: PanelAccessService,
     @InjectRepository(WeeklyContentSchedule)
     private readonly scheduleRepo: Repository<WeeklyContentSchedule>,
     @InjectRepository(Empleadas)
@@ -46,26 +50,18 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
     private readonly dataSource: DataSource,
   ) {}
 
+  /*
+   * Arranca siempre. Antes se apagaba sin token de Telegram porque los avisos
+   * solo salian por el bot; ahora salen por push, y un entorno sin bot tambien
+   * tiene que pedir las fotos y cobrar la multa.
+   */
   onModuleInit() {
-    const token = this.configService.get<string>('TELEGRAM_BOT_TOKEN', '');
-    if (
-      !token ||
-      token.includes('dummy') ||
-      token.includes('fake') ||
-      token.startsWith('123456789')
-    ) {
-      this.logger.log(
-        'Bot de Telegram deshabilitado en local; omitiendo programador de contenido semanal.',
-      );
-      return;
-    }
-
     // Escanear cada 10 minutos
     this.timer = setInterval(() => void this.runCycle(), 10 * 60 * 1000);
     if (typeof this.timer?.unref === 'function') {
       this.timer.unref();
     }
-    const initialTimer: any = setTimeout(() => void this.runCycle(), 10_000);
+    const initialTimer = setTimeout(() => void this.runCycle(), 10_000);
     if (typeof initialTimer?.unref === 'function') {
       initialTimer.unref();
     }
@@ -133,21 +129,26 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /**
+   * Pide las fotos a todas las modelos con catalogo activo.
+   *
+   * Hasta la Fase 5 se saltaba a quien no tenia Telegram vinculado, porque el
+   * pedido solo viajaba por el bot. Ahora el aviso es push y el portal es la
+   * via de entrega, asi que todas quedan sujetas al ciclo; la que entra por
+   * primera vez tiene su semana de gracia (`esSemanaDeGracia`).
+   */
   private async handleFridayRequests(semanaInicio: string) {
     const activeEmployees = await this.empleadasRepo.find({
       where: { catalogoActivo: true },
-      relations: { usuario: true },
     });
 
     for (const emp of activeEmployees) {
-      if (!emp.usuario?.telegramChatId) continue;
-
-      const schedule = await this.scheduleRepo.findOne({
+      const existente = await this.scheduleRepo.findOne({
         where: { empleadaId: emp.id, semanaInicio },
       });
-      if (schedule) continue;
+      if (existente) continue;
 
-      await this.scheduleRepo.save(
+      const schedule = await this.scheduleRepo.save(
         this.scheduleRepo.create({
           empleadaId: emp.id,
           semanaInicio,
@@ -157,13 +158,15 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
         }),
       );
 
-      await this.enviarAvisoDeFotos(emp.usuario, {
-        nombre: emp.nombreArtistico,
+      await this.avisar(emp.usuarioId, {
         titulo: 'Toca renovar tus fotos de la semana',
-        cuerpo: [
-          'Sube tus fotos recientes desde tu portal para renovar tu catalogo',
-          'del fin de semana. Ya no hace falta mandarlas por este chat.',
-        ].join('\n'),
+        cuerpo:
+          'Sube tus fotos recientes desde tu portal para renovar tu catalogo.',
+        url: PORTAL_FOTOS_PATH,
+        tag: `fotos-${schedule.id}`,
+        tipo: AVISO_FOTOS_SEMANALES,
+        relatedEntityId: schedule.id,
+        dedupeKey: `fotos-solicitud:${schedule.id}`,
       });
     }
   }
@@ -184,12 +187,10 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
         { semanaInicio, estado: 'solicitado' },
         { semanaInicio, estado: 'recordatorio_enviado' },
       ],
-      relations: { empleada: { usuario: true } },
+      relations: { empleada: true },
     });
 
     for (const schedule of pendientes) {
-      const usuario = schedule.empleada?.usuario;
-      if (!usuario?.telegramChatId) continue;
       if (schedule.recordatoriosEnviados >= maxRecordatorios) continue;
 
       // Un solo aviso por dia: si el de hoy ya salio, se espera al siguiente.
@@ -197,49 +198,47 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
 
       const numero = schedule.recordatoriosEnviados + 1;
       const restantes = maxRecordatorios - numero;
+      const gracia = await this.weeklyContentService.esSemanaDeGracia(
+        schedule.empleadaId,
+        semanaInicio,
+      );
 
       /*
        * Nivel 2: tiene plazo, no urgencia. Pero se le cobra una multa si se le
        * pasa, asi que enterarse tarde le cuesta dinero.
+       *
+       * La clave de dedupe lleva el numero de aviso: si el guardado del
+       * contador falla tras el envio, la pasada siguiente no lo repite.
        */
-      if (usuario.id) {
-        try {
-          await this.notifications.notificar(usuario.id, {
-            titulo: 'Te faltan tus fotos de la semana',
-            cuerpo:
-              restantes > 0
-                ? `Te quedan ${restantes} recordatorios antes de la multa.`
-                : 'Es el último recordatorio antes de la multa.',
-            url: '/empleada/portal?seccion=fotos',
-            tag: `fotos-${schedule.id}`,
-            tipo: AVISO_FOTOS_SEMANALES,
-          });
-        } catch (err) {
-          this.logger.error(
-            'Error enviando el aviso push de las fotos semanales:',
-            err,
-          );
-        }
-      }
+      await this.avisar(schedule.empleada?.usuarioId, {
+        titulo: `Te faltan tus fotos de la semana (${numero} de ${maxRecordatorios})`,
+        cuerpo: this.cuerpoDelRecordatorio(restantes, gracia),
+        url: PORTAL_FOTOS_PATH,
+        tag: `fotos-${schedule.id}`,
+        tipo: AVISO_FOTOS_SEMANALES,
+        relatedEntityId: schedule.id,
+        dedupeKey: `fotos-recordatorio:${schedule.id}:${numero}`,
+      });
 
       schedule.estado = 'recordatorio_enviado';
       schedule.recordatorioAt = new Date();
       schedule.recordatoriosEnviados = numero;
       await this.scheduleRepo.save(schedule);
-
-      await this.enviarAvisoDeFotos(usuario, {
-        nombre: schedule.empleada.nombreArtistico,
-        titulo: `Recordatorio ${numero} de ${maxRecordatorios}`,
-        cuerpo: [
-          'Todavia no recibimos tus fotos de esta semana.',
-          restantes > 0
-            ? `Te ${restantes === 1 ? 'queda' : 'quedan'} ${restantes} ${
-                restantes === 1 ? 'aviso' : 'avisos'
-              } antes de que se aplique la multa.`
-            : 'Este es el ultimo aviso: si no las subes, se aplicara la multa.',
-        ].join('\n'),
-      });
     }
+  }
+
+  private cuerpoDelRecordatorio(restantes: number, gracia: boolean): string {
+    if (gracia) {
+      return restantes > 0
+        ? 'Esta semana no hay multa, pero a partir de la proxima si. Subelas desde tu portal.'
+        : 'Ultimo aviso. Esta semana no hay multa, pero a partir de la proxima si.';
+    }
+    if (restantes <= 0) {
+      return 'Es el ultimo aviso: si no las subes, se aplicara la multa.';
+    }
+    return `Te ${restantes === 1 ? 'queda' : 'quedan'} ${restantes} ${
+      restantes === 1 ? 'aviso' : 'avisos'
+    } antes de que se aplique la multa.`;
   }
 
   /**
@@ -249,6 +248,10 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
    * a que alguien lo revisara: la consecuencia ahora es inmediata y visible en
    * el corte. El reporte se sigue registrando para que quede en el historial
    * disciplinario, pero ya no es lo unico que pasa.
+   *
+   * En la semana de gracia el ciclo se cierra igual (`falta_aplicada`, para que
+   * el ERP la vea atrasada y la pasada siguiente no la vuelva a evaluar), pero
+   * sin multa ni reporte: la gracia es justamente no tener consecuencia.
    */
   private async handleExhaustedReminders(semanaInicio: string) {
     const { maxRecordatorios, importeMulta } =
@@ -259,14 +262,39 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
         { semanaInicio, estado: 'solicitado' },
         { semanaInicio, estado: 'recordatorio_enviado' },
       ],
-      relations: { empleada: { usuario: true } },
+      relations: { empleada: true },
     });
 
     for (const schedule of pendientes) {
       if (schedule.recordatoriosEnviados < maxRecordatorios) continue;
       if (schedule.multaAplicadaAt) continue;
 
+      const usuarioId = schedule.empleada?.usuarioId;
       const aplicada = new Date();
+
+      if (
+        await this.weeklyContentService.esSemanaDeGracia(
+          schedule.empleadaId,
+          semanaInicio,
+        )
+      ) {
+        schedule.estado = 'falta_aplicada';
+        schedule.faltaAt = aplicada;
+        await this.scheduleRepo.save(schedule);
+
+        await this.avisar(usuarioId, {
+          titulo: 'Esta semana no se aplico multa',
+          cuerpo:
+            'No recibimos tus fotos, pero era tu semana de gracia. A partir de la proxima, agotar los avisos tiene multa.',
+          url: PORTAL_FOTOS_PATH,
+          tag: `fotos-${schedule.id}`,
+          tipo: AVISO_FOTOS_SEMANALES,
+          relatedEntityId: schedule.id,
+          dedupeKey: `fotos-gracia:${schedule.id}`,
+        });
+        continue;
+      }
+
       schedule.estado = 'falta_aplicada';
       schedule.faltaAt = aplicada;
       schedule.multaAplicadaAt = aplicada;
@@ -297,19 +325,16 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
         }),
       );
 
-      const usuario = schedule.empleada?.usuario;
-      if (!usuario?.telegramChatId) continue;
-
-      await this.enviarAvisoDeFotos(usuario, {
-        nombre: schedule.empleada.nombreArtistico,
+      await this.avisar(usuarioId, {
         titulo: 'Se aplico una multa por tus fotos semanales',
-        cuerpo: [
-          `Se agotaron los ${maxRecordatorios} recordatorios sin recibir tus fotos.`,
-          registrada
-            ? `Se cargo una multa de $${importeMulta.toFixed(2)} a tu corte de esta semana.`
-            : 'Se registro el incumplimiento en tu historial.',
-          'Todavia puedes subirlas desde tu portal para regularizar tu catalogo.',
-        ].join('\n'),
+        cuerpo: registrada
+          ? `Se cargo una multa de ${FORMATO_MONEDA.format(importeMulta)} a tu corte. Todavia puedes subirlas desde tu portal.`
+          : 'Se registro el incumplimiento en tu historial. Todavia puedes subirlas desde tu portal.',
+        url: PORTAL_FOTOS_PATH,
+        tag: `fotos-${schedule.id}`,
+        tipo: AVISO_SANCION,
+        relatedEntityId: schedule.id,
+        dedupeKey: `fotos-multa:${schedule.id}`,
       });
     }
   }
@@ -397,49 +422,23 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Manda un aviso de fotos con el boton que abre el portal en su seccion.
+   * Manda un aviso de fotos por push.
    *
-   * El pase es de un solo uso y de vida corta, igual que el del comando
-   * /portal: el enlace viaja por un chat cuyo historial no controlamos.
-   *
-   * Si el pase no se puede emitir, el aviso sale igual pero sin boton: quedarse
-   * sin recordatorio es peor que quedarse sin atajo.
+   * `notificar` no lanza, pero el ciclo recorre a todas las modelos y un fallo
+   * inesperado con una no puede dejar a las demas sin aviso ni sin multa.
    */
-  private async enviarAvisoDeFotos(
-    usuario: { id: string; telegramChatId: string | null },
-    mensaje: { nombre: string; titulo: string; cuerpo: string },
+  private async avisar(
+    usuarioId: string | null | undefined,
+    aviso: Aviso,
   ): Promise<void> {
-    if (!usuario.telegramChatId) return;
-
-    const texto = [
-      `*${mensaje.titulo}*`,
-      '',
-      `Hola ${mensaje.nombre}.`,
-      mensaje.cuerpo,
-    ].join('\n');
-
-    let botones: ReturnType<typeof botonesDePortal> | undefined;
+    if (!usuarioId) return;
     try {
-      const { url } = await this.panelAccessService.issueLink(
-        usuario.id,
-        usuario.telegramChatId,
-        PORTAL_FOTOS_PATH,
-      );
-      botones = botonesDePortal(url, 'Subir mis fotos');
+      await this.notifications.notificar(usuarioId, aviso);
     } catch (error) {
       this.logger.warn(
-        `No se pudo adjuntar el acceso al portal para ${mensaje.nombre}:`,
+        `No se pudo enviar el aviso "${aviso.titulo}" a ${usuarioId}:`,
         error,
       );
     }
-
-    await this.telegramService
-      .sendMessage(usuario.telegramChatId, texto, {
-        parseMode: 'Markdown',
-        buttons: botones,
-      })
-      .catch((fallo) =>
-        this.logger.warn(`No se pudo avisar a ${mensaje.nombre}:`, fallo),
-      );
   }
 }

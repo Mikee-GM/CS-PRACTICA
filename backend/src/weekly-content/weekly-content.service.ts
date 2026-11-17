@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, LessThan } from 'typeorm';
 import {
   WeeklyPhotoSubmission,
   SubmissionStatus,
@@ -19,28 +19,28 @@ import {
   UploadService,
   type UploadedFilePayload,
 } from '../upload/upload.service';
-import { TelegramService } from '../telegram/telegram.service';
-import { botonesDePortal } from '../telegram/telegram-portal-buttons';
-import { PanelAccessService } from '../auth/panel-access.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { AVISO_FOTOS_SEMANALES } from '../notifications/avisos-catalogo';
 import { APP_TIME_ZONE } from '../common/locale';
 
 /** Tope por envio. Evita que un descuido cargue la galeria entera del telefono. */
 const MAX_PHOTOS_POR_ENVIO = 12;
 
-/** Destino del pase que acompaña al aviso: el portal, ya en sus fotos. */
-const PORTAL_FOTOS_PATH = '/empleada/portal?seccion=fotos';
+/** A donde lleva tocar un aviso de fotos: el portal, ya en sus fotos. */
+export const PORTAL_FOTOS_PATH = '/empleada/portal?seccion=fotos';
 
 /**
- * Quita del texto los caracteres con los que Telegram marca formato.
- *
- * El motivo del rechazo lo escribe una persona y viaja dentro de un mensaje en
- * Markdown: un asterisco o un corchete sueltos dejan el marcado sin cerrar y
- * Telegram responde 400 sin entregar nada, asi que el aviso se perdia entero
- * por un caracter. El Markdown antiguo no admite escapado fiable, de modo que
- * se retiran; ninguno hace falta para explicar que corregir en una foto.
+ * Tope del motivo dentro del aviso push. El motivo completo se lee en el
+ * portal; en la pantalla de bloqueo un texto largo se corta igual.
  */
-function sinMarcasMarkdown(texto: string): string {
-  return texto.replace(/[*_`[\]]/g, '');
+const MOTIVO_EN_AVISO_MAX = 120;
+
+function recortar(texto: string, max: number): string {
+  const limpio = texto.trim();
+  if (limpio.length <= max) {
+    return /[.!?]$/.test(limpio) ? limpio : `${limpio}.`;
+  }
+  return `${limpio.slice(0, max - 3).trimEnd()}...`;
 }
 
 @Injectable()
@@ -59,13 +59,9 @@ export class WeeklyContentService {
     @InjectRepository(EmpleadaFotosExclusivas)
     private readonly fotosExclusivasRepo: Repository<EmpleadaFotosExclusivas>,
     private readonly uploadService: UploadService,
-    /*
-     * Los dos ultimos entran por el aviso de rechazo: el motivo tiene que
-     * llegarle a la modelo por Telegram, con el pase que le abre el portal en
-     * sus fotos para que pueda reemplazarla sin buscar el enlace.
-     */
-    private readonly telegramService: TelegramService,
-    private readonly panelAccessService: PanelAccessService,
+    // Por el aviso de rechazo: el motivo tiene que llegarle a la modelo aunque
+    // no entre al portal por su cuenta.
+    private readonly notifications: NotificationsService,
   ) {}
 
   /**
@@ -170,15 +166,18 @@ export class WeeklyContentService {
     fotosPendientesDeRevision: number;
     multaAplicadaAt: string | null;
     importeMulta: number;
+    /** Esta semana agotar los avisos no cuesta multa (ver `esSemanaDeGracia`). */
+    semanaDeGracia: boolean;
   }> {
     const semanaInicio = this.getCurrentCycleFriday();
     const { maxRecordatorios, importeMulta } = await this.getFinePolicy();
 
-    const [schedule, fotosPendientes] = await Promise.all([
+    const [schedule, fotosPendientes, semanaDeGracia] = await Promise.all([
       this.scheduleRepo.findOne({ where: { empleadaId, semanaInicio } }),
       this.submissionRepo.count({
         where: { empleadaId, semanaInicio, estado: 'pendiente' },
       }),
+      this.esSemanaDeGracia(empleadaId, semanaInicio),
     ]);
 
     const recordatoriosEnviados = schedule?.recordatoriosEnviados ?? 0;
@@ -211,6 +210,7 @@ export class WeeklyContentService {
         ? schedule.multaAplicadaAt.toISOString()
         : null,
       importeMulta,
+      semanaDeGracia,
     };
   }
 
@@ -349,7 +349,7 @@ export class WeeklyContentService {
    * Validar una foto semanal: Aprobar (Pública o Privada) o Rechazar.
    *
    * El rechazo admite un motivo: se guarda para que la modelo lo vea en su
-   * portal y se le manda por Telegram. Sin el, "No aprobada" no le decia que
+   * portal y se le manda por push. Sin el, "No aprobada" no le decia que
    * corregir y volvia a mandar la misma clase de foto.
    */
   async reviewSubmission(
@@ -360,9 +360,9 @@ export class WeeklyContentService {
   ): Promise<WeeklyPhotoSubmission> {
     const submission = await this.submissionRepo.findOne({
       where: { id: submissionId },
-      // El usuario de la empleada entra por el aviso de rechazo: es quien
-      // tiene el chat de Telegram al que se manda el motivo.
-      relations: { empleada: { usuario: true } },
+      // La empleada entra por el aviso de rechazo: su `usuarioId` es a quien
+      // se le manda el motivo.
+      relations: { empleada: true },
     });
 
     if (!submission) {
@@ -424,60 +424,66 @@ export class WeeklyContentService {
   }
 
   /**
-   * Avisa por Telegram de una foto rechazada.
+   * Avisa por push de una foto rechazada.
    *
    * El aviso sale aunque no haya motivo: enterarse de que hay que reenviarla
    * ya es la mitad del recado, y esperar a que la modelo entre al portal por su
    * cuenta significaba, en la practica, que se enteraba dias despues.
    *
    * Nada de esto puede tumbar la revision: la decision ya esta guardada cuando
-   * se llama, asi que un fallo de Telegram se registra y se sigue.
+   * se llama, asi que un fallo del aviso se registra y se sigue.
    */
   private async avisarRechazo(
     submission: WeeklyPhotoSubmission,
   ): Promise<void> {
-    const usuario = submission.empleada?.usuario;
-    if (!usuario?.telegramChatId) return;
+    const usuarioId = submission.empleada?.usuarioId;
+    if (!usuarioId) return;
 
-    const nombre = submission.empleada?.nombreArtistico ?? '';
-    const texto = [
-      '*Una de tus fotos no fue aprobada*',
-      '',
-      nombre ? `Hola ${sinMarcasMarkdown(nombre)}.` : 'Hola.',
-      submission.motivoRechazo
-        ? `Motivo: ${sinMarcasMarkdown(submission.motivoRechazo)}`
-        : 'Administración no aprobó una de las fotos que enviaste esta semana.',
-      '',
-      'Puedes subir otra desde tu portal para reemplazarla.',
-    ].join('\n');
-
-    let botones: ReturnType<typeof botonesDePortal> | undefined;
+    const motivo = submission.motivoRechazo;
     try {
-      const { url } = await this.panelAccessService.issueLink(
-        usuario.id,
-        usuario.telegramChatId,
-        PORTAL_FOTOS_PATH,
-      );
-      botones = botonesDePortal(url, 'Subir otra foto');
+      await this.notifications.notificar(usuarioId, {
+        titulo: 'Una de tus fotos no fue aprobada',
+        cuerpo: motivo
+          ? `Motivo: ${recortar(motivo, MOTIVO_EN_AVISO_MAX)} Sube otra desde tu portal.`
+          : 'Sube otra desde tu portal para reemplazarla.',
+        url: PORTAL_FOTOS_PATH,
+        tag: `foto-rechazada-${submission.id}`,
+        tipo: AVISO_FOTOS_SEMANALES,
+        relatedEntityId: submission.id,
+        // Con la hora de la revision: una foto que se vuelve a rechazar tras
+        // aprobarse es otro aviso, no un duplicado del primero.
+        dedupeKey: `fotos-rechazo:${submission.id}:${
+          submission.revisadoAt?.getTime() ?? 0
+        }`,
+      });
     } catch (error) {
-      // Sin boton se sigue: quedarse sin aviso es peor que quedarse sin atajo.
       this.logger.warn(
-        `No se pudo adjuntar el acceso al portal para ${submission.empleadaId}:`,
+        `No se pudo avisar del rechazo a ${submission.empleadaId}:`,
         error,
       );
     }
+  }
 
-    await this.telegramService
-      .sendMessage(usuario.telegramChatId, texto, {
-        parseMode: 'Markdown',
-        buttons: botones,
-      })
-      .catch((fallo) =>
-        this.logger.warn(
-          `No se pudo avisar del rechazo a ${submission.empleadaId}:`,
-          fallo,
-        ),
-      );
+  /**
+   * Si este ciclo es la semana de gracia de la modelo: la primera en la que se
+   * le piden fotos.
+   *
+   * Hasta la Fase 5 solo se pedian fotos (y se multaba) a quien tenia Telegram
+   * vinculado. Al quitar ese filtro, las demas pasan a estar sujetas a la multa
+   * de golpe, y se decidio darles una semana sin multa para que conozcan el
+   * flujo del portal. Se deriva de la historia en vez de guardarse en una
+   * columna: es gracia la semana que no tiene ningun ciclo anterior. Quien ya
+   * estaba sujeta tiene ciclos previos y no la recibe; una modelo nueva si, que
+   * es lo mismo que necesita.
+   */
+  async esSemanaDeGracia(
+    empleadaId: string,
+    semanaInicio: string,
+  ): Promise<boolean> {
+    const anteriores = await this.scheduleRepo.count({
+      where: { empleadaId, semanaInicio: LessThan(semanaInicio) },
+    });
+    return anteriores === 0;
   }
 
   /**

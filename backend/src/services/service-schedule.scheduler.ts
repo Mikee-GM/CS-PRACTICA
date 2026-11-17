@@ -13,7 +13,7 @@ import {
   withAdvisoryLock,
 } from '../common/scheduling/advisory-lock';
 import { InjectBot } from 'nestjs-telegraf';
-import { Telegraf, Markup } from 'telegraf';
+import { Telegraf } from 'telegraf';
 import { Servicios } from './entities/service.entity';
 import { AiMessageService } from '../ai/ai-message.service';
 import { describeError } from '../common/errors/error-message';
@@ -21,6 +21,10 @@ import { APP_TIME_ZONE, APP_LOCALE } from '../common/locale';
 import { ServicesService } from './services.service';
 import { ConversationNotifier } from '../conversations/conversation-notifier';
 import { avisarAlChatWeb, unaVez } from './aviso-al-cliente-web';
+import {
+  NotificationsService,
+  type Aviso,
+} from '../notifications/notifications.service';
 
 @Injectable()
 export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
@@ -39,6 +43,7 @@ export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
     private readonly aiMessageService: AiMessageService,
     private readonly dataSource: DataSource,
     private readonly servicesService: ServicesService,
+    private readonly notifications: NotificationsService,
     // Opcional por lo mismo que en `ServicesService`: sin el no hay canal web.
     @Optional()
     private readonly conversationNotifier?: ConversationNotifier,
@@ -52,8 +57,10 @@ export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
       token.includes('fake') ||
       token.startsWith('123456789')
     ) {
+      // Solo se apaga el envio al cliente de Telegram: el recordatorio al
+      // personal sale por push y al cliente web por su chat.
       this.logger.log(
-        'Bot de Telegram deshabilitado en local; omitiendo programador de citas.',
+        'Bot de Telegram deshabilitado en local; el recordatorio de citas no saldra por Telegram.',
       );
       this.telegramEnabled = false;
     }
@@ -83,10 +90,7 @@ export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
       await withAdvisoryLock(
         this.dataSource,
         ADVISORY_LOCKS.serviceSchedule,
-        () =>
-          this.telegramEnabled
-            ? this.checkUpcomingScheduledServices()
-            : Promise.resolve(),
+        () => this.checkUpcomingScheduledServices(),
       );
     } catch (error) {
       this.logger.warn(
@@ -139,8 +143,7 @@ export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
       },
       relations: {
         cliente: true,
-        empleada: { usuario: true, jefe: true },
-        jefe: true,
+        empleada: true,
       },
     });
 
@@ -161,73 +164,33 @@ export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
           },
         );
 
-        // 1. Notificar a la Empleada
-        const empChatId = service.empleada?.usuario?.telegramChatId;
-        if (empChatId && empChatId !== '111111111') {
-          try {
-            await this.bot.telegram.sendMessage(
-              empChatId,
-              `⏰ *Recordatorio de Cita Próxima (en 45 min):*\n\n` +
-                `Tu servicio con *${
-                  service.cliente?.nombreTelegram || 'el cliente'
-                }* está programado para las *${horaStr}*.\n` +
-                `Por favor prepárate para el traslado.`,
-              { parse_mode: 'Markdown' },
-            );
-          } catch (err) {
-            this.logger.error(
-              `Error notificando recordatorio a la empleada ${service.empleadaId}:`,
-              err,
-            );
-          }
-        }
-
-        // 2. Notificar al Jefe con opciones de transporte
-        const bossGroupId =
-          service.jefe?.grupoTelegramId ||
-          service.empleada?.jefe?.grupoTelegramId;
-        const threadId = service.telegramThreadId
-          ? Number(service.telegramThreadId)
-          : undefined;
-
-        if (bossGroupId) {
-          const transportButtons = Markup.inlineKeyboard([
-            [
-              Markup.button.callback(
-                '🚗 Despachar Chofer',
-                `sched_trans:${service.id}:chofer`,
-              ),
-              Markup.button.callback(
-                '🚗 Pedir Uber',
-                `sched_trans:${service.id}:uber`,
-              ),
-            ],
-          ]);
-
-          try {
-            await this.bot.telegram.sendMessage(
-              bossGroupId,
-              `⏰ *Recordatorio de Cita Próxima (en 45 min):*\n\n` +
-                `• *Empleada:* ${service.empleada?.nombreArtistico || 'Empleada'}\n` +
-                `• *Cliente:* ${service.cliente?.nombreTelegram || 'Cliente'}\n` +
-                `• *Hora de Cita:* ${horaStr}\n` +
-                `• *Transporte preferido:* ${(
-                  service.transporteAgendado || 'No asignado'
-                ).toUpperCase()}\n\n` +
-                `Elige el transporte para iniciar el traslado:`,
-              {
-                parse_mode: 'Markdown',
-                message_thread_id: threadId,
-                ...transportButtons,
-              },
-            );
-          } catch (err) {
-            this.logger.error(
-              `Error notificando recordatorio al jefe de servicio ${service.id}:`,
-              err,
-            );
-          }
-        }
+        /*
+         * 1 y 2. Empleada y jefe, por push. Antes iban por Telegram: un mensaje
+         * directo a la modelo y otro al grupo del jefe con botones para elegir
+         * transporte. El grupo con temas no se porta (Fase 5); el jefe elige el
+         * transporte desde su panel. El texto no lleva nombres ni hora: el aviso
+         * se ve en la pantalla de bloqueo y el detalle vive tras el toque.
+         */
+        await this.avisar(service.empleada?.usuarioId, {
+          titulo: 'Tu cita es en 45 minutos',
+          cuerpo: 'Preparate para el traslado. Toca para ver el servicio.',
+          url: '/empleada/servicio',
+          tag: `cita-${service.id}`,
+          requireInteraction: true,
+          relatedEntityId: service.id,
+          dedupeKey: `employee:appointment_reminder:${service.id}:event`,
+        });
+        await this.avisar(service.jefeId, {
+          titulo: 'Cita en 45 minutos',
+          cuerpo: `Elige el transporte para iniciar el traslado (preferido: ${
+            service.transporteAgendado || 'sin asignar'
+          }).`,
+          url: '/jefe',
+          tag: `cita-${service.id}`,
+          requireInteraction: true,
+          relatedEntityId: service.id,
+          dedupeKey: `boss:appointment_reminder:${service.id}:event`,
+        });
 
         // 3. Notificar al Cliente mediante la IA
         const respaldoRecordatorio = `Hola amor, te confirmo que todo está listo para nuestra cita de las ${horaStr}, ya me estoy preparando.`;
@@ -241,7 +204,8 @@ export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
             respaldoRecordatorio,
           ),
         );
-        if (service.cliente?.telegramChatId) {
+        // El cliente de Telegram sigue hasta la Fase 6; la Fase 5 es del personal.
+        if (this.telegramEnabled && service.cliente?.telegramChatId) {
           try {
             const clientMsg = await redactarRecordatorio();
             await this.bot.telegram.sendMessage(
@@ -264,6 +228,22 @@ export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
           { respaldo: respaldoRecordatorio },
         );
       }
+    }
+  }
+
+  /**
+   * `notificar` no lanza, pero el ciclo recorre todas las citas proximas y un
+   * fallo inesperado con una no puede dejar sin recordatorio a las demas.
+   */
+  private async avisar(
+    usuarioId: string | null | undefined,
+    aviso: Aviso,
+  ): Promise<void> {
+    if (!usuarioId) return;
+    try {
+      await this.notifications.notificar(usuarioId, aviso);
+    } catch (err) {
+      this.logger.error(`Error enviando el aviso push "${aviso.titulo}":`, err);
     }
   }
 }

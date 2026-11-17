@@ -5,9 +5,9 @@ import { WeeklyContentService } from './weekly-content.service';
  *
  * Rechazar era un boton mudo: la modelo veia "No aprobada" en el portal y
  * volvia a mandar la misma clase de foto. Ahora el motivo se guarda con la
- * decision y sale por Telegram, asi que lo que no puede fallar es que el motivo
+ * decision y sale por push, asi que lo que no puede fallar es que el motivo
  * acompañe al rechazo, que una aprobacion posterior lo borre, y que un fallo
- * del bot no tumbe la revision, que ya esta decidida cuando se avisa.
+ * del aviso no tumbe la revision, que ya esta decidida cuando se avisa.
  */
 describe('WeeklyContentService.reviewSubmission', () => {
   const submissionRepo = { findOne: jest.fn(), save: jest.fn() };
@@ -20,8 +20,7 @@ describe('WeeklyContentService.reviewSubmission', () => {
     create: jest.fn(),
   };
   const uploadService = {};
-  const telegramService = { sendMessage: jest.fn() };
-  const panelAccessService = { issueLink: jest.fn() };
+  const notifications = { notificar: jest.fn() };
 
   /*
    * Se construye por nombre y no con `new`.
@@ -42,23 +41,19 @@ describe('WeeklyContentService.reviewSubmission', () => {
     fotosRepo,
     fotosExclusivasRepo,
     uploadService,
-    telegramService,
-    panelAccessService,
+    notifications,
   });
 
   const revisor = { id: 'user-admin' } as any;
 
-  /** Envio pendiente de una modelo con chat vinculado. */
+  /** Envio pendiente de una modelo. */
   const envio = (overrides: Record<string, unknown> = {}) => ({
     id: 'sub-1',
     empleadaId: 'emp-1',
     url: 'https://cdn.example.com/foto.jpg',
     estado: 'pendiente',
     motivoRechazo: null,
-    empleada: {
-      nombreArtistico: 'Modelo',
-      usuario: { id: 'user-1', telegramChatId: '555' },
-    },
+    empleada: { nombreArtistico: 'Modelo', usuarioId: 'user-1' },
     ...overrides,
   });
 
@@ -66,19 +61,15 @@ describe('WeeklyContentService.reviewSubmission', () => {
     jest.clearAllMocks();
     // Se reasigna en cada prueba y no solo al declararlo: clearAllMocks borra
     // las llamadas pero conserva la implementacion, asi que el rechazo que
-    // simula el bot caido se arrastraria a las siguientes.
-    telegramService.sendMessage.mockResolvedValue(undefined);
+    // simula el aviso caido se arrastraria a las siguientes.
+    notifications.notificar.mockResolvedValue(1);
     submissionRepo.save.mockImplementation((valor) => valor);
     fotosRepo.find.mockResolvedValue([]);
     fotosRepo.create.mockImplementation((valor) => valor);
-    panelAccessService.issueLink.mockResolvedValue({
-      url: 'https://portal.example.com/acceso/abc',
-    });
   });
 
-  it('guarda el motivo y se lo manda a la modelo por Telegram', async () => {
-    const pendiente = envio();
-    submissionRepo.findOne.mockResolvedValue(pendiente);
+  it('guarda el motivo y se lo manda a la modelo por push', async () => {
+    submissionRepo.findOne.mockResolvedValue(envio());
 
     const resultado = await service.reviewSubmission(
       'sub-1',
@@ -90,9 +81,10 @@ describe('WeeklyContentService.reviewSubmission', () => {
     expect(resultado.estado).toBe('rechazada');
     expect(resultado.motivoRechazo).toBe('La foto esta movida.');
 
-    const [chatId, texto] = telegramService.sendMessage.mock.calls[0];
-    expect(chatId).toBe('555');
-    expect(texto).toContain('La foto esta movida.');
+    const [usuarioId, aviso] = notifications.notificar.mock.calls[0];
+    expect(usuarioId).toBe('user-1');
+    expect(aviso.cuerpo).toContain('La foto esta movida.');
+    expect(aviso.url).toBe('/empleada/portal?seccion=fotos');
   });
 
   it('avisa igual cuando se rechaza sin motivo', async () => {
@@ -107,47 +99,43 @@ describe('WeeklyContentService.reviewSubmission', () => {
     // Un motivo vacio no debe guardarse como cadena: el portal distingue
     // "sin motivo" por el nulo.
     expect(resultado.motivoRechazo).toBeNull();
-    expect(telegramService.sendMessage).toHaveBeenCalledTimes(1);
+    expect(notifications.notificar).toHaveBeenCalledTimes(1);
   });
 
-  /**
-   * El motivo lo escribe una persona y viaja en un mensaje con formato
-   * Markdown: un asterisco suelto hacia que Telegram devolviera 400 y el aviso
-   * se perdiera entero.
-   */
-  it('quita del motivo las marcas que romperian el Markdown', async () => {
+  it('recorta un motivo largo para que quepa en el aviso', async () => {
     submissionRepo.findOne.mockResolvedValue(envio());
 
     await service.reviewSubmission(
       'sub-1',
       'rechazar',
       revisor,
-      'Se ve *raro* el _fondo_ [aqui]',
+      'x'.repeat(300),
     );
 
-    const [, texto] = telegramService.sendMessage.mock.calls[0];
-    expect(texto).toContain('Se ve raro el fondo aqui');
+    const [, aviso] = notifications.notificar.mock.calls[0];
+    expect(aviso.cuerpo.length).toBeLessThan(200);
+    expect(aviso.cuerpo).toContain('...');
   });
 
-  it('no avisa a una modelo sin chat de Telegram vinculado', async () => {
+  it('avisa a la modelo aunque no tenga Telegram vinculado', async () => {
     submissionRepo.findOne.mockResolvedValue(
-      envio({ empleada: { nombreArtistico: 'Modelo', usuario: null } }),
+      envio({
+        empleada: {
+          nombreArtistico: 'Modelo',
+          usuarioId: 'user-1',
+          usuario: { telegramChatId: null },
+        },
+      }),
     );
 
-    const resultado = await service.reviewSubmission(
-      'sub-1',
-      'rechazar',
-      revisor,
-      'Falta luz.',
-    );
+    await service.reviewSubmission('sub-1', 'rechazar', revisor, 'Falta luz.');
 
-    expect(resultado.motivoRechazo).toBe('Falta luz.');
-    expect(telegramService.sendMessage).not.toHaveBeenCalled();
+    expect(notifications.notificar).toHaveBeenCalledTimes(1);
   });
 
-  it('deja la revision guardada aunque falle el envio por Telegram', async () => {
+  it('deja la revision guardada aunque falle el aviso', async () => {
     submissionRepo.findOne.mockResolvedValue(envio());
-    telegramService.sendMessage.mockRejectedValue(new Error('bot caido'));
+    notifications.notificar.mockRejectedValue(new Error('push caido'));
 
     await expect(
       service.reviewSubmission('sub-1', 'rechazar', revisor, 'Falta luz.'),
@@ -167,6 +155,44 @@ describe('WeeklyContentService.reviewSubmission', () => {
 
     expect(resultado.estado).toBe('aprobada_publica');
     expect(resultado.motivoRechazo).toBeNull();
-    expect(telegramService.sendMessage).not.toHaveBeenCalled();
+    expect(notifications.notificar).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Decision 3 de la Fase 5: al quitar el filtro por Telegram, la primera semana
+ * en la que se le piden fotos a una modelo no tiene multa.
+ */
+describe('WeeklyContentService.esSemanaDeGracia', () => {
+  const scheduleRepo = { count: jest.fn() };
+  const service = Object.create(
+    WeeklyContentService.prototype,
+  ) as WeeklyContentService;
+  Object.assign(service, { scheduleRepo });
+
+  beforeEach(() => jest.clearAllMocks());
+
+  it('es gracia la semana sin ningun ciclo anterior', async () => {
+    scheduleRepo.count.mockResolvedValue(0);
+
+    await expect(service.esSemanaDeGracia('emp-1', '2026-08-21')).resolves.toBe(
+      true,
+    );
+
+    // Solo cuentan los ciclos anteriores, nunca el de la propia semana.
+    const [{ where }] = scheduleRepo.count.mock.calls[0];
+    expect(where.empleadaId).toBe('emp-1');
+    expect(where.semanaInicio).toMatchObject({
+      _type: 'lessThan',
+      _value: '2026-08-21',
+    });
+  });
+
+  it('no es gracia para quien ya tuvo ciclos', async () => {
+    scheduleRepo.count.mockResolvedValue(4);
+
+    await expect(service.esSemanaDeGracia('emp-1', '2026-08-21')).resolves.toBe(
+      false,
+    );
   });
 });

@@ -25,8 +25,8 @@ import {
 } from 'class-validator';
 
 /**
- * Tope del motivo de rechazo. Da para explicar qué corregir sin que el aviso
- * de Telegram se convierta en un muro de texto.
+ * Tope del motivo de rechazo. Da para explicar qué corregir sin que el portal
+ * lo muestre como un muro de texto.
  */
 const MOTIVO_RECHAZO_MAX = 300;
 
