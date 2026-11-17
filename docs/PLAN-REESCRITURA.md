@@ -513,3 +513,29 @@ Pendiente:
 - Un jefe de relevo que no actuo no recibe los SSE de esas conversaciones.
 - La bandeja trae 200 como mucho y ordena por atencion despues del LIMIT.
 - Frontend del panel del equipo (paso 11).
+
+## Fase 3: feed de posts (decisiones tomadas)
+
+Plan del planificador resuelto con sus recomendaciones; la unica diferencia es el
+tope de video.
+
+- Solo posts con foto o video y likes. Visibles solo para clientes con sesion y
+  declaracion 18+ (`/feed` general y `/modelos/[slug]`).
+- Estados: borrador, pendiente, aprobado, rechazado, archivado. Un post aprobado
+  que se edita vuelve a pendiente y se oculta hasta nueva aprobacion (conserva
+  likes). "Borrar" por la modelo archiva; solo borrador y rechazado se borran de
+  verdad, con su media en R2.
+- Los posts de un jefe o admin se aprueban al enviarlos, solo para modelos
+  dentro de su alcance, con rastro (`author_role`, `reviewed_by`).
+- Media: imagenes JPEG/PNG/WEBP; video MP4 y WebM (MOV solo si es MP4 compatible),
+  validados por bytes. Tope de video 20 MB y 30 s declarados, hasta 10 medias y
+  3 videos por post; poster generado en el navegador; sin transcodificacion y
+  sin autoplay con sonido. Se mantiene el limite de body de Next (20 MB); subir a
+  50 MB queda para una fase con URLs prefirmadas. El jefe verifica el video
+  completo antes de aprobar.
+- Contador de likes desnormalizado con trigger (filosofia Heavy DB).
+- Lo aprobado es publico para quien tenga la URL (bucket publico, sin politica de
+  retencion por ahora). La moderacion automatica y la verificacion de edad
+  reforzada siguen pendientes: esta fase no las cierra.
+- Pasos: B1 migracion y entidades, B2 subida de media, B3 API de la modelo, B4
+  API del cliente, B5 API del jefe, B6 avisos, F0-F4 frontend, I1 integracion.
