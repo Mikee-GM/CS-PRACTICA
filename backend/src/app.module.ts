@@ -43,6 +43,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { TeamChannelModule } from './team-channel/team-channel.module';
 import { ConversationsModule } from './conversations/conversations.module';
 import { PostsModule } from './posts/posts.module';
+import { FeedModule } from './feed/feed.module';
 
 @Module({
   imports: [
@@ -217,6 +218,7 @@ import { PostsModule } from './posts/posts.module';
     TeamChannelModule,
     ConversationsModule,
     PostsModule,
+    FeedModule,
   ],
   controllers: [AppController],
   providers: [

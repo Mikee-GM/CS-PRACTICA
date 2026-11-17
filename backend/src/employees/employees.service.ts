@@ -283,6 +283,9 @@ export class EmployeesService {
    * relacion `usuario` para filtrar por `activo`, y se elimina del resultado
    * antes de devolverlo; el frontend unicamente usa los ids escalares
    * (`usuarioId`, `jefeId`, `jefeSecundarioId`), que sí son columnas propias.
+   *
+   * El criterio de visibilidad es el de `modelo-visible.ts` (chat web y feed),
+   * aplicado aqui en memoria; si cambia uno, hay que cambiar el otro.
    */
   async findAllActive(): Promise<Empleadas[]> {
     const employees = await this.empleadasRepository.find({

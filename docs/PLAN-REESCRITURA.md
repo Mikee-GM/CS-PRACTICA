@@ -635,3 +635,36 @@ Pendiente:
   `GET /staff/conversations/:id`.
 - Los specs de `components/jefe/today` siguen sin ejecutarse por
   `jest-environment-jsdom`; `next build` sigue cayendo por `@playwright/test`.
+
+### Fase 3, B4
+
+API del feed para el cliente. Modulo nuevo `feed` (`FeedModule`, registrado en
+`AppModule`), aparte de `PostsModule`.
+
+- Rutas, todas `JwtAuthGuard` + `RolesGuard` + `@Roles('cliente')`:
+  `GET /feed` y `GET /feed/models/:slug` (`?cursor=&limit=`, limit 1..20, 10 por
+  defecto) devuelven `{ items, nextCursor }`; `PUT` y `DELETE
+  /feed/posts/:id/like` (con `CsrfGuard`, 60/min) devuelven `{ liked, likeCount }`.
+- La ficha sale de `Clientes.usuarioId` (sin ficha 404) y exige
+  `mayor_de_edad_declarado_at` (sin ella 403), tambien para los likes.
+- Solo posts `aprobado` de modelos visibles; lo demas responde 404.
+- Paginacion por `(published_at, id)` descendente, comparada como tupla en SQL,
+  pidiendo `limit + 1`. El cursor es base64url de `published_at|id` con la fecha
+  en texto con microsegundos, para no perder posts del mismo milisegundo; mal
+  formado responde 400.
+- Una consulta por pagina: modelo por JOIN, `likedByMe` por EXISTS y media con
+  `json_agg` ordenado por `position`.
+- Likes idempotentes: visibilidad y mutacion en un CTE (`INSERT ... ON CONFLICT
+  DO NOTHING` / `DELETE ... USING`) y `like_count` releido en otra sentencia,
+  despues del trigger.
+- Criterio de visibilidad de la modelo extraido a `employees/modelo-visible.ts`;
+  `ConversationsService` delega en el sin cambiar su SQL ni sus specs.
+- `GET /catalog/employees` no cambia ni expone posts.
+
+Pendiente:
+
+- Probar contra Postgres real la tupla del cursor y sus indices, el EXISTS, el
+  `json_agg`, los CTE con `ON CONFLICT` / `DELETE ... USING` y la relectura del
+  contador tras el trigger; probar las rutas de punta a punta.
+- `EmployeesService.findAllActive` sigue aplicando el criterio de visibilidad en
+  memoria: unificarlo con `modelo-visible.ts`.

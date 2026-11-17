@@ -11,6 +11,10 @@ import { DataSource, Not, Repository } from 'typeorm';
 import { Clientes } from '../clients/entities/client.entity';
 import { describeError } from '../common/errors/error-message';
 import { Empleadas } from '../employees/entities/employee.entity';
+import {
+  condicionModeloVisible,
+  joinUsuarioDeModelo,
+} from '../employees/modelo-visible';
 import { RealtimeEventsService } from '../realtime/realtime.service';
 import {
   admiteComprobante,
@@ -359,11 +363,10 @@ export class ConversationsService {
   }
 
   /**
-   * Mismo criterio que el catalogo publico (`EmployeesService.findAllActive`):
-   * catalogo activo, usuario activo y sin sancion vigente. No se reutiliza ese
-   * metodo porque carga y ordena a todas las modelos con fotos, extras y
-   * disponibilidad; aqui basta con saber si una concreta es visible. Si el
-   * criterio del catalogo cambia, hay que cambiar tambien este.
+   * Mismo criterio que el catalogo publico y el feed (`modelo-visible.ts`).
+   * No se reutiliza `EmployeesService.findAllActive` porque carga y ordena a
+   * todas las modelos con fotos, extras y disponibilidad; aqui basta con
+   * saber si una concreta es visible.
    *
    * Una modelo oculta responde 404, igual que una inexistente: el catalogo
    * tampoco revela que existe.
@@ -372,17 +375,9 @@ export class ConversationsService {
     const filas: Array<{ id: string }> = await this.dataSource.query(
       `SELECT e.id
        FROM empleadas e
-       INNER JOIN usuarios u ON u.id = e.usuario_id
+       ${joinUsuarioDeModelo('e', 'u')}
        WHERE e.id = $1
-         AND e.catalogo_activo = true
-         AND u.activo = true
-         AND NOT EXISTS (
-           SELECT 1 FROM disciplinary_sanctions s
-           WHERE s.subject_type = 'employee'
-             AND s.subject_id = e.id
-             AND s.status = 'active'
-             AND s.starts_at <= now()
-             AND (s.type = 'permanent_ban' OR s.ends_at > now()))`,
+         AND ${condicionModeloVisible('e', 'u')}`,
       [employeeId],
     );
     if (filas.length === 0) {
