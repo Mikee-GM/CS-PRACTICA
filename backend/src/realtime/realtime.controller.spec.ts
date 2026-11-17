@@ -1,4 +1,5 @@
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { Usuarios } from '../users/entities/user.entity';
 import { RealtimeController } from './realtime.controller';
 
 /*
@@ -12,11 +13,13 @@ describe('RealtimeController.sseChofer', () => {
   const realtimeEventsService = { getDriverStream: jest.fn() };
   const empleadasRepository = { findOne: jest.fn() };
   const choferesRepository = { findOne: jest.fn() };
+  const clientesRepository = { findOne: jest.fn() };
 
   const controller = new RealtimeController(
     realtimeEventsService as any,
     empleadasRepository as any,
     choferesRepository as any,
+    clientesRepository as any,
   );
 
   beforeEach(() => jest.clearAllMocks());
@@ -45,5 +48,88 @@ describe('RealtimeController.sseChofer', () => {
       NotFoundException,
     );
     expect(realtimeEventsService.getDriverStream).not.toHaveBeenCalled();
+  });
+});
+
+/*
+ * Los canales con JwtAuthGuard no pasan por RolesGuard: cada metodo comprueba
+ * el rol a mano. Estas pruebas fijan que el canal del cliente solo admite
+ * clientes y que un cliente --cuenta que cualquiera puede crear-- no abre los
+ * canales del personal.
+ */
+describe('RealtimeController: canal del cliente y separacion de roles', () => {
+  const realtimeEventsService = {
+    getClientStream: jest.fn(),
+    getJefesStream: jest.fn(),
+    getBossStream: jest.fn(),
+    getEmployeeStream: jest.fn(),
+  };
+  const empleadasRepository = { findOne: jest.fn() };
+  const choferesRepository = { findOne: jest.fn() };
+  const clientesRepository = { findOne: jest.fn() };
+
+  const controller = new RealtimeController(
+    realtimeEventsService as any,
+    empleadasRepository as any,
+    choferesRepository as any,
+    clientesRepository as any,
+  );
+
+  const peticion = (rol: Usuarios['rol'], id = 'user-1') => ({
+    user: { id, rol } as Usuarios,
+  });
+
+  beforeEach(() => jest.clearAllMocks());
+
+  it('conecta al cliente con el canal de su ficha', async () => {
+    clientesRepository.findOne.mockResolvedValue({ id: 'cliente-1' });
+    const stream = {} as any;
+    realtimeEventsService.getClientStream.mockReturnValue(stream);
+
+    const result = await controller.sseCliente(peticion('cliente'));
+
+    expect(clientesRepository.findOne).toHaveBeenCalledWith({
+      where: { usuarioId: 'user-1' },
+      select: { id: true },
+    });
+    expect(realtimeEventsService.getClientStream).toHaveBeenCalledWith(
+      'cliente-1',
+    );
+    expect(result).toBe(stream);
+  });
+
+  it('responde 404 al cliente sin ficha', async () => {
+    clientesRepository.findOne.mockResolvedValue(null);
+
+    await expect(
+      controller.sseCliente(peticion('cliente')),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(realtimeEventsService.getClientStream).not.toHaveBeenCalled();
+  });
+
+  it.each(['jefe', 'admin', 'empleada', 'chofer'] as const)(
+    'niega el canal del cliente al rol %s',
+    async (rol) => {
+      await expect(controller.sseCliente(peticion(rol))).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(clientesRepository.findOne).not.toHaveBeenCalled();
+      expect(realtimeEventsService.getClientStream).not.toHaveBeenCalled();
+    },
+  );
+
+  it('niega a un cliente el canal de jefes', () => {
+    expect(() => controller.sseJefes(peticion('cliente'))).toThrow(
+      ForbiddenException,
+    );
+    expect(realtimeEventsService.getJefesStream).not.toHaveBeenCalled();
+    expect(realtimeEventsService.getBossStream).not.toHaveBeenCalled();
+  });
+
+  it('niega a un cliente el canal de empleada', async () => {
+    await expect(
+      controller.sseEmpleada(peticion('cliente')),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(empleadasRepository.findOne).not.toHaveBeenCalled();
   });
 });

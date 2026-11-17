@@ -15,6 +15,8 @@ const CANALES: Record<string, string> = {
   jefes: "/realtime/sse/jefes",
   empleada: "/realtime/sse/empleada",
   chofer: "/realtime/sse/chofer",
+  // Chat web del cliente: el backend solo deja entrar a cuentas `cliente`.
+  cliente: "/realtime/sse/cliente",
 };
 
 export async function GET(request: Request) {

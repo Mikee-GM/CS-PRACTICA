@@ -12,6 +12,7 @@ import { Observable } from 'rxjs';
 import { RealtimeEventsService } from './realtime.service';
 import { Empleadas } from '../employees/entities/employee.entity';
 import { Choferes } from '../drivers/entities/driver.entity';
+import { Clientes } from '../clients/entities/client.entity';
 import {
   ApiControllerDocs,
   ApiSseTokenDocs,
@@ -37,9 +38,11 @@ import { Usuarios } from '../users/entities/user.entity';
  * (DriverPortalController) en vez de JwtAuthGuard. Ese guard si sabe aceptar
  * el token por query de forma segura, verificando tipo y firma.
  *
- * Se elimino tambien `sse/cliente`: esperaba un rol 'cliente' que no existe en
- * la enumeracion de Usuarios y que ningun punto del backend emite, asi que era
- * inalcanzable.
+ * `sse/cliente` existio antes con un rol que no estaba en la enumeracion y se
+ * elimino por inalcanzable. Vuelve con las cuentas de cliente del chat web:
+ * usa JwtAuthGuard como jefes y empleadas y comprueba el rol a mano, porque
+ * este controlador no pasa por RolesGuard. Por eso cada canal rechaza
+ * cualquier rol que no sea el suyo, y un cliente no abre ninguno ajeno.
  */
 @Controller('realtime')
 @ApiControllerDocs('realtime')
@@ -50,6 +53,8 @@ export class RealtimeController {
     private readonly empleadasRepository: Repository<Empleadas>,
     @InjectRepository(Choferes)
     private readonly choferesRepository: Repository<Choferes>,
+    @InjectRepository(Clientes)
+    private readonly clientesRepository: Repository<Clientes>,
   ) {}
 
   @Sse('sse/jefes')
@@ -83,6 +88,26 @@ export class RealtimeController {
       throw new NotFoundException('Perfil de empleada no encontrado');
     }
     return this.realtimeEventsService.getEmployeeStream(empleada.id);
+  }
+
+  @Sse('sse/cliente')
+  @UseGuards(JwtAuthGuard)
+  @ApiSseTokenDocs('Conectar canal SSE para cliente autenticado')
+  async sseCliente(
+    @Req() request: { user: Usuarios },
+  ): Promise<Observable<any>> {
+    const user = request.user;
+    if (user.rol !== 'cliente') {
+      throw new ForbiddenException('Solo clientes pueden conectar aquí');
+    }
+    const cliente = await this.clientesRepository.findOne({
+      where: { usuarioId: user.id },
+      select: { id: true },
+    });
+    if (!cliente) {
+      throw new NotFoundException('Perfil de cliente no encontrado');
+    }
+    return this.realtimeEventsService.getClientStream(cliente.id);
   }
 
   @Sse('sse/chofer')

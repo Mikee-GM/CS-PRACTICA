@@ -211,3 +211,49 @@ Pendiente:
 - Decidir como responde el canal web a `LimiteDiarioDeIaError`.
 - `telegram/telegram-booking-lifecycle.ts` ya no tiene importadores; se puede
   borrar.
+
+### Fase 2, pasos 4 y 5
+
+API REST del chat web para el cliente y canal SSE del cliente. Sin IA todavia.
+
+- `ConversationsService` y `ConversationsController` (`/conversations`), todas
+  las rutas con `JwtAuthGuard` + `RolesGuard` + `@Roles('cliente')`; las que
+  escriben, ademas `CsrfGuard` y limite de ritmo (abrir chat 10/min, mensajes
+  20/min).
+  - `GET /conversations`: bandeja del cliente (hasta 100), con nombre artistico,
+    slug y foto de perfil de la modelo (lo mismo que publica el catalogo),
+    estado y ultimo mensaje recortado a 140 caracteres. No expone `mode`.
+  - `POST /conversations` `{ employeeId }`: 201 si crea, 200 si devuelve la
+    abierta. Valida que la modelo sea visible con el criterio de
+    `EmployeesService.findAllActive`, replicado en una consulta puntual. La
+    carrera del indice unico parcial se resuelve capturando la violacion y
+    releyendo.
+  - `GET /conversations/:id/messages?cursor=&limit=`: descendente, maximo 50. El
+    cursor es el id del ultimo mensaje entregado y se compara por
+    `(created_at, id)` en SQL. El adjunto solo entrega su tipo.
+  - `POST /conversations/:id/messages` `{ body, clientMessageId }`: idempotente
+    (201 nuevo, 200 reintento, sin eventos ni turno en el reintento), 409 si la
+    conversacion esta cerrada (despues de comprobar la idempotencia). La
+    conversacion se bloquea con `FOR UPDATE` mientras se inserta.
+- Seguridad: todo parte de la ficha `Clientes` de la sesion. Una conversacion
+  ajena o inexistente responde 404, y una cuenta sin ficha tambien.
+- Eventos en `conversations/conversation-events.ts`: `message_created`,
+  `conversation_mode_changed`, `receipt_status`, `typing`, con forma
+  `{ type, data }` y solo ids. Cada mensaje del cliente emite `message_created`
+  al cliente y a los jefes de la modelo.
+- Punto de extension del paso 6: `CONVERSATION_TURN_HANDLER`
+  (`ConversationTurnHandler.onClientMessage`), opcional. Se invoca tras el commit
+  sin esperarlo y sus errores solo se registran.
+- `GET /realtime/sse/cliente`: `JwtAuthGuard` y rol comprobado a mano; el resto
+  de roles recibe 403. El proxy de Next (`/api/realtime/sse?canal=cliente`) ya lo
+  conoce.
+
+Pendiente:
+
+- Ejecutar contra una base real la bandeja (`LATERAL`, `$2::uuid IS NULL`), la
+  paginacion por cursor, el `FOR UPDATE` y la captura de la violacion del indice
+  parcial (sin Docker).
+- Decidir si el cliente ve el `mode` y como se sirven los adjuntos (paso 7).
+- El criterio de visibilidad de la modelo esta duplicado respecto al catalogo.
+- En `sse/chofer` (`PortalAuthGuard`, sin rol) un cliente recibe 404 y no 403:
+  no abre canal, pero no es un rechazo explicito por rol.
