@@ -1882,3 +1882,193 @@ los archivos tocados.
   reserva (puede ser `null` si no tiene duracion pactada); no se valida contra
   `totalFinal`. Es una decision de producto si el chat web debe validar contra
   la cuenta final.
+
+## Fase 6, D1-K configuracion y docs
+
+- Retirada la variable `NEXT_PUBLIC_TELEGRAM_BOT_USERNAME` de `catalogo-cs/Dockerfile`, `docker-compose.yml`, `.env.example` y `catalogo-cs/.env.example`.
+- `backend/.env.example`: eliminado el bloque Telegram (`TELEGRAM_BOT_TOKEN`, `ADMIN_SPY_CHAT_ID`, `TELEGRAM_WEBHOOK_BASE_URL`, `APP_INSTANCE_COUNT`, `TELEGRAM_PROVIDER_TOKEN`).
+- `deploy/nginx/colombia-sexys.conf.template`: eliminado el bloque comentado del webhook de Telegram.
+- Docs actualizadas: `CLAUDE.md` (sin seccion Telegram, `/jefe` como bandeja de chats web), `README.md`, `catalogo-cs/ARCHITECTURE.md`, `backend/Docs.md`, `docs/QA_LOCAL_OPERATIONS.md`, `docs/RELEASE_READINESS_OPERATIONS.md`, y reglas de `backend/.agents/rules/` (se quitaron las secciones 11 a 18 de backend-rules y la de IDs de chat de heavydb-rules).
+- Pendiente: `backend/.env` (no versionado) contiene un `TELEGRAM_BOT_TOKEN` real y un `TELEGRAM_PROVIDER_TOKEN`; deben revocarse y retirarse a mano. Si el backend aun valida `APP_INSTANCE_COUNT` con Joi, quitar esa validacion en el carril de codigo.
+
+## Fase 6, D1-E entidades y recibos
+
+- `services/entities/service.entity.ts`: fuera `telegramResumenDefinitivoId`,
+  `telegramClienteMensajeId`, `telegramEmpleadaMensajeId`, `clienteTelegramId`,
+  `telegramThreadId` y la relacion `conversacionesTelegrams` (con su import).
+- `trips/entities/trip.entity.ts`: fuera `telegramUberFileId`,
+  `telegramEmpleadaMsgChoferCaminoId`, `telegramEmpleadaMsgChoferLlegadoId` y
+  `telegramChoferMsgOfertaId`.
+- `services/entities/payment-receipt-validation.entity.ts`: fuera `chatId` y
+  `telegramFileId`; `clienteTelegram` pasa a `clienteNombre` conservando la
+  columna `cliente_telegram` (temporal: la migracion D2 la renombra y borra
+  `chat_id`, `telegram_file_id` y las columnas de las otras entidades).
+- `booking/booking-receipts.ts` (`NuevaValidacion` sin `chatId`/`telegramFileId`),
+  `booking/aceptacion-de-borrador.ts` (fuera la opcion `clienteTelegramId`),
+  `conversations/staff-conversations.service.ts` (deja de leer el chat de
+  Telegram del cliente; `clientesRepository` queda sin uso en ese servicio) y
+  los specs correspondientes.
+- Pendiente: errores de uso en `services/*.ts`, `drivers`, `group-services` y
+  `god-eye.service.ts` (`telegram_uber_file_id`) son de otros carriles. Los
+  comentarios y el tipo `CanalDeReserva = 'telegram' | 'web'` de `booking/`
+  son del carril F (IA/canal).
+- Verificacion: tsc y jest no corren completos mientras
+  `clients/entities/client.entity.ts:80` (otro carril) tenga un caracter
+  invalido; de mis archivos no hay errores propios.
+
+### Fase 6, D1-B drivers
+
+- `backend/src/drivers/` ya no referencia Telegram, `modoBot` ni `modo_bot`
+  (comentarios incluidos; `rg -i "telegram|modoBot|modo_bot"` sin coincidencias).
+- `drivers.module.ts`: fuera `TelegramModule`. `driver-trips.service.ts`: fuera
+  `TelegramService` y los envios al cliente por Telegram; la llegada y el cierre
+  del regreso salen solo por `avisarAlChatWeb`. No lee ni escribe columnas
+  `telegram_*` de viaje.
+- `drivers.service.ts` y `dto/create-driver.dto.ts`: fuera `telegramChatId`
+  (alta, edicion y el select de choferes cercanos) y `modoBot`.
+  `entities/driver.entity.ts`: fuera `modoBot`.
+- Specs: reescritos `driver-trips.service.spec.ts` y
+  `driver-trips.avisos-chat-web.spec.ts` (el caso "cliente Telegram" se cambio
+  por "cliente sin cuenta web"); `diagnostico-de-reparto.spec.ts` pierde el caso
+  que verificaba la ausencia de Telegram.
+- Pendiente: la columna `modo_bot` de `choferes` requiere una migracion de
+  `DROP COLUMN IF EXISTS` (no creada aqui). Las suites de `drivers` que importan
+  `ServicesService` no corren hasta que el carril de services termine.
+
+## Fase 6, D1-C group-services
+
+- `group-services.module.ts`: fuera `TelegramModule`.
+- `group-services.service.ts`: fuera `@InjectBot`, los envios a Telegram, las lecturas de `ConversacionesTelegram`, `clienteTelegramId` y `notifyPendingTransferTelegram`. Borrados los metodos sin llamadas: `createFromDetectedIntent`, `setLocationFromClient`, `confirmClientCatalog`, `toggleCatalogSelection`, `findActiveRequestByClientTelegram`, `findRequestByThread`, `setTelegramThread`, `recordRequestConversation`, `participantAccess`, `finishByResponsible` y los auxiliares `compactUuid`/`expandUuid`. Se conserva `finishByResponsibleUser` (lo usa el portal de la empleada).
+- Todo grupo nace del chat web: `requestMessages`, `sendRequestMessage` y `requestClientLocation` responden 409 si la solicitud no tiene conversacion; `openCatalog` responde siempre 409 (el jefe elige las modelos desde el panel).
+- `entities/group-service-request.entity.ts`: fuera `telegramThreadId` (la columna `telegram_thread_id` queda para la migracion D2).
+- `grupo-en-chat-web.service.ts`: comentarios sin Telegram. El SQL crudo conserva `cl.nombre_telegram` hasta la migracion D2 (la columna aun existe); el alias de salida sigue siendo `client_nombre`.
+- Pruebas: `group-services.chat-web.spec.ts` sin bot; casos nuevos de 409 sin conversacion.
+- Pendiente: `bookingSessionId` se conserva (lo usa el chat web). Los 3 suites que importan `services.service.ts` no cargan hasta que el carril de services quite su import de `telegram-conversations`; tsc no reporta errores en `src/group-services/`. Tambien hay un error de sintaxis en `clients/entities/client.entity.ts:80` (otro carril) que rompia la carga antes.
+
+## Fase 6, D1-D personas y clientes
+
+- `users`: `Usuarios` pierde `telegramChatId` (y su indice unico `usuarios_telegram_chat_id_key`), `grupoTelegramId`, `telegramVerificationCode` y `telegramVerificationExpiresAt`; `create-user.dto.ts` pierde `telegramChatId`.
+- `employees`: `Empleadas` pierde `modoBot`; `create-employee.dto.ts` pierde `telegramChatId` y `modoBot`; `employees.service.ts` ya no guarda el chat al crear.
+- `clients`: `Clientes` pierde `telegramChatId`, `adminTopicId`, `conversacionesTelegrams` y el indice `clientes_telegram_chat_id_key`. La propiedad `nombreTelegram` ahora es `nombre` sobre la columna `nombre_telegram` (temporal hasta D2). `CreateClientDto` solo lleva `nombre`; el buscador filtra por nombre; la ficha (`client-dossier`) expone `nombre` y ya no `telegramChatId`.
+- `client-accounts`: al registrarse, `clientes.nombre` se rellena desde `usuarios.nombre`.
+- `discipline`: fuera `createClientRating` (queda `createClientRatingIdempotent`); su spec se conserva, renombrado el `describe`. Los SQL siguen con `c.nombre_telegram` y alias `clienteNombre`.
+- `conversations/staff-conversations.service.ts`: sin cambios mios (otro carril ya habia quitado el uso de `telegramChatId`); el SQL conserva `cl.nombre_telegram` con alias `client_nombre`.
+- `locations`: fuera `registrarPorTelegram` y `sujetoPorTelegram`, con sus casos en el spec.
+- `employee-reports`: fuera `createFromClient`, `createFromDriver`, `CreateTelegramReportDto`, `report-callback.ts` y `report-callback.spec.ts` (el callback solo servia a los botones del bot).
+- `candidate-screening`: fuera `bindTelegram`, `getScreeningByToken` y la columna `telegramChatId` de la entidad.
+- `employee-onboarding`: fuera `findPendingDeliveries`, `findDueReminders`, `markWelcomeSent/RegulationSent/ReminderSent` y las columnas `welcomeSentAt`, `regulationSentAt`, `reminderSentAt` (se conservan `web_reminder_count` y `last_web_reminder_at`).
+- Migracion D2 pendiente (`IF EXISTS`): `DROP COLUMN` en `usuarios` (`telegram_chat_id`, `grupo_telegram_id`, `telegram_verification_code`, `telegram_verification_expires_at`), `empleadas.modo_bot`, `clientes` (`telegram_chat_id`, `admin_topic_id`), `candidate_screenings.telegram_chat_id`, `employee_onboarding` (`welcome_sent_at`, `regulation_sent_at`, `reminder_sent_at`), con sus indices unicos; y renombrar `clientes.nombre_telegram` a `nombre` (luego actualizar el `name` de la columna y los SQL crudos de discipline, conversations, group-services y services).
+- Pendiente: `employee-onboarding.controller.ts` (fuera de mi lista) conserva los endpoints `requeueDelivery`/`requeueUserDelivery`, que ahora solo limpian `lastDeliveryError`; conviene retirarlos. El resto de carriles aun usa `nombreTelegram`/`telegramChatId` de `Clientes` en `services`, `drivers` y `group-services` (specs y `service-history.service.ts`).
+
+### Fase 6, D1-J: frontend admin y catalogo
+
+- Borrados: `app/admin/chat-monitor`, `app/admin/bitacora-chat`,
+  `components/erp/chat-monitor-*`, `components/admin/dev/ConversationLogViewer.tsx`,
+  `lib/actions/telegram-conversations.ts`, `lib/actions/dev-chat-log.ts`,
+  `lib/telegram-links.ts`, `components/layout/telegram-float.tsx`. Los paneles de
+  admin sobre Telegram no tienen sustituto (decision del dueno).
+- God Eye: fuera pausar/reanudar IA y el interceptor de chat
+  (`lib/actions/god-eye.ts`, `GodEyeDashboard`); la fila de servicios queda a
+  ancho completo. Detalle de servicio: fuera la pestana de chat y sus acciones
+  (`lib/data/services.ts`, `service-detail-dialog.tsx`).
+- Catalogo publico: `modelos-mapper`, `types/index.ts`, `ModelProfile`,
+  `ModelModal`, `FichaModelo` sin `contactLink` ni `telegramChatId`; el perfil
+  solo ofrece el chat web. `Hero` ofrece "Pidelo en el chat con la modelo", que
+  lleva al catalogo (el chat detecta `servicio_grupal`). `contactLabel` se
+  conserva porque el backend aun lo guarda.
+- Tipos: `lib/types.ts` sin `telegramChatId`, `telegramFileId`,
+  `telegramUberFileId`, `telegramThreadId`, `telegramId`, `clienteTelegramId`;
+  `nombreTelegram` pasa a `nombre` y `clienteTelegram` a `clienteNombre` en
+  todos los consumidores. `ClienteResumen` y `ClientDossier` traen `telefono`
+  opcional; el listado y la ficha de clientes muestran telefono en lugar del ID
+  de Telegram (confirmar que la API lo devuelva). El formulario de servicio
+  manual manda solo `clienteId`.
+- Actions: `registro.ts`, `jefes.ts`, `choferes.ts` y `CandidateDetailClient` ya
+  no mandan ni leen `telegramChatId`. `asuntosPendientes` pierde los parametros
+  `empleadas` y `choferes` (ya no se usaban).
+- Textos y comentarios sin Telegram en `components/empleada`, `chofer`, `ui`,
+  `erp`, `lib` y `app/admin`. E2E: fuera el caso de la foto de la bandeja del
+  jefe y sus fixtures en `e2e/`.
+- Verificacion: `tsc --noEmit` solo falla en `.next/types` (rutas borradas, se
+  regenera al compilar), specs con testing-library, e2e y `app/jefe|components/jefe`
+  (carril I: `getServiceMessages`/`sendServiceMessage` y la pestana `chats`).
+  eslint sin errores; jest `chats-del-equipo` 26 pruebas verdes.
+- Pendiente en carril I: `TeamOperations.tsx` aun usa `nombreTelegram` del tipo
+  `Client` (ahora `nombre`) y los respaldos de `GroupServiceOrganizer`.
+
+### Fase 6, D1-F IA (canal unico web)
+
+- `ai/prompts/prompts.ts`: `CanalChat` queda en `'web'`; se borran la cabecera,
+  la regla de emojis y las ramas de Telegram, y `REGLAS_PERMANENTES` (solo queda
+  `REGLAS_PERMANENTES_WEB`). El texto web no cambia. `canal` sigue siendo un
+  campo opcional de `EmpleadaPromptParams` porque el snapshot lo pasa.
+- `ai/ai-guardrails.ts`: fuera `detectBotProbe`, `detectIdentityQuestion`, el
+  catalogo `IN_CHARACTER_DEFLECTIONS` con emojis y la cadencia
+  (`MENSAJES_ENTRE_EMOJIS`). `detectSonda`, `pickDeflection` y `limitarEmojis`
+  conservan un parametro de canal ignorado solo para no romper
+  `prompt-web-snapshot.spec.ts`. `looksLikeAssistantRegister` sigue estricto por
+  defecto y el chat web pasa `permitirIdentidad`.
+- `booking/`: `CanalDeReserva` queda en `'web'`; `vestirRespuestaIa` siempre
+  aplica el comportamiento web; `booking.service.ts` ya no pasa `'web'` a
+  `detectSonda`/`pickDeflection`; comentarios de Telegram retirados en
+  `chat-channel`, `booking-ai.service`, `booking-state` y `booking.module`.
+  `aplicarLimiteDiario` se conserva como opcion generica.
+- Specs: sin casos de Telegram en `prompts.spec.ts`, `ai-guardrails.spec.ts` y
+  `respuesta-ia.spec.ts`. `jest ai/ booking/ prompt-web-snapshot --ci`: 19
+  suites, 327 pruebas, 28 snapshots sin tocar el `.snap`.
+- Pendiente (fuera del carril): menciones en comentarios de
+  `booking-lifecycle`, `booking.errors`, `datos-de-reserva`, `marcas-de-control`,
+  `extractores-de-reserva(.spec)`, `entities/customer-booking-session.entity` y
+  `booking-receipts` (carril E).
+
+### Fase 6, D1-G/H (resto del backend, scripts y e2e)
+
+- G: se quitaron las menciones a Telegram en comentarios y textos de `common/*`
+  (el guard y el filtro ahora hablan de "contexto que no es HTTP"; sus specs
+  usan `rpc` en vez de `telegraf`), `notifications`, `upload`, `employee-photos`,
+  `challenges`, `weekly-content` (+specs, sin `telegramChatId` en los dobles),
+  `service-feedback`, `manual-services`, `team-channel`, `reglamento-*` y
+  `conversations/{alcance-del-jefe,comprobante-pendiente,conversation-notifier,web-turn-handler}`.
+- H: `limpiar-base-datos.ts` ya no toca `conversaciones_telegram`,
+  `telegram_link_attempts`, `employee_telegram_bots` ni `telegram_sessions`.
+  `sembrar-datos-demo.ts` sin columnas de Telegram en usuarios, clientes,
+  servicios, viajes, comprobantes, solicitudes grupales y screenings; se quito
+  el guion de `conversaciones_telegram` (la tabla desaparece) y los
+  `welcome/regulation/reminder_sent_at` de onboardings (ahora
+  `web_reminder_count` y `last_web_reminder_at`). `sembrar-dominios.spec.ts` sin
+  indices unicos de Telegram.
+- e2e: `servicio-sin-telegram.e2e-spec.ts` pasa a `servicio-completo.e2e-spec.ts`
+  (sin espia de `callApi`); `LISTA-MANUAL-SIN-TELEGRAM.md` pasa a
+  `LISTA-MANUAL-SERVICIO.md`. `app.e2e-spec.ts` sin bot, `TelegramService` ni
+  `telegram_sessions`, y se eliminaron los tres tests que dependian de
+  `TelegramBookingUpdate` y `telegram-conversations` (pre-service, acceso cruzado
+  y dos servicios del mismo cliente); su cobertura equivalente del chat web
+  queda pendiente de escribir sobre `conversations`.
+- Pendiente: las columnas `clientes.nombre_telegram` y
+  `payment_receipt_validations.cliente_telegram` siguen con ese nombre fisico
+  (el seed y el e2e las usan); renombrarlas es de D3. `upload.service.ts` conserva
+  `EVIDENCE_SOURCE_HOSTS = ['api.telegram.org']` porque
+  `ServicesService` (servicios.service.ts ~6143) aun llama a
+  `uploadEvidenceFromUrl`; al retirar ese caller, borrar el metodo y la lista.
+  `drivers/diagnostico-de-reparto.spec.ts` conserva dos aserciones negativas
+  sobre `telegram_chat_id` y 'Telegram' (carril B). `limpiar-base-datos.ts` no
+  lista las tablas `conversations` y `messages` (aparecen como "no contempladas").
+
+### Fase 6, D1-I frontend jefe
+
+- `/jefe` ("Hoy") pasa a ser la bandeja de chats web: `app/jefe/page.tsx` monta `TodayHeader` (interruptor de jornada y "Crear servicio") y `BandejaChatsWeb`. `TodayHeader` ahora lleva el dialogo de alta y recibe `employees`. `app/jefe/chats-web/page.tsx` es `redirect("/jefe")`. `SelectorDeBandeja` queda con "Chats" y "Publicaciones"; `JefeLayoutClient` ya solo trata `/jefe` como bandeja de Hoy.
+- `components/jefe/today/` queda en `TodayHeader`, `today-model.ts` (solo estado operacional: `operationStateForService`, `canBossAuthorizeService`, `canAssignTransport`, `presentServiceState`) y `transport-assignment-model.ts`. Borrados 22 archivos (bandeja de Telegram, inspector, specs). Specs ajustados: `today-model.spec.ts` y `transport-assignment.spec.tsx` (sin `ServiceInspector` ni `shouldRefreshTodayWorkspace`).
+- `lib/actions/jefe-panel.ts`: fuera `getJefeTodaySnapshot`, las acciones de conversacion/borrador de `/telegram-conversations/*`, `getServiceMessages` y `sendServiceMessage`. Borrado `jefe-panel.read.spec.ts` (su unica prueba era el snapshot).
+- `TeamOperations.tsx` sin chat del servicio ni botones "Chat"; usa `cliente.nombre` y ya no lee `telegramUberFileId`. `GroupServiceOrganizer.tsx` usa `client.nombre` con respaldo `clientNombre`.
+- Pendiente: `transport-assignment.spec.tsx` no corre aqui porque falta `jest-environment-jsdom` y `@testing-library/react` (heredado). Sin prueba de navegador; la altura de la bandeja bajo el encabezado (`13rem` movil / `6rem` escritorio) es estimada.
+
+### Fase 6, D1-A services
+
+- `services.module.ts`: fuera `TelegramModule` (y el `forwardRef`), `TelegramSession` y `ConversacionesTelegram`.
+- `services.service.ts`: fuera `@InjectBot`, `conversationsRepository`, `telegramSessionRepository`, `clientesRepository` (quedo sin uso), `TELEGRAM_MESSAGE_RETENTION_MS` y todos los envios por bot. Borrados `sendPostServiceSurvey` (la encuesta era solo Telegram; sus dos llamadas en `finishByEmployee` y `sendFinalReceiptAndAward` salen), `notifyClientsWaitingForEmployee`, `cerrarConversacionDelCliente`, `recordAgencyMessage`, `changePaymentMethodByClient`, `dispatchScheduledTrip` y `saveUberScreenshot`. `avisarDeLaReprogramacion`, `notifyServiceCancelled`, `aceptar`, `extendByEmployee`, `rechazar`, `recalculateScheduledSuccessor`, `activateScheduledSuccessor`, `sweepServicesEndingSoon`, `cancelarServicioPorDemora`, `requestOpenEndedFinalPayment` y `updateUberStatus` conservan solo el gemelo web (`avisarClienteWeb`) y el push. La oferta de "otras modelos" de `cancelarServicioPorDemora` era solo tarjetas de Telegram y se fue con ellas: al cliente web se le remite al catalogo (`textoAvisoCancelacionPorDemora`). `requestOpenEndedFinalPayment` ya no recibe `clienteChatId` y sale si el cliente no tiene cuenta web; `finishByEmployee` deja de devolver `clienteChatId` (`clienteNombre` sigue). Ya no se lee ni escribe `telegramResumenDefinitivoId`, `telegramChoferMsgOfertaId`, `telegramUberFileId` (solo `uberScreenshotUrl`), `clienteTelegramId`, `usuario.telegramChatId` ni los ids de mensaje/tema. `cliente.nombreTelegram` pasa a `cliente.nombre` y `receipt.clienteTelegram` a `receipt.clienteNombre`.
+- `service-schedule.scheduler.ts`: fuera `@InjectBot`, `ConfigService`, la lectura de `TELEGRAM_BOT_TOKEN` y el recordatorio al cliente de Telegram (queda push al personal y chat web al cliente).
+- `god-eye.service.ts`: fuera `telegram_chat_id`, `grupo_telegram_id`, `telegram_uber_file_id` y los alias `clienteTelegramChatId`, `clienteTelefono`, `jefeTelegram`, `telegramChatId`, `grupoTelegramId`. El historial de chat del diagnostico (`conversaciones_telegram`) ahora sale de `messages` unido a `conversations` por `service_id`, con los mismos alias (`emisor`, `mensaje`, `iaActiva` fijo en false, `enviadoAt`).
+- `admin-service-lifecycle.service.ts`: fuera el UPDATE y el conteo sobre `conversaciones_telegram` (y `conversationsPreserved` del resultado de auditoria).
+- `dto/create-service.dto.ts` sin `clienteTelegramId`; comentarios de `aviso-al-cliente-web.ts`, `service-duration.ts` y `dto/reschedule-service.dto.ts` sin Telegram. `service-history.service.ts` usa `cliente.nombre`.
+- Specs: borrados `services.post-service.spec.ts` y `cancelacion-cierra-la-conversacion.spec.ts`; el resto sin dobles de bot/sesion y con las expectativas de Telegram sustituidas por las del gemelo web (`conversationNotifier.notifyClient`) en cancelacion, reprogramacion, cierre por la empleada, aceptacion (fin proximo) y el scheduler; `services.avisos-chat-web.spec.ts` sin los casos "cliente de Telegram".
+- Pendiente: la columna `clientes.nombre_telegram` sigue en el SQL de `god-eye.service.ts` (alias de salida ya `clienteNombre`) hasta D2/D3. Con `saveUberScreenshot` borrado, `UploadService.uploadEvidenceFromUrl` y `EVIDENCE_SOURCE_HOSTS` (`api.telegram.org`) quedan sin llamadores: borrarlos en el carril de upload. El frontend (`GodEyeDashboard.tsx`, `lib/types.ts`) aun puede leer los alias eliminados de god-eye (`clienteTelefono`, `jefeTelegram`, `telegramUberFileId`).

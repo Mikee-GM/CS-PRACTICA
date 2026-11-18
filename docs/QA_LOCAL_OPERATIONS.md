@@ -24,7 +24,6 @@ export JWT_SECRET=local-qa-jwt-secret-000000000000000000000001
 export JWT_REFRESH_SECRET=local-qa-refresh-secret-000000000000000000002
 export COOKIE_SECRET=local-qa-cookie-secret-000000000000000000003
 export DEFAULT_ADMIN_EMAIL=admin.qa@ejemplo.local DEFAULT_ADMIN_PASSWORD=AdminQaLocal-2026
-export TELEGRAM_BOT_TOKEN=123456789:dummy-local-no-launch
 export R2_ENDPOINT=https://local.invalid R2_ACCESS_KEY_ID=local R2_SECRET_ACCESS_KEY=local
 export R2_BUCKET_NAME=local-qa R2_PUBLIC_URL=https://media.local.invalid
 corepack pnpm migration:run
@@ -32,7 +31,7 @@ QA_LOCAL_SEED=CONFIRM_LOCAL_QA corepack pnpm db:qa:seed
 corepack pnpm start:dev
 ```
 
-El token incluye `dummy`, por lo que Telegraf no inicia polling. R2, Push, IA y Telegram no deben probarse como proveedores reales en este entorno.
+R2, Push e IA no deben probarse como proveedores reales en este entorno.
 
 ## 3. Frontend
 
@@ -40,7 +39,6 @@ En otra terminal, desde `catalogo-cs/`:
 
 ```bash
 BACKEND_API_URL=http://localhost:4000 \
-NEXT_PUBLIC_TELEGRAM_BOT_USERNAME=qa_bot \
 corepack pnpm dev
 ```
 

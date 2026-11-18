@@ -21,16 +21,6 @@ trigger: always_on
     fechaRegistro: Date;
     ```
 
-- **IDs de Chat de Telegram:**
-  - Las IDs de Telegram deben almacenarse en la base de datos como `bigint`.
-  - En JavaScript/TypeScript, deben mapearse como `string` para evitar pérdida de precisión por el límite `Number.MAX_SAFE_INTEGER`.
-  - En TypeORM:
-    ```typescript
-    @Column({ type: 'bigint' })
-    @Index()
-    clienteTelegramId: string;
-    ```
-
 ## 2. Roles, Seguridad y Perfiles
 
 - **Entidad Usuario Unificada:**

@@ -88,8 +88,6 @@ services:
     build:
       context: .
       dockerfile: catalogo-cs/Dockerfile
-      args:
-        NEXT_PUBLIC_TELEGRAM_BOT_USERNAME: ${NEXT_PUBLIC_TELEGRAM_BOT_USERNAME:-}
     restart: unless-stopped
     env_file:
       - ./catalogo-cs/.env.local

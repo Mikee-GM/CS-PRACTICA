@@ -15,18 +15,14 @@ solicitud del cliente.
    cerró su jornada, el servicio pasa al secundario; si tampoco hay, cae en
    cualquier jefe o administrador activo y disponible.
 
-3. Generar un código de un solo uso con `POST /api/v1/users/:id/telegram-otp`.
+3. Entregarle sus credenciales de acceso al portal web.
 
-4. La empleada busca el bot en su Telegram, lo inicia y escribe
-   `/vincular XXXXXX` con el código generado.
-
-Con eso queda operativa. El comando `/vincular_grupo` no es para ella: sirve
-para que un jefe o un administrador enlace su propio grupo de Telegram, que es
-donde se abre un tema por cada cliente.
+Con eso queda operativa. Los jefes atienden a los clientes desde la bandeja de
+chats web (`/jefe`).
 
 ## Qué recibe la empleada
 
-El bot le avisa de cada cita nueva. Es su jefe quien acepta o rechaza el
+El portal y las notificaciones web le avisan de cada cita nueva. Es su jefe quien acepta o rechaza el
 servicio, así que a ella le llega ya resuelto.
 
 Durante el servicio recibe:
@@ -44,11 +40,9 @@ su siguiente servicio.
 
 ## Portal web
 
-Todo lo anterior también se hace desde su portal (`/empleada/portal`), sin
+Todo lo anterior se hace desde su portal (`/empleada/portal`), sin
 depender de encontrar el mensaje correcto en el chat: marcar que va en camino y
 que llegó, agregar extras, finalizar el servicio y subir sus fotos semanales.
-Los avisos de Telegram llevan un botón que abre el portal en la sección
-correspondiente.
+Los avisos llevan un enlace que abre el portal en la sección correspondiente.
 
-Las fotos semanales solo se suben por el portal. Si manda una foto por el chat,
-el bot se lo explica y le da el acceso directo.
+Las fotos semanales solo se suben por el portal.

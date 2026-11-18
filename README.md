@@ -6,7 +6,7 @@ operación interna. Incluye:
 - `catalogo-cs`: Next.js 15 y React 19.
 - `backend`: NestJS 11, TypeORM y PostgreSQL.
 - PostgreSQL 16 administrado por Docker Compose.
-- Cloudflare R2 para imágenes, Telegram e integración opcional con Groq.
+- Cloudflare R2 para imágenes e integración opcional con Groq.
 
 ## Requisitos
 

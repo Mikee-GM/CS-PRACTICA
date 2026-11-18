@@ -28,7 +28,7 @@ pnpm check            # lint + test + build, la misma secuencia que CI
 Una sola prueba o un solo archivo del backend:
 
 ```bash
-corepack pnpm --filter backend exec jest telegram-booking-session
+corepack pnpm --filter backend exec jest conversations
 corepack pnpm --filter backend exec jest -t "nombre del it"
 ```
 
@@ -87,13 +87,13 @@ Consecuencias que hay que respetar:
 
 - `BACKEND_API_URL` es exclusivamente de servidor (`http://backend:4000` en
   Docker, `http://localhost:4000` en local). Nunca la expongas al cliente.
-- El frontend no accede a PostgreSQL, R2, JWT, Telegram ni IA. Toda
+- El frontend no accede a PostgreSQL, R2, JWT ni IA. Toda
   persistencia, autenticación y subida de archivos pasa por el backend.
 - Si cambias la versión de la API, `lib/api-constants.ts` es la fuente única:
   vive aparte de `api-server.ts` porque el middleware corre en runtime edge y no
   puede importar `next/headers`.
 - `main.ts` excluye del prefijo `/api` las rutas de infraestructura
-  (`health/live`, `health/ready`, `telegram/webhook/:recordId`), y esas además
+  (`health/live`, `health/ready`), y esas además
   llevan `@Version(VERSION_NEUTRAL)` porque `exclude` no quita la versión.
 
 ### Backend: módulos de feature
@@ -117,7 +117,7 @@ para el chofer más cercano, etc. El backend inserta y recarga, o recibe el valo
 ya calculado. Detalle completo en `backend/.agents/rules/heavydb-rules.md`.
 
 Tipos obligatorios: dinero en `numeric` con `ColumnNumericTransformer`, fechas en
-`timestamptz`, IDs de chat de Telegram en `bigint` mapeados a `string`.
+`timestamptz`.
 
 ### Dinero y zona horaria
 
@@ -164,30 +164,13 @@ de la outbox) debe envolverse en
 `common/scheduling/advisory-lock.ts#withAdvisoryLock`, con una clave numérica
 propia. Sin él, dos réplicas duplican cada mensaje.
 
-### Telegram
-
-`nestjs-telegraf`. Hay **un solo bot** (`TELEGRAM_BOT_TOKEN`) para todos:
-clientes, empleadas, choferes, jefes, admin y onboarding de candidatas. Hubo una
-etapa con un bot dedicado por modelo; se eliminó, y `telegram-session.key.ts`
-todavía entiende las claves de sesión de entonces porque las filas viven 30
-días. No vuelvas a introducir enrutado por bot: `@InjectBot()` es el único bot.
-
-Con `TELEGRAM_WEBHOOK_BASE_URL` definida se usan webhooks; vacía, long polling.
-Con `APP_INSTANCE_COUNT > 1` el long polling rompe en silencio (Telegram
-devuelve 409 a uno de los procesos), por eso la configuración se valida al
-arrancar. El flujo de alta de una empleada y el modelo de grupos con temas están
-en `backend/Docs.md`.
-
-Los handlers (`@Update()`, `@Command()`) solo traducen el `Context` a una llamada
-de servicio, igual que un controller HTTP.
-
 ### Todas las empleadas son de agencia
 
 No existen las empleadas independientes. Siempre hay un jefe (o un admin) que
 autoriza los servicios: `ServicesService.aceptar()` y `.rechazar()` exigen rol
 `jefe` o `admin`, y eso es deliberado, no una limitación que haya que relajar.
 Una empleada nunca acepta su propio servicio ni recibe directamente la
-solicitud del cliente, y `/vincular_grupo` es solo para jefes y admins.
+solicitud del cliente.
 
 Si el jefe principal de una empleada está inactivo, no disponible o cerró su
 jornada, el servicio pasa al secundario, y si tampoco hay, a cualquier jefe o
@@ -214,7 +197,7 @@ Límite por cliente vía `MAX_DAILY_AI_CALLS`.
 - `lib/actions/*` contiene las Server Actions por dominio; `lib/data/*` las
   lecturas. Las peticiones autenticadas se fuerzan a `no-store`; solo las
   públicas pueden pedir ISR.
-- Rutas: `/` catálogo público, `/admin/*` panel, `/jefe/*` panel de jefe,
+- Rutas: `/` catálogo público, `/admin/*` panel, `/jefe/*` bandeja de chats web,
   `/empleada/portal` y `/chofer/portal` (portales con sesión web).
 - `next.config.ts` tiene `eslint.ignoreDuringBuilds: true` como deuda técnica
   pendiente: el build no valida lint, hay que ejecutarlo aparte.
@@ -235,8 +218,7 @@ Definidas en `catalogo-cs/AGENTS.md` (cargado por `catalogo-cs/CLAUDE.md`):
 
 ## Reglas detalladas por área
 
-- `backend/.agents/rules/backend-rules.md` — NestJS, DTOs, errores, seguridad,
-  bots con Telegraf.
+- `backend/.agents/rules/backend-rules.md` — NestJS, DTOs, errores, seguridad.
 - `backend/.agents/rules/heavydb-rules.md` — tipos exactos, triggers, migraciones.
 - `backend/.agents/rules/ai-rules.md` — abstracción de proveedor, reintentos,
   costos, prompt injection.

@@ -6,7 +6,7 @@ Esta lista valida la rama `refactor/operations-core` en un entorno local o de QA
 
 - [ ] Confirmar rama, commit y árbol limpio con `git status`, `git branch --show-current` y `git rev-parse HEAD`.
 - [ ] Configurar variables exclusivas de QA a partir de los `.env.example`; usar PostgreSQL vacío o una copia anonimizada.
-- [ ] Mantener Telegram y Web Push simulados o apuntando a cuentas de prueba.
+- [ ] Mantener Web Push simulado o apuntando a cuentas de prueba.
 - [ ] Ejecutar `corepack pnpm install --frozen-lockfile` y la matriz automatizada completa.
 
 ## Base de datos y migración
@@ -44,9 +44,8 @@ Esta lista valida la rama `refactor/operations-core` en un entorno local o de QA
 
 ## Notificaciones
 
-- [ ] Confirmar destinatarios de Push y Telegram informativo con adaptadores de QA.
-- [ ] Simular fallo independiente de Push y Telegram: la transición válida permanece y el error queda registrado.
-- [ ] Confirmar que Telegram interno no muestra botones que cambien estados operativos.
+- [ ] Confirmar destinatarios de Push con adaptadores de QA.
+- [ ] Simular fallo de Push: la transición válida permanece y el error queda registrado.
 
 ## Rollback
 

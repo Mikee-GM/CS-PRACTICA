@@ -19,7 +19,7 @@ trigger: always_on
 
 ## 21. Colas para Trabajos de IA
 
-- **Todo request de IA no urgente va a una cola** (BullMQ/Redis), nunca bloquear el request-response HTTP ni el handler de Telegraf esperando una respuesta de IA que puede tardar segundos.
+- **Todo request de IA no urgente va a una cola** (BullMQ/Redis), nunca bloquear el request-response HTTP ni un handler de eventos esperando una respuesta de IA que puede tardar segundos.
 - Procesar los jobs de IA con **concurrencia limitada** en el worker, alineada a la cuota real de tu tier de API, para no generar una cascada de 429 apenas escale el tráfico.
 - Guardar el estado del job (`pending`, `processing`, `completed`, `failed`) para poder informar al usuario/bot el progreso sin bloquear, especialmente en flujos largos (ej. generación de reportes, análisis de documentos).
 
