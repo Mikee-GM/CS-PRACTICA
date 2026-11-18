@@ -34,7 +34,7 @@ import { RealtimeEventsService } from '../realtime/realtime.service';
 import { PaymentReceiptValidations } from '../services/entities/payment-receipt-validation.entity';
 import { Servicios } from '../services/entities/service.entity';
 import { ServicesService } from '../services/services.service';
-import { CustomerBookingSession } from '../telegram-conversations/entities/customer-booking-session.entity';
+import { CustomerBookingSession } from '../booking/entities/customer-booking-session.entity';
 import { Usuarios } from '../users/entities/user.entity';
 import { jefeAlcanzaModelo, modelosAlAlcance } from './alcance-del-jefe';
 import {

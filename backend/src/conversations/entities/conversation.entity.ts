@@ -11,7 +11,7 @@ import {
 import { Clientes } from '../../clients/entities/client.entity';
 import { Empleadas } from '../../employees/entities/employee.entity';
 import { Servicios } from '../../services/entities/service.entity';
-import { CustomerBookingSession } from '../../telegram-conversations/entities/customer-booking-session.entity';
+import { CustomerBookingSession } from '../../booking/entities/customer-booking-session.entity';
 import { Usuarios } from '../../users/entities/user.entity';
 
 export const CONVERSATION_STATUSES = [

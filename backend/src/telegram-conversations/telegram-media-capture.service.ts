@@ -8,7 +8,7 @@ import { Empleadas } from '../employees/entities/employee.entity';
 import { RealtimeEventsService } from '../realtime/realtime.service';
 import { Servicios } from '../services/entities/service.entity';
 import { Usuarios } from '../users/entities/user.entity';
-import { CustomerBookingSession } from './entities/customer-booking-session.entity';
+import { CustomerBookingSession } from '../booking/entities/customer-booking-session.entity';
 import { ConversacionesTelegram } from './entities/telegram-conversation.entity';
 import { extractConversationAttachment } from './telegram-conversation-attachment';
 

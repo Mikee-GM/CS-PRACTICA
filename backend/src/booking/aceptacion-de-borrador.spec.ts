@@ -1,5 +1,5 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
-import type { CustomerBookingSession } from '../telegram-conversations/entities/customer-booking-session.entity';
+import type { CustomerBookingSession } from './entities/customer-booking-session.entity';
 import {
   aceptarBorradorDeReserva,
   ubicacionDeBorradorValida,

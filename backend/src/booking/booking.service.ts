@@ -35,7 +35,7 @@ import {
 import { multiplyMoney, sumMoney } from '../common/money';
 import { Empleadas } from '../employees/entities/employee.entity';
 import { AuthorizedBankAccounts } from '../services/entities/authorized-bank-account.entity';
-import { CustomerBookingSession } from '../telegram-conversations/entities/customer-booking-session.entity';
+import { CustomerBookingSession } from './entities/customer-booking-session.entity';
 import { TransportOperationsService } from '../transport-operations/transport-operations.service';
 import { BookingAiService, HistorialDeReserva } from './booking-ai.service';
 import {

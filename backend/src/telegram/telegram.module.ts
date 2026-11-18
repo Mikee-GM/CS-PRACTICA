@@ -55,7 +55,7 @@ import { TelegramLinkAttemptsService } from './telegram-link-attempts.service';
 import { TeamChannelModule } from '../team-channel/team-channel.module';
 import { isDummyTelegramToken } from './telegram-transport';
 import { TelegramConversationsModule } from '../telegram-conversations/telegram-conversations.module';
-import { CustomerBookingSession } from '../telegram-conversations/entities/customer-booking-session.entity';
+import { CustomerBookingSession } from '../booking/entities/customer-booking-session.entity';
 import {
   TelegramMediaCaptureModule,
   TelegramMediaCaptureService,

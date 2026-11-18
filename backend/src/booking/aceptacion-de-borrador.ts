@@ -7,7 +7,7 @@ import { IsNull, Repository } from 'typeorm';
 import type { Empleadas } from '../employees/entities/employee.entity';
 import type { Servicios } from '../services/entities/service.entity';
 import type { ServicesService } from '../services/services.service';
-import { CustomerBookingSession } from '../telegram-conversations/entities/customer-booking-session.entity';
+import { CustomerBookingSession } from './entities/customer-booking-session.entity';
 
 /**
  * Aceptar un borrador de reserva, independiente del canal.

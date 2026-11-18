@@ -7,7 +7,7 @@ import { Servicios } from '../services/entities/service.entity';
 import { TelegramSession } from '../telegram/entities/telegram-session.entity';
 import { Clientes } from '../clients/entities/client.entity';
 import { TelegramModule } from '../telegram/telegram.module';
-import { CustomerBookingSession } from './entities/customer-booking-session.entity';
+import { CustomerBookingSession } from '../booking/entities/customer-booking-session.entity';
 import { Empleadas } from '../employees/entities/employee.entity';
 import { ServicesModule } from '../services/services.module';
 import { TelegramMessageDeletionScheduler } from './telegram-message-deletion.scheduler';

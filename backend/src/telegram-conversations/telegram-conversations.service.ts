@@ -19,7 +19,7 @@ import { TelegramSession } from '../telegram/entities/telegram-session.entity';
 import { Clientes } from '../clients/entities/client.entity';
 import { parseSessionKey } from '../telegram/telegram-session.key';
 import { Empleadas } from '../employees/entities/employee.entity';
-import { CustomerBookingSession } from './entities/customer-booking-session.entity';
+import { CustomerBookingSession } from '../booking/entities/customer-booking-session.entity';
 import { ServicesService } from '../services/services.service';
 import type { UpdateBookingDraftDto } from './dto/update-booking-draft.dto';
 import {
