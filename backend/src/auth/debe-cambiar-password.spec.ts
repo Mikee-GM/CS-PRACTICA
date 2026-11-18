@@ -13,11 +13,7 @@ import { AuthSession } from './entities/auth-session.entity';
  * que llega en `/auth/me` y en la respuesta del login (Fase 5, B-acceso).
  */
 describe('debeCambiarPassword en /auth/me y en el login', () => {
-  const controller = new AuthController(
-    {} as AuthService,
-    {} as never,
-    {} as never,
-  );
+  const controller = new AuthController({} as AuthService, {} as never);
   const me = (user: Partial<Usuarios>) =>
     controller.me({ user } as unknown as Request);
 

@@ -8,17 +8,14 @@ import { Usuarios } from '../users/entities/user.entity';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { AuthSession } from './entities/auth-session.entity';
-import { PanelAccessToken } from './entities/panel-access-token.entity';
-import { PanelAccessService } from './panel-access.service';
 import { AuthCleanupScheduler } from './auth-cleanup.scheduler';
 import { CsrfGuard } from './guards/csrf.guard';
-import { PortalAuthGuard } from './guards/portal-auth.guard';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { ACCESS_TOKEN_TTL_SECONDS } from './auth.constants';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Usuarios, AuthSession, PanelAccessToken]),
+    TypeOrmModule.forFeature([Usuarios, AuthSession]),
     ClientAccountsModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     // registerAsync + getOrThrow: sin JWT_SECRET el proceso falla al arrancar,
@@ -34,22 +31,7 @@ import { ACCESS_TOKEN_TTL_SECONDS } from './auth.constants';
     }),
   ],
   controllers: [AuthController],
-  providers: [
-    AuthService,
-    PanelAccessService,
-    AuthCleanupScheduler,
-    JwtStrategy,
-    CsrfGuard,
-    PortalAuthGuard,
-  ],
-  exports: [
-    AuthService,
-    PanelAccessService,
-    JwtStrategy,
-    CsrfGuard,
-    PortalAuthGuard,
-    PassportModule,
-    JwtModule,
-  ],
+  providers: [AuthService, AuthCleanupScheduler, JwtStrategy, CsrfGuard],
+  exports: [AuthService, JwtStrategy, CsrfGuard, PassportModule, JwtModule],
 })
 export class AuthModule {}

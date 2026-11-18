@@ -5,7 +5,6 @@ import { AuthCleanupScheduler } from './auth-cleanup.scheduler';
  * que no se pise a si mismo ni tumbe el proceso si la base falla.
  */
 describe('AuthCleanupScheduler', () => {
-  const panelAccessService = { purgeExpired: jest.fn() };
   const authService = { purgeStaleSessions: jest.fn() };
 
   /*
@@ -37,39 +36,24 @@ describe('AuthCleanupScheduler', () => {
   ) as AuthCleanupScheduler;
   Object.assign(scheduler, {
     logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
-    panelAccessService,
     authService,
     dataSource,
   });
 
   beforeEach(() => {
     jest.clearAllMocks();
-    panelAccessService.purgeExpired.mockResolvedValue(3);
     authService.purgeStaleSessions.mockResolvedValue(120);
   });
 
-  it('barre pases caducados y sesiones viejas en cada ciclo', async () => {
+  it('barre las sesiones viejas en cada ciclo', async () => {
     await scheduler.runCycle();
 
-    expect(panelAccessService.purgeExpired).toHaveBeenCalledTimes(1);
-    expect(authService.purgeStaleSessions).toHaveBeenCalledTimes(1);
-  });
-
-  it('no barre sesiones si el barrido de pases falla; lo reintenta el ciclo siguiente', async () => {
-    panelAccessService.purgeExpired.mockRejectedValueOnce(
-      new Error('sin base'),
-    );
-
-    await scheduler.runCycle();
-    expect(authService.purgeStaleSessions).not.toHaveBeenCalled();
-
-    await scheduler.runCycle();
     expect(authService.purgeStaleSessions).toHaveBeenCalledTimes(1);
   });
 
   it('no arranca un ciclo encima de otro que sigue corriendo', async () => {
     let liberar: () => void = () => undefined;
-    panelAccessService.purgeExpired.mockReturnValue(
+    authService.purgeStaleSessions.mockReturnValue(
       new Promise<number>((resolve) => {
         liberar = () => resolve(0);
       }),
@@ -81,26 +65,24 @@ describe('AuthCleanupScheduler', () => {
 
     await scheduler.runCycle();
 
-    expect(panelAccessService.purgeExpired).toHaveBeenCalledTimes(1);
+    expect(authService.purgeStaleSessions).toHaveBeenCalledTimes(1);
 
     liberar();
     await primero;
   });
 
   it('registra el fallo sin propagarlo, para no tumbar el temporizador', async () => {
-    panelAccessService.purgeExpired.mockRejectedValue(new Error('sin base'));
+    authService.purgeStaleSessions.mockRejectedValue(new Error('sin base'));
 
     await expect(scheduler.runCycle()).resolves.toBeUndefined();
   });
 
   it('vuelve a correr despues de un ciclo fallido', async () => {
-    panelAccessService.purgeExpired.mockRejectedValueOnce(
-      new Error('sin base'),
-    );
+    authService.purgeStaleSessions.mockRejectedValueOnce(new Error('sin base'));
 
     await scheduler.runCycle();
     await scheduler.runCycle();
 
-    expect(panelAccessService.purgeExpired).toHaveBeenCalledTimes(2);
+    expect(authService.purgeStaleSessions).toHaveBeenCalledTimes(2);
   });
 });

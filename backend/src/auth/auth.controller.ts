@@ -14,9 +14,6 @@ import { timingSafeEqual } from 'crypto';
 import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
-import { PanelAccessService } from './panel-access.service';
-import { PanelAccessDto } from './dto/panel-access.dto';
-import { PortalSessionDto } from './dto/portal-session.dto';
 import { LoginDto } from './dto/login.dto';
 import { ClientAccountsService } from '../client-accounts/client-accounts.service';
 import { RegisterClientDto } from '../client-accounts/dto/register-client.dto';
@@ -44,7 +41,6 @@ import { Usuarios } from '../users/entities/user.entity';
 export class AuthController {
   constructor(
     private readonly authService: AuthService,
-    private readonly panelAccessService: PanelAccessService,
     private readonly clientAccountsService: ClientAccountsService,
   ) {}
 
@@ -129,71 +125,6 @@ export class AuthController {
       request.signedCookies?.[ACCESS_COOKIE] as string | undefined,
     );
     this.clearAuthCookies(response);
-  }
-
-  /**
-   * Canjea el pase que el bot le manda al jefe y abre sesion.
-   *
-   * El pase se gasta al usarlo, salvo la breve cortesia que aplica
-   * `PanelAccessService` para que la previsualizacion de Telegram no lo queme
-   * antes de que el enlace llegue a abrirse de verdad.
-   *
-   * Sustituye una prueba de identidad por otra equivalente: el pase solo existe
-   * porque el chat de Telegram ya estaba vinculado a esa cuenta. Se limita el
-   * ritmo igual que el login, porque tambien abre sesion.
-   */
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
-  @Post('panel-access')
-  @HttpCode(HttpStatus.OK)
-  async panelAccess(
-    @Body() dto: PanelAccessDto,
-    @Req() request: Request,
-    @Res({ passthrough: true }) response: Response,
-  ) {
-    const { user, redirectPath } = await this.panelAccessService.consume(
-      dto.token,
-      dto.chatId ?? null,
-    );
-
-    const deviceId =
-      request.headers['x-device-id']?.toString().slice(0, 128) ||
-      request.headers['user-agent']?.slice(0, 128) ||
-      'telegram-link';
-
-    const result = await this.authService.issueSessionFor(user, deviceId);
-    this.setAuthCookies(response, result);
-
-    return { user: result.user, redirectPath };
-  }
-
-  /**
-   * Canjea el token con el que se abre un portal por una sesion en cookie.
-   *
-   * Lo llama el middleware del front la primera vez que alguien entra al portal
-   * desde Telegram; a partir de ahi la aplicacion instalada vive de la cookie.
-   * Se limita el ritmo igual que el login y que `panel-access`, porque tambien
-   * abre sesion.
-   */
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
-  @Post('portal-session')
-  @HttpCode(HttpStatus.OK)
-  async portalSession(
-    @Body() dto: PortalSessionDto,
-    @Req() request: Request,
-    @Res({ passthrough: true }) response: Response,
-  ) {
-    const deviceId =
-      request.headers['x-device-id']?.toString().slice(0, 128) ||
-      request.headers['user-agent']?.slice(0, 128) ||
-      'portal-link';
-
-    const result = await this.authService.issueSessionFromPortalToken(
-      dto.token,
-      deviceId,
-    );
-    this.setAuthCookies(response, result);
-
-    return { user: result.user };
   }
 
   /**

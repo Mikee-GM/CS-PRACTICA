@@ -145,12 +145,9 @@ Reglas completas y no negociables en `catalogo-cs/rules.md`. Lo esencial:
   `admin`, `jefe`, `empleada`, `chofer`.
 - El middleware de Next solo redirige según la *presencia* de la cookie. La
   autorización real siempre ocurre en el backend.
-- Dos caminos de acceso alternativos: `PortalAuthGuard` (portales de empleada y
-  chofer abiertos desde una Mini App de Telegram; admite token por query, Bearer
-  o cookie y deja `request.portalUserId`) y `PanelAccessService` (pases de un
-  solo uso de 5 min enviados por chat, con destino guardado en base y
-  restringido por una lista blanca de rutas internas).
-- `AuthCleanupScheduler` purga sesiones y pases caducados.
+- Los portales de empleada y chofer usan la misma sesión web (`JwtAuthGuard` +
+  `@Roles`); no hay tokens por URL ni pases de acceso.
+- `AuthCleanupScheduler` purga las sesiones caducadas.
 
 ### Tiempo real
 
@@ -218,8 +215,7 @@ Límite por cliente vía `MAX_DAILY_AI_CALLS`.
   lecturas. Las peticiones autenticadas se fuerzan a `no-store`; solo las
   públicas pueden pedir ISR.
 - Rutas: `/` catálogo público, `/admin/*` panel, `/jefe/*` panel de jefe,
-  `/empleada/portal` y `/chofer/portal` (Mini Apps), `/acceso/[token]` canje de
-  pases.
+  `/empleada/portal` y `/chofer/portal` (portales con sesión web).
 - `next.config.ts` tiene `eslint.ignoreDuringBuilds: true` como deuda técnica
   pendiente: el build no valida lint, hay que ejecutarlo aparte.
 - Las maquetas del ERP viven como design canvases en `design/erp/*.dc.html`.

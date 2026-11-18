@@ -2,7 +2,7 @@ import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
-import { EntityManager, IsNull, Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { createHash, randomUUID } from 'crypto';
 import { Usuarios } from '../users/entities/user.entity';
@@ -106,50 +106,10 @@ export class AuthService {
   /**
    * Abre sesion para un usuario ya identificado por otra via.
    *
-   * Lo usa el canje del pase de Telegram: la contrasena no interviene porque la
-   * identidad ya quedo probada al vincular el chat. Todo lo demas -- par de
-   * tokens, sesion registrada, expiraciones -- es identico a un login normal,
-   * asi que la sesion resultante no es mas larga ni mas poderosa.
+   * La contrasena no interviene porque la identidad ya quedo probada antes.
+   * Todo lo demas -- par de tokens, sesion registrada, expiraciones -- es
+   * identico a un login normal.
    */
-  /**
-   * Cambia el token con el que se abre un portal por una sesion normal.
-   *
-   * Existe para que los portales se puedan instalar en el telefono. Se entra a
-   * ellos desde una Mini App de Telegram, que trae el token en la URL; una
-   * aplicacion instalada arranca desde su icono, sin token y sin nada que la
-   * identifique, asi que hasta ahora no habia forma de abrirla dos veces. Con
-   * la sesion en cookie si la hay, y ademas es lo que necesitan los avisos
-   * push, que no existen dentro del webview de Telegram.
-   *
-   * Es la misma sustitucion que hace `panel-access`: una prueba de identidad
-   * por otra equivalente, porque el token solo se emitio contra un chat ya
-   * vinculado a esa cuenta.
-   *
-   * Se acota a empleada y chofer a proposito. El token viaja en una URL --y las
-   * URL acaban en los registros del proxy, en el historial y en la cabecera
-   * Referer--, asi que este canje no puede ser una puerta para abrir sesion de
-   * jefe o de admin.
-   */
-  async issueSessionFromPortalToken(
-    token: string,
-    deviceId: string,
-  ): Promise<AuthTokens> {
-    // Comprueba firma, tipo, sesion viva y cuenta activa.
-    const { sub } = await this.verifyPortalToken(token);
-
-    const user = await this.usuariosRepository.findOne({ where: { id: sub } });
-    if (!user) {
-      throw new UnauthorizedException('Token de portal inválido o expirado');
-    }
-    if (user.rol !== 'empleada' && user.rol !== 'chofer') {
-      throw new UnauthorizedException(
-        'Este acceso es solo para los portales de empleada y chofer',
-      );
-    }
-
-    return this.issueSessionFor(user, deviceId);
-  }
-
   async issueSessionFor(user: Usuarios, deviceId: string): Promise<AuthTokens> {
     if (!user.activo) {
       throw new UnauthorizedException('Usuario inactivo');
@@ -459,56 +419,6 @@ export class AuthService {
       this.logger.log(`Sesiones caducadas eliminadas: ${total}`);
     }
     return total;
-  }
-
-  /**
-   * Valida el token con el que se entra a los portales de empleada y chofer.
-   *
-   * Comprueba lo mismo que la estrategia de una peticion normal: que la sesion
-   * siga viva y que la cuenta siga activa. Antes solo miraba la firma, y eso
-   * dejaba dos agujeros: cerrar sesion no expulsaba a nadie del portal --el
-   * token seguia sirviendo hasta caducar-- y desactivar una cuenta tampoco.
-   *
-   * Y solo se admite ya el tipo `access`. Hubo un tipo `employee_portal` que
-   * duraba siete dias y no llevaba sesion asociada, de modo que era imposible
-   * de revocar; dejo de emitirse hace tiempo, pero se seguia aceptando, asi que
-   * cualquiera emitido entonces continuaba siendo una llave valida.
-   */
-  async verifyPortalToken(
-    token: string,
-  ): Promise<{ sub: string; email: string; rol: string }> {
-    const invalido = new UnauthorizedException(
-      'Token de portal inválido o expirado',
-    );
-
-    let payload: TokenPayload;
-    try {
-      payload = await this.jwtService.verifyAsync<TokenPayload>(token, {
-        secret: this.accessSecret(),
-      });
-    } catch {
-      throw invalido;
-    }
-
-    if (!payload || payload.type !== 'access' || !payload.sid) {
-      throw invalido;
-    }
-
-    const session = await this.sessionsRepository.findOne({
-      where: { id: payload.sid, userId: payload.sub, revokedAt: IsNull() },
-      select: { id: true, expiresAt: true },
-    });
-    if (!session || session.expiresAt.getTime() <= Date.now()) {
-      throw invalido;
-    }
-
-    const user = await this.usuariosRepository.findOne({
-      where: { id: payload.sub, activo: true },
-      select: { id: true, email: true, rol: true },
-    });
-    if (!user) throw invalido;
-
-    return { sub: user.id, email: user.email, rol: user.rol };
   }
 
   /**
