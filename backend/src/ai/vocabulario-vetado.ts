@@ -3,7 +3,7 @@
  *
  * Es una sola lista para los dos sitios que hablan con el en ese chat: el
  * prompt web se la prohibe a la IA (`prompts.ts`) y los avisos del servicio,
- * que no los redacta el prompt web sino textos fijos o pensados para Telegram,
+ * que no los redacta el prompt web sino textos fijos,
  * se filtran con ella (`services/aviso-al-cliente-web.ts`). Si estuvieran
  * copiadas, una palabra anadida a una lista se le seguiria escapando a la otra.
  *

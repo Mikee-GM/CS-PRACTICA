@@ -21,7 +21,7 @@ export class AiMessageService {
     context: Record<string, string | number | null | undefined>,
     fallback: string,
   ): Promise<string> {
-    const systemPrompt = `Escribe un mensaje de WhatsApp/Telegram como si fueras la empleada hablando directamente con el cliente en español colombiano casual.
+    const systemPrompt = `Escribe un mensaje de WhatsApp como si fueras la empleada hablando directamente con el cliente en español colombiano casual.
 El evento es: ${event}.
 
 Personalidad obligatoria:

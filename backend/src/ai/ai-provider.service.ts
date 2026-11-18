@@ -258,7 +258,7 @@ export class AiProviderService {
       const content = data.choices?.[0]?.message?.content || '';
 
       // Una respuesta vacia no puede devolverse como si fuera valida: el
-      // llamador la enviaria a Telegram, el envio fallaria y el chat acabaria
+      // llamador la enviaria al cliente, el envio fallaria y el chat acabaria
       // en manos del jefe sin dejar claro por que. El motivo habitual es que el
       // modelo agoto el presupuesto razonando, y eso conviene verlo en el log.
       if (!content.trim()) {

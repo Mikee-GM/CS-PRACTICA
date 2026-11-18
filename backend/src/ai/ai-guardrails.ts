@@ -6,9 +6,9 @@
  * una garantia: un modelo se deja convencer. Este modulo es la parte que si se
  * cumple siempre, porque no depende de lo que el modelo decida hacer.
  *
- * Algunas barreras dependen del canal: en Telegram el personaje niega ser una
- * IA y en el chat web no (ver `CanalChat`). Lo que no recibe canal se comporta
- * como en Telegram, que tiene que seguir igual hasta que se retire.
+ * El unico canal es el chat web (ver `CanalChat`): ahi el personaje no niega
+ * ser una IA, asi que la pregunta de identidad llega al modelo y la respuesta
+ * honesta no se descarta.
  */
 import type { CanalChat } from './prompts/prompts';
 
@@ -197,27 +197,10 @@ const TASK_PATTERNS: RegExp[] = [
 const SERVICE_TOPIC_PATTERN =
   /\b(tarifa|precio|precios|costo|cuesta|vale|total|hora|horas|horita|ratico|extra|extras|transporte|traslado|pago|pagar|efectivo|tarjeta|transferencia|anticipo|deposito|motel|moteles|ubicacion|direccion|servicio|servicios|cita)\b/;
 
-/**
- * La pregunta directa de si del otro lado hay una IA.
- *
- * Va aparte de los jailbreaks porque su trato depende del canal: en Telegram
- * se desvia como cualquier sonda, y en el chat web es una pregunta legitima que
- * tiene que llegar al modelo para que conteste la verdad.
- */
-const IDENTITY_PATTERNS: RegExp[] = [
-  /\beres (una |un )?(ia|inteligencia artificial|bot|robot|chatbot|asistente|maquina|programa)\b/,
-];
-
 /** Intento de sacarla del personaje, leerle las instrucciones o el modelo. */
 export function detectJailbreak(message: string): boolean {
   const normalized = normalizeForMatch(message);
   return JAILBREAK_PATTERNS.some((pattern) => pattern.test(normalized));
-}
-
-/** "¿Eres una IA?", "¿eres un bot?". */
-export function detectIdentityQuestion(message: string): boolean {
-  const normalized = normalizeForMatch(message);
-  return IDENTITY_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
 /** Un encargo ajeno al servicio (traducir, calcular, escribir un poema). */
@@ -231,25 +214,19 @@ export function detectTareaAjena(message: string): boolean {
  * Mensajes que se responden con una frase enlatada en personaje sin gastar una
  * llamada al modelo: es mas barato, mas rapido y, sobre todo, no falla nunca.
  *
- * En la web la pregunta de identidad no entra: se deja pasar al modelo para que
- * la conteste con honestidad. Los jailbreaks y los encargos ajenos se cortan
- * igual en los dos canales.
+ * La pregunta de identidad no entra: se deja pasar al modelo para que la
+ * conteste con honestidad. Los jailbreaks y los encargos ajenos si se cortan.
+ *
+ * El segundo parametro se conserva solo por las llamadas que aun lo pasan; no
+ * hay mas canal que el web.
  */
 export function detectSonda(
   message: string,
-  canal: CanalChat = 'telegram',
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _canal?: CanalChat,
 ): boolean {
   if (detectJailbreak(message)) return true;
-  if (canal === 'telegram' && detectIdentityQuestion(message)) return true;
   return detectTareaAjena(message);
-}
-
-/**
- * Sondas clasicas para detectar que del otro lado hay una IA, tal y como las
- * trata Telegram: jailbreaks, pregunta de identidad y encargos ajenos.
- */
-export function detectBotProbe(message: string): boolean {
-  return detectSonda(message, 'telegram');
 }
 
 const ARRIVAL_TIME_PATTERNS: RegExp[] = [
@@ -300,24 +277,9 @@ export function pickArrivalTimeReply(previous?: string | null): string {
 }
 
 /**
- * Desvios en personaje. Nunca dicen que no pueden hablar de algo: una negativa
- * con forma de politica de contenido delata al bot tanto como decir "soy una IA".
- */
-export const IN_CHARACTER_DEFLECTIONS: string[] = [
-  'Ay mor, de eso yo no sé nada, yo en lo mío 🙈',
-  'Jajaja papi, yo para eso soy un desastre',
-  'Uy no, esas cosas se me salen de las manos, cuéntame mejor de ti',
-  'Ay lindo, yo de eso ni idea',
-  'Mmm eso ni lo intento, mejor cuéntame qué andas buscando',
-  'No me pongas a pensar tanto que se me enreda la cabeza 😅',
-  'Ay no corazón, yo soy más de otras cosas',
-  'Eso déjaselo a otro papi, lo mío es otra cosa 😏',
-];
-
-/**
- * Los mismos desvios para el chat web, donde no se usan emojis nunca. Se
- * escriben aparte, y no quitando los emojis a los de arriba, para que ningun
- * desvio web dependa de como quede la frase tras recortarla.
+ * Desvios en personaje para el chat web, donde no se usan emojis nunca. Nunca
+ * dicen que no pueden hablar de algo: una negativa con forma de politica de
+ * contenido enfria la conversacion tanto como un tono de mostrador.
  */
 export const IN_CHARACTER_DEFLECTIONS_WEB: string[] = [
   'Ay mor, de eso yo no sé nada, yo en lo mío',
@@ -333,11 +295,12 @@ export const IN_CHARACTER_DEFLECTIONS_WEB: string[] = [
 /** Elige un desvío distinto al anterior para que no suene enlatado. */
 export function pickDeflection(
   previous?: string | null,
-  canal: CanalChat = 'telegram',
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _canal?: CanalChat,
 ): string {
-  const catalogo =
-    canal === 'web' ? IN_CHARACTER_DEFLECTIONS_WEB : IN_CHARACTER_DEFLECTIONS;
-  const options = catalogo.filter((option) => option !== previous);
+  const options = IN_CHARACTER_DEFLECTIONS_WEB.filter(
+    (option) => option !== previous,
+  );
   return options[Math.floor(Math.random() * options.length)];
 }
 
@@ -366,10 +329,10 @@ const ASSISTANT_REGISTER_PATTERNS: RegExp[] = [
 ];
 
 /**
- * Declararse IA. En Telegram es lo que no puede decir nunca; en la web es la
- * respuesta honesta que se le pide ante la pregunta en serio, asi que alli no
- * descarta nada. "Modelo de lenguaje" queda arriba, fuera de esta excepcion:
- * es jerga tecnica, no la frase corta que se espera.
+ * Declararse IA. En el chat web es la respuesta honesta que se le pide ante la
+ * pregunta en serio, asi que el filtro la deja pasar con `permitirIdentidad`.
+ * "Modelo de lenguaje" queda arriba, fuera de esta excepcion: es jerga
+ * tecnica, no la frase corta que se espera.
  */
 const DECLARA_SER_IA_PATTERN =
   /\bsoy (una |un )?(ia|inteligencia artificial|asistente|bot)\b/;
@@ -379,8 +342,9 @@ const DECLARA_SER_IA_PATTERN =
  * la respuesta entera: el cliente prefiere un desvío coqueto antes que una
  * frase que huele a política de contenido.
  *
- * `permitirIdentidad` deja pasar que se declare IA (chat web), pero no el
- * registro de asistente generico ("como asistente puedo ayudarte").
+ * `permitirIdentidad` deja pasar que se declare IA (lo que usa el chat web),
+ * pero no el registro de asistente generico ("como asistente puedo
+ * ayudarte"). Sin ella es estricto y descarta tambien declararse IA.
  */
 export function looksLikeAssistantRegister(
   reply: string,
@@ -642,16 +606,6 @@ export function modeloNombradaEnLaRespuesta<T extends { nombre: string }>(
 }
 
 /**
- * Cada cuantos mensajes de la modelo se permite un emoji.
- *
- * El prompt ya lo pedia ("maximo 1 emoji cada 2 o 3 mensajes") y el modelo lo
- * ignoraba: en una conversacion real de veinticinco turnos salio un emoji en
- * los veinticinco. Como con los enlaces y los telefonos, lo que el prompt
- * promete pero no puede garantizar se aplica aqui.
- */
-export const MENSAJES_ENTRE_EMOJIS = 3;
-
-/**
  * Un emoji, entero y contado como uno solo.
  *
  * `Extended_Pictographic` cubre las caritas, los gestos y los simbolos, y a eso
@@ -677,46 +631,23 @@ export function contarEmojis(texto: string): number {
 }
 
 /**
- * Recorta los emojis de una respuesta segun la cadencia.
- *
- * `mensajesDesdeElUltimo` es cuantos mensajes lleva la modelo sin usar ninguno.
- * Si todavia no toca, la respuesta sale limpia; si toca, se queda UNO --el
- * primero, que es donde el modelo suele poner el que de verdad acompana- y se
- * quitan los demas.
+ * Quita los emojis de una respuesta: en el chat web no hay cadencia, no se usa
+ * ninguno. Se conserva con esta forma por las llamadas que aun pasan la cuenta
+ * de mensajes y el canal; ambos se ignoran.
  */
 export function limitarEmojis(
   texto: string,
-  mensajesDesdeElUltimo: number,
-  opciones: { canal?: CanalChat } = {},
+  _mensajesDesdeElUltimo?: number,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _opciones: { canal?: CanalChat } = {},
 ): { texto: string; llevaEmoji: boolean } {
-  if (opciones.canal === 'web') {
-    return { texto: quitarEmojis(texto), llevaEmoji: false };
-  }
-  if (contarEmojis(texto) === 0) {
-    return { texto, llevaEmoji: false };
-  }
-
-  const tocaEmoji = mensajesDesdeElUltimo >= MENSAJES_ENTRE_EMOJIS - 1;
-  let conservados = 0;
-  const limpio = texto.replace(EMOJI_PATTERN, (match) => {
-    if (tocaEmoji && conservados === 0) {
-      conservados += 1;
-      return match;
-    }
-    return ' ';
-  });
-
-  const resultado = recomponerEspacios(limpio);
-  // Un mensaje que era solo un emoji se quedaria vacio: mejor dejarlo pasar
-  // entero que mandar una respuesta en blanco.
-  if (!resultado) return { texto, llevaEmoji: true };
-  return { texto: resultado, llevaEmoji: conservados > 0 };
+  return { texto: quitarEmojis(texto), llevaEmoji: false };
 }
 
 /**
  * Quita todos los emojis: en el chat web no se usan nunca, ni con cadencia.
  *
- * A diferencia de `limitarEmojis`, aqui un mensaje que era solo un emoji se
+ * Aqui un mensaje que era solo un emoji se
  * queda vacio en vez de pasar entero, porque la regla web no admite ninguno.
  * Quien lo llame tiene que tratar la cadena vacia como una respuesta que no
  * sirve (igual que hoy se trata la que suena a asistente) y desviar.

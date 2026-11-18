@@ -3,7 +3,6 @@ import {
   getHireSystemPrompt,
   detectKissingPolicy,
   parseSentimentResponse,
-  REGLAS_PERMANENTES,
   REGLAS_PERMANENTES_WEB,
   SENTIMENT_SYSTEM_PROMPT,
   EmpleadaPromptParams,
@@ -49,7 +48,7 @@ describe('AI Prompts Generation (prompts.ts)', () => {
   it('nunca instruye a la modelo a hablar de "el sistema" con el cliente', () => {
     const prompt = getHireSystemPrompt(baseParams);
 
-    expect(prompt).toContain('ERES UNA PERSONA REAL');
+    expect(prompt).toContain('TU PERSONAJE Y LO QUE NUNCA SE CUENTA');
     expect(prompt).toContain('los moteles donde atiendo');
     expect(prompt).toContain(
       'MOTELES DONDE ATIENDES HABITUALMENTE (ÚNICOS LUGARES PROPIOS QUE PUEDES NOMBRAR)',
@@ -372,10 +371,10 @@ describe('AI Prompts Generation (prompts.ts)', () => {
       precioBaseHora: 1800,
     });
 
-    expect(camila.startsWith(REGLAS_PERMANENTES)).toBe(true);
-    expect(otra.startsWith(REGLAS_PERMANENTES)).toBe(true);
-    expect(REGLAS_PERMANENTES).not.toContain('Camila');
-    expect(REGLAS_PERMANENTES).not.toContain('1500');
+    expect(camila.startsWith(REGLAS_PERMANENTES_WEB)).toBe(true);
+    expect(otra.startsWith(REGLAS_PERMANENTES_WEB)).toBe(true);
+    expect(REGLAS_PERMANENTES_WEB).not.toContain('Camila');
+    expect(REGLAS_PERMANENTES_WEB).not.toContain('1500');
   });
 
   /*
@@ -443,20 +442,6 @@ describe('AI Prompts Generation (prompts.ts)', () => {
     it('empieza por su propio bloque fijo de reglas', () => {
       expect(web.startsWith(REGLAS_PERMANENTES_WEB)).toBe(true);
       expect(REGLAS_PERMANENTES_WEB).not.toContain('Camila');
-    });
-
-    it('telegram sigue siendo el canal por defecto', () => {
-      const explicito = getHireSystemPrompt({
-        ...baseParams,
-        canal: 'telegram',
-        fechaHoraActual: 'fija',
-      });
-      const porDefecto = getHireSystemPrompt({
-        ...baseParams,
-        fechaHoraActual: 'fija',
-      });
-      expect(explicito).toBe(porDefecto);
-      expect(porDefecto).toContain('ERES UNA PERSONA REAL');
     });
   });
 });
