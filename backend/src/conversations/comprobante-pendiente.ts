@@ -1,5 +1,6 @@
 import { comprobanteEnCurso } from '../booking/booking-receipts';
 import { normalizarEstado } from '../booking/booking-state';
+import { toCents } from '../common/money';
 import type { ConversationStatus } from './entities/conversation.entity';
 
 /**
@@ -76,8 +77,34 @@ export function admiteComprobante(
 }
 
 /**
+ * El servicio de la conversacion espera comprobante (ya filtrado por metodo y
+ * por estado abierto con `METODOS_CON_COMPROBANTE` y `SERVICIO_CERRADO`).
+ *
+ * Un servicio individual lo dice con `comprobante_pendiente`. Uno grupal no
+ * usa esa marca: lo que espera es su saldo (`pending_balance`, que calcula el
+ * trigger `calcular_total_servicio`), y solo por transferencia, que es el unico
+ * metodo grupal que se acredita con CEP (`GroupServicesService.registerPayment`).
+ * Una ampliacion del grupo vuelve a abrir saldo y, con el, el comprobante.
+ */
+export function servicioEsperaComprobante(servicio: {
+  serviceType?: string | null;
+  metodoPago?: string | null;
+  comprobantePendiente?: boolean | null;
+  pendingBalance?: number | string | null;
+}): boolean {
+  if (servicio.serviceType === 'grupal') {
+    return (
+      servicio.metodoPago === 'transferencia' &&
+      toCents(servicio.pendingBalance) > 0
+    );
+  }
+  return Boolean(servicio.comprobantePendiente);
+}
+
+/**
  * Fragmentos SQL para leer lo mismo en una consulta de listado. `$m` y `$s`
- * son los parametros con `METODOS_CON_COMPROBANTE` y `SERVICIO_CERRADO`.
+ * son los parametros con `METODOS_CON_COMPROBANTE` y `SERVICIO_CERRADO`. La
+ * condicion es la de `servicioEsperaComprobante`.
  */
 export function joinServicioQueEsperaComprobante(
   alias: string,
@@ -88,7 +115,13 @@ export function joinServicioQueEsperaComprobante(
   return `LEFT JOIN servicios ${alias}
          ON ${alias}.id = ${conversacion}.service_id
         AND ${alias}.metodo_pago::text = ANY(${parametroMetodos}::text[])
-        AND ${alias}.comprobante_pendiente = true
+        AND (
+          (${alias}.service_type <> 'grupal'
+           AND ${alias}.comprobante_pendiente = true)
+          OR (${alias}.service_type = 'grupal'
+              AND ${alias}.metodo_pago::text = 'transferencia'
+              AND ${alias}.pending_balance > 0)
+        )
         AND ${alias}.estado::text <> ALL(${parametroCerrados}::text[])`;
 }
 

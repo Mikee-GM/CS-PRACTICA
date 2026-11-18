@@ -1,4 +1,10 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { describeError } from '../common/errors/error-message';
@@ -6,7 +12,7 @@ import { Empleadas } from '../employees/entities/employee.entity';
 import { RealtimeEventsService } from '../realtime/realtime.service';
 import { MESSAGE_CREATED, MessageCreatedEvent } from './conversation-events';
 import { Conversation } from './entities/conversation.entity';
-import { Message } from './entities/message.entity';
+import { Message, type MessageSender } from './entities/message.entity';
 
 export type AvisoAlCliente = {
   clienteId: string;
@@ -72,6 +78,37 @@ export class ConversationNotifier {
   }
 
   /**
+   * Escribe en una conversacion concreta y lo anuncia por SSE.
+   *
+   * A diferencia de `notifyClient`, si lanza: lo usa quien actua a peticion
+   * de una persona (un jefe que escribe desde la solicitud grupal) y necesita
+   * saber que el mensaje no se guardo. 404 si la conversacion no existe y 409
+   * si esta cerrada. El texto llega ya limpio; aqui no se filtra.
+   */
+  async escribir(entrada: {
+    conversationId: string;
+    sender: Extract<MessageSender, 'jefe' | 'sistema'>;
+    texto: string;
+  }): Promise<Message> {
+    const texto = entrada.texto.trim();
+    if (!texto)
+      throw new BadRequestException('El mensaje no puede estar vacío');
+    const entregado = await this.guardar(
+      entrada.conversationId,
+      null,
+      texto,
+      entrada.sender,
+    );
+    if (!entregado) throw new NotFoundException('Conversación no encontrada');
+    await this.anunciar(
+      entregado.conversation.clientId,
+      entregado.conversation,
+      entregado.message,
+    );
+    return entregado.message;
+  }
+
+  /**
    * Primero la conversacion del propio servicio, por `service_id` o por el
    * borrador del que salio (`booking_session_id`); entre las dos gana la que
    * ya apunta al servicio. Esa vale aunque este cerrada: el aviso pertenece a
@@ -127,20 +164,30 @@ export class ConversationNotifier {
    */
   private guardar(
     conversationId: string,
-    clienteId: string,
+    clienteId: string | null,
     texto: string,
+    sender: Extract<MessageSender, 'jefe' | 'sistema'> = 'sistema',
   ): Promise<{ conversation: Conversation; message: Message } | null> {
     return this.dataSource.transaction(async (manager) => {
       const conversation = await manager.findOne(Conversation, {
-        where: { id: conversationId, clientId: clienteId },
+        where: clienteId
+          ? { id: conversationId, clientId: clienteId }
+          : { id: conversationId },
         lock: { mode: 'pessimistic_write' },
       });
       if (!conversation) return null;
+      // Un aviso del ciclo de vida si cabe en una cerrada (es su historial);
+      // un mensaje de una persona no: el cliente ya no puede contestar ahi.
+      if (sender === 'jefe' && conversation.status === 'cerrada') {
+        throw new ConflictException(
+          'Esta conversación está cerrada; el cliente ya no la ve como abierta',
+        );
+      }
 
       const message = await manager.save(
         manager.create(Message, {
           conversationId,
-          sender: 'sistema',
+          sender,
           body: texto,
         }),
       );

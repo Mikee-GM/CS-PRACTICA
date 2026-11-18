@@ -1395,3 +1395,112 @@ Decisiones a confirmar:
 - La cancelacion por demora y la racha de rechazos ahora avisan por push
   (antes solo por Telegram); la racha se puede silenciar con el interruptor de
   sanciones.
+
+### Fase 5, B-grupos (backend)
+
+Decision 6: servicio grupal del cliente web sin Telegram. El plan no detallaba
+G1-G5; el implementador los definio asi (confirmar):
+
+- G1, nacimiento: la solicitud nace de una conversacion web y la crea el jefe.
+- G2, conversacion: mensajes del jefe, peticion de ubicacion y pin del chat.
+- G3, cotizacion: al confirmarla, el cliente la recibe en su chat.
+- G4, comprobante: el cliente lo sube por el chat y se cobra contra el saldo.
+- G5, avisos: saldo, pago completo, rechazo del comprobante y push de inicio a
+  las participantes.
+
+Hecho:
+
+- Migracion `1811005000000-LinkGroupRequestsToConversations`:
+  `group_service_requests.conversation_id uuid NULL`, FK
+  `fk_group_requests_conversation` a `conversations` con `ON DELETE SET NULL` e
+  indice parcial `idx_group_requests_conversation`; idempotente y con `down`.
+- `GrupoEnChatWebService` (`group-services/grupo-en-chat-web.service.ts`): todo
+  lo del canal web. Depende solo de la base y de `ConversationNotifier`
+  (`ConversationNotifierModule`): importar `ConversationsModule` cerraria un
+  ciclo con `TelegramModule`.
+- `ConversationNotifier.escribir({ conversationId, sender: 'jefe'|'sistema',
+  texto })`: escritura dirigida que si lanza (404, y 409 si un `jefe` escribe
+  en una cerrada); `notifyClient` no cambia.
+- Rutas nuevas en `GroupServicesController` (`admin`, `jefe`):
+  - `GET /group-services/chat-requests`: conversaciones no cerradas con
+    `state.motivoDeEntrega = 'servicio_grupal'` y sin solicitud viva, con el
+    alcance de la bandeja (`modelosAlAlcance`). Tope 50.
+  - `POST /group-services/requests/from-conversation` (`{ conversationId }`,
+    10/min): 404 fuera de alcance, 409 cerrada o si otro jefe ya organiza un
+    grupo del cliente. Si el cliente ya tenia una solicitud viva sin chat web,
+    se le engancha esta conversacion. Toma la conversacion para quien la crea
+    (`HUMAN_ACTIVE`, solo si estaba con la IA o sin dueno) y avisa al cliente
+    con el texto de la bandeja.
+  - `POST /group-services/requests/:id/location-from-chat` (10/min): copia a
+    la solicitud el ultimo pin `ubicacion` del cliente (y su direccion como
+    referencia si no habia); 409 sin pin o si no viene del chat web.
+- `CsrfGuard` a nivel de clase en `GroupServicesController` (deja pasar GET).
+  Antes ninguna mutacion de grupos lo pedia; el panel ya manda el token.
+- Rutas existentes con rama web cuando la solicitud tiene `conversationId`:
+  `GET requests/:id/messages` lee los ultimos 200 mensajes de la conversacion
+  con la forma `ConversationMessage` que ya pinta el panel (ubicacion como
+  `location`, foto y comprobante como `photo`); `POST requests/:id/messages`
+  escribe como `jefe` sin emojis; `request-location` deja un aviso; `catalog`
+  responde 409 (el cliente web no elige: decision 6).
+- Cotizacion: `confirmQuote` engancha el servicio a la conversacion
+  (`service_id`, `con_servicio`, sin pisar otro) y deja la cotizacion:
+  participantes vivas, duracion, traslado, total, pagado, forma de pago y, en
+  transferencia con saldo, saldo y cuentas activas. Importes en centavos con
+  `money.ts`, presentados en `es-MX`; los totales los calcula PostgreSQL
+  (`calcular_total_servicio`).
+- Comprobante: `servicioEsperaComprobante` en `comprobante-pendiente.ts` es el
+  criterio unico; un grupal espera comprobante si es por transferencia y tiene
+  `pending_balance > 0` (no usa `comprobante_pendiente`). Lo aplican la subida,
+  el resumen del cliente y la bandeja (`joinServicioQueEsperaComprobante`). La
+  subida registra `tipoCobro: 'grupal'` con el servicio ya enlazado, compara
+  contra el saldo y deja como revisor al jefe del servicio, como Telegram. El
+  dinero sigue entrando solo con CEP y `registerPayment`.
+- Avisos web: saldo tras cualquier cambio que ya lo avisaba por Telegram;
+  "pago completo" cuando un pago registrado deja el saldo en cero; rechazo
+  manual del comprobante con el motivo pasado por `textoWebSeguro`. Los textos
+  fijos no dicen nada de `PALABRAS_VETADAS_WEB` (spec).
+- Inicio del grupal: el mensaje de Telegram con botones a cada participante se
+  cambio por push (`/empleada/servicio`, `dedupeKey`
+  `group_service_started:<servicio>:<modelo>`, sin nombres ni importes).
+- Telegram al cliente se conserva en grupos (criterio de B-schedulers y
+  B-emisores): mensajes, catalogo, ubicacion, saldo y rechazo siguen saliendo
+  al cliente de Telegram; el web sale ademas, una vez por canal.
+- Pruebas: `grupo-en-chat-web.service.spec.ts`,
+  `group-services.chat-web.spec.ts`, `comprobante-pendiente.spec.ts`,
+  `link-group-requests-to-conversations.spec.ts` y casos nuevos en
+  `conversation-notifier.spec.ts` y `conversation-receipts.service.spec.ts`.
+
+Pendiente:
+
+- Frontend (no era de este carril): en `/jefe/grupos` listar
+  `chat-requests` con boton "Armar grupo" (`from-conversation`), boton "Usar
+  ubicacion del chat" y ocultar "Enviar catalogo" en solicitudes con
+  `conversationId` (anadir el campo a `GroupServiceRequest` en
+  `lib/types.ts`). El chat del grupo ya funciona con la forma actual. En
+  `/chats/[id]` del cliente, el boton de comprobante aparece solo porque
+  `comprobantePendiente` ya usa el criterio nuevo.
+- Migracion y consultas sin probar contra Postgres real: `chat-requests`
+  (`state->>`), la toma de control, el pin, el `JOIN` del comprobante con la
+  rama grupal y el flujo completo cotizar, subir, confirmar CEP y registrar.
+- Cancelar un grupal (`cancelService`, `releaseExpiredHolds`) no avisa al
+  cliente por ningun canal, tampoco antes por Telegram.
+- `releaseExpiredHolds` corre cada minuto en cada replica sin
+  `withAdvisoryLock` (anterior a este carril); con varias replicas puede
+  repetir el push de reserva vencida.
+- Un grupal pagado en efectivo o tarjeta no se cobra por el chat; el mixto
+  grupal tampoco (igual que en Telegram).
+- Fase 6: borrar `openCatalog` por botones, `toggleCatalogSelection`,
+  `confirmClientCatalog`, `findActiveRequestByClientTelegram`,
+  `findRequestByThread`, `setTelegramThread`, `recordRequestConversation`,
+  `telegram_thread_id` y los envios al cliente de Telegram.
+
+Decisiones a confirmar:
+
+- La solicitud web la crea el jefe desde el pedido del chat; el turno de la IA
+  no la crea solo (en Telegram si). Evita un ciclo de modulos y deja al jefe
+  decidir; si se quiere automatica, hace falta un evento entre modulos.
+- Crear la solicitud toma la conversacion para quien la crea.
+- Un jefe no puede abrir un grupo para un cliente que ya tiene uno con otro
+  jefe (409); un admin si, y se queda con el jefe que ya lo organizaba.
+- Que el pin del chat no se aplique solo a la solicitud: lo aplica el jefe.
+- Texto del push de inicio y destino `/empleada/servicio` para el grupal.

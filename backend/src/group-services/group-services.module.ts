@@ -17,6 +17,8 @@ import { TelegramModule } from '../telegram/telegram.module';
 import { LiquidationsModule } from '../liquidations/liquidations.module';
 import { ServicesModule } from '../services/services.module';
 import { GroupBossAssignmentService } from './group-boss-assignment.service';
+import { GrupoEnChatWebService } from './grupo-en-chat-web.service';
+import { ConversationNotifierModule } from '../conversations/conversation-notifier.module';
 
 @Module({
   imports: [
@@ -36,9 +38,16 @@ import { GroupBossAssignmentService } from './group-boss-assignment.service';
     forwardRef(() => TelegramModule),
     LiquidationsModule,
     forwardRef(() => ServicesModule),
+    // El chat web del grupo escribe con el notificador, que solo depende de la
+    // base: importar `ConversationsModule` cerraria un ciclo con Telegram.
+    ConversationNotifierModule,
   ],
   controllers: [GroupServicesController],
-  providers: [GroupServicesService, GroupBossAssignmentService],
+  providers: [
+    GroupServicesService,
+    GroupBossAssignmentService,
+    GrupoEnChatWebService,
+  ],
   exports: [GroupServicesService, GroupBossAssignmentService, TypeOrmModule],
 })
 export class GroupServicesModule {}

@@ -223,4 +223,89 @@ describe('ConversationNotifier', () => {
       }),
     ).resolves.toBe(true);
   });
+
+  /** Escritura dirigida, para quien actua a peticion de una persona. */
+  describe('escribir', () => {
+    it('guarda en esa conversacion con el remitente pedido y lo anuncia', async () => {
+      const message = await notifier.escribir({
+        conversationId: CONVERSACION,
+        sender: 'jefe',
+        texto: '  Ya tenemos a las chicas  ',
+      });
+
+      expect(dataSource.query).not.toHaveBeenCalled();
+      expect(manager.findOne).toHaveBeenCalledWith(
+        Conversation,
+        expect.objectContaining({
+          where: { id: CONVERSACION },
+          lock: { mode: 'pessimistic_write' },
+        }),
+      );
+      expect(manager.create).toHaveBeenCalledWith(Message, {
+        conversationId: CONVERSACION,
+        sender: 'jefe',
+        body: 'Ya tenemos a las chicas',
+      });
+      expect(message.id).toBe('mensaje-1');
+      expect(realtime.emitToClient).toHaveBeenCalledWith(CLIENTE, {
+        type: MESSAGE_CREATED,
+        data: { conversationId: CONVERSACION, messageId: 'mensaje-1' },
+      });
+    });
+
+    it('responde 404 si la conversacion no existe', async () => {
+      manager.findOne.mockResolvedValueOnce(null);
+      await expect(
+        notifier.escribir({
+          conversationId: CONVERSACION,
+          sender: 'sistema',
+          texto: 'Hola',
+        }),
+      ).rejects.toThrow('Conversación no encontrada');
+    });
+
+    it('un mensaje del jefe no entra en una conversacion cerrada', async () => {
+      manager.findOne.mockResolvedValueOnce({
+        id: CONVERSACION,
+        clientId: CLIENTE,
+        employeeId: MODELO,
+        status: 'cerrada',
+      });
+      await expect(
+        notifier.escribir({
+          conversationId: CONVERSACION,
+          sender: 'jefe',
+          texto: 'Hola',
+        }),
+      ).rejects.toThrow(/cerrada/);
+      expect(manager.save).not.toHaveBeenCalled();
+    });
+
+    it('un aviso del sistema si queda en el historial de una cerrada', async () => {
+      manager.findOne.mockResolvedValueOnce({
+        id: CONVERSACION,
+        clientId: CLIENTE,
+        employeeId: MODELO,
+        status: 'cerrada',
+      });
+      await expect(
+        notifier.escribir({
+          conversationId: CONVERSACION,
+          sender: 'sistema',
+          texto: 'Pago recibido',
+        }),
+      ).resolves.toEqual(expect.objectContaining({ id: 'mensaje-1' }));
+    });
+
+    it('rechaza un texto vacio sin tocar la base', async () => {
+      await expect(
+        notifier.escribir({
+          conversationId: CONVERSACION,
+          sender: 'jefe',
+          texto: '   ',
+        }),
+      ).rejects.toThrow('El mensaje no puede estar vacío');
+      expect(dataSource.transaction).not.toHaveBeenCalled();
+    });
+  });
 });

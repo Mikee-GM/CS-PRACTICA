@@ -271,7 +271,12 @@ describe('ConversationReceiptsService', () => {
         serviceId: 'servicio-1',
         status: 'con_servicio',
       });
-      servicioPendiente = { id: 'servicio-1' };
+      servicioPendiente = {
+        id: 'servicio-1',
+        serviceType: 'individual',
+        metodoPago: 'transferencia',
+        comprobantePendiente: true,
+      };
 
       const { creado } = await crear().subirComprobante(
         USUARIO,
@@ -280,6 +285,82 @@ describe('ConversationReceiptsService', () => {
         {},
       );
       expect(creado).toBe(true);
+    });
+
+    it('rechaza el servicio individual que ya no espera comprobante', async () => {
+      conv = conversacion({
+        state: { esquema: 1, lifecycle: 'READY' },
+        serviceId: 'servicio-1',
+        status: 'con_servicio',
+      });
+      servicioPendiente = {
+        id: 'servicio-1',
+        serviceType: 'individual',
+        metodoPago: 'transferencia',
+        comprobantePendiente: false,
+      };
+
+      await expect(
+        crear().subirComprobante(USUARIO, CONVERSACION, ARCHIVO, {}),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    describe('servicio grupal cotizado desde el panel', () => {
+      beforeEach(() => {
+        conv = conversacion({
+          state: { esquema: 1, lifecycle: 'COLLECTING' },
+          serviceId: 'servicio-1',
+          status: 'con_servicio',
+        });
+        servicioPendiente = {
+          id: 'servicio-1',
+          serviceType: 'grupal',
+          metodoPago: 'transferencia',
+          comprobantePendiente: false,
+          pendingBalance: 3600.5,
+          jefeId: 'jefe-organizador',
+        };
+      });
+
+      it('cobra el saldo con el jefe que organizo el grupo', async () => {
+        const { creado } = await crear().subirComprobante(
+          USUARIO,
+          CONVERSACION,
+          ARCHIVO,
+          {},
+        );
+        await drenar();
+
+        expect(creado).toBe(true);
+        expect(validaciones.create).toHaveBeenCalledWith(
+          expect.objectContaining({
+            tipoCobro: 'grupal',
+            servicioId: 'servicio-1',
+          }),
+        );
+        expect(aiProvider.analyzeReceipt).toHaveBeenCalledWith(URL_R2, 3600.5);
+        expect(validaciones.save).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            jefeId: 'jefe-organizador',
+            montoEsperado: 3600.5,
+          }),
+        );
+      });
+
+      it('responde 409 si el grupo ya no tiene saldo', async () => {
+        servicioPendiente = { ...servicioPendiente, pendingBalance: 0 };
+        await expect(
+          crear().subirComprobante(USUARIO, CONVERSACION, ARCHIVO, {}),
+        ).rejects.toThrow(ConflictException);
+        expect(uploadService.uploadEvidence).not.toHaveBeenCalled();
+      });
+
+      it('responde 409 si el grupo no se paga por transferencia', async () => {
+        servicioPendiente = { ...servicioPendiente, metodoPago: 'mixto' };
+        await expect(
+          crear().subirComprobante(USUARIO, CONVERSACION, ARCHIVO, {}),
+        ).rejects.toThrow(ConflictException);
+      });
     });
 
     it('responde 400 sin archivo', async () => {

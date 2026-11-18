@@ -30,6 +30,12 @@ export class CreateGroupRequestDto {
   bookingSessionId?: string;
 }
 
+/** Solicitud grupal a partir de una conversacion del chat web. */
+export class CreateGroupRequestFromConversationDto {
+  @IsUUID()
+  conversationId: string;
+}
+
 export class UpdateGroupRequestDto {
   @IsOptional()
   @IsNumber()

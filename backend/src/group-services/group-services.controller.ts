@@ -3,16 +3,23 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Put,
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
+import { GetUser } from '../auth/decorators/get-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { CsrfGuard } from '../auth/guards/csrf.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { Usuarios } from '../users/entities/user.entity';
 import {
   AddGroupParticipantDto,
   ChangeGroupDurationDto,
@@ -20,6 +27,7 @@ import {
   ConfigureGroupTransportDto,
   ConfirmGroupQuoteDto,
   CreateGroupRequestDto,
+  CreateGroupRequestFromConversationDto,
   ManualTransportChargeDto,
   GroupRequestMessageDto,
   RegisterGroupPaymentDto,
@@ -30,8 +38,13 @@ import {
 } from './dto/group-service.dto';
 import { GroupServicesService } from './group-services.service';
 
+/*
+ * `CsrfGuard` a nivel de clase: deja pasar GET y exige el token en todo lo que
+ * escribe. Antes de la Fase 5 estas rutas no lo pedian; el panel ya lo manda
+ * siempre (`apiFetch`).
+ */
 @Controller('group-services')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, CsrfGuard)
 @Roles('admin', 'jefe')
 export class GroupServicesController {
   constructor(private readonly groupServices: GroupServicesService) {}
@@ -49,6 +62,31 @@ export class GroupServicesController {
   @Post('requests')
   create(@Body() dto: CreateGroupRequestDto, @Req() req: any) {
     return this.groupServices.create(dto, req.user);
+  }
+
+  /** Conversaciones del chat web que piden un grupo y aun no tienen solicitud. */
+  @Get('chat-requests')
+  pendingConversations(@GetUser() actor: Usuarios) {
+    return this.groupServices.pendingConversations(actor);
+  }
+
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('requests/from-conversation')
+  createFromConversation(
+    @Body() dto: CreateGroupRequestFromConversationDto,
+    @GetUser() actor: Usuarios,
+  ) {
+    return this.groupServices.createFromConversation(dto.conversationId, actor);
+  }
+
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('requests/:id/location-from-chat')
+  @HttpCode(HttpStatus.OK)
+  useChatLocation(
+    @Param('id', ParseUUIDPipe) id: string,
+    @GetUser() actor: Usuarios,
+  ) {
+    return this.groupServices.useChatLocation(id, actor);
   }
 
   @Get('requests/:id')

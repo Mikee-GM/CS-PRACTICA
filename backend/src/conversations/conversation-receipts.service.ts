@@ -24,6 +24,7 @@ import { normalizarEstado } from '../booking/booking-state';
 import type { ConversationRef } from '../booking/chat-channel';
 import { Clientes } from '../clients/entities/client.entity';
 import { describeError } from '../common/errors/error-message';
+import { roundMoney } from '../common/money';
 import { Empleadas } from '../employees/entities/employee.entity';
 import { RealtimeEventsService } from '../realtime/realtime.service';
 import { AuthorizedBankAccounts } from '../services/entities/authorized-bank-account.entity';
@@ -44,6 +45,7 @@ import {
   hayCobroPendiente,
   METODOS_CON_COMPROBANTE,
   SERVICIO_CERRADO,
+  servicioEsperaComprobante,
   VENTANA_ANALISIS_MS,
 } from './comprobante-pendiente';
 import { aMensajeDelChat, type MensajeDelChat } from './conversations.service';
@@ -70,10 +72,16 @@ export const TEXTOS_DEL_COMPROBANTE = {
 
 /** Lo que se le pide al comprobante que llega por esta conversacion. */
 export interface CobroPendiente {
-  tipoCobro: 'reserva';
+  /** `grupal`: el saldo de un servicio grupal cotizado desde el panel. */
+  tipoCobro: 'reserva' | 'grupal';
   /** `null` cuando no hay monto con el que comparar (mixto sin parte fijada). */
   montoEsperado: number | null;
   servicioId: string | null;
+  /**
+   * Quien revisa el comprobante. En un grupal es el jefe que organizo el
+   * servicio, que puede no ser jefe de la modelo de la conversacion.
+   */
+  jefeId?: string | null;
 }
 
 /** Lo que el analisis en segundo plano necesita del comprobante recibido. */
@@ -199,7 +207,16 @@ export class ConversationReceiptsService {
 
       const validation = await registrarValidacion(
         manager.getRepository(PaymentReceiptValidations),
-        { imageUrl: subida.url, tipoCobro: cobroVigente.tipoCobro },
+        {
+          imageUrl: subida.url,
+          tipoCobro: cobroVigente.tipoCobro,
+          // El grupal ya tiene servicio: como en Telegram, la foto nace
+          // enganchada a el para que el jefe la vea en su ficha.
+          servicioId:
+            cobroVigente.tipoCobro === 'grupal' && cobroVigente.servicioId
+              ? cobroVigente.servicioId
+              : undefined,
+        },
       );
       const message = await manager.save(
         manager.create(Message, {
@@ -321,7 +338,7 @@ export class ConversationReceiptsService {
         analysis,
         resultado,
         {
-          jefeId: empleada?.jefeId ?? undefined,
+          jefeId: cobro.jefeId ?? empleada?.jefeId ?? undefined,
           expectedAmount: cobro.montoEsperado ?? undefined,
           // Solo para rastrear de donde vino. No es el borrador de Telegram:
           // ese lo lee el boton "Aprobar" del bot, que aqui no existe.
@@ -489,17 +506,36 @@ export class ConversationReceiptsService {
     conversation: Conversation,
   ): Promise<CobroPendiente | null> {
     const estado = normalizarEstado(conversation.state);
-    const servicio = conversation.serviceId
+    const leido = conversation.serviceId
       ? await manager.findOne(Servicios, {
           where: {
             id: conversation.serviceId,
             metodoPago: In([...METODOS_CON_COMPROBANTE]),
-            comprobantePendiente: true,
             estado: Not(In([...SERVICIO_CERRADO])),
           },
-          select: { id: true },
+          select: {
+            id: true,
+            jefeId: true,
+            serviceType: true,
+            metodoPago: true,
+            comprobantePendiente: true,
+            pendingBalance: true,
+          },
         })
       : null;
+    const servicio = leido && servicioEsperaComprobante(leido) ? leido : null;
+
+    // El grupal se cobra por su saldo, que ya fijo el jefe al confirmar la
+    // cotizacion; el borrador de la IA no interviene. Mismo monto esperado y
+    // mismo jefe que en Telegram (`tipoCobro: 'grupal'`).
+    if (servicio?.serviceType === 'grupal') {
+      return {
+        tipoCobro: 'grupal',
+        montoEsperado: roundMoney(servicio.pendingBalance),
+        servicioId: servicio.id,
+        jefeId: servicio.jefeId,
+      };
+    }
     if (!hayCobroPendiente(estado, Boolean(servicio))) return null;
 
     const empleada = await manager.findOne(Empleadas, {

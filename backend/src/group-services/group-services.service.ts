@@ -58,6 +58,11 @@ import { ConfigService } from '@nestjs/config';
 import { OfficeLiquidationSyncService } from '../liquidations/office-liquidation-sync.service';
 import { ServicesService } from '../services/services.service';
 import { GroupBossAssignmentService } from './group-boss-assignment.service';
+import {
+  GrupoEnChatWebService,
+  type MensajeDelGrupo,
+  type PedidoGrupalDelChat,
+} from './grupo-en-chat-web.service';
 
 type Actor = Pick<Usuarios, 'id' | 'rol'>;
 
@@ -94,6 +99,7 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
     @Inject(forwardRef(() => ServicesService))
     private readonly servicesService: ServicesService,
     private readonly bossAssignment: GroupBossAssignmentService,
+    private readonly grupoWeb: GrupoEnChatWebService,
   ) {}
 
   onModuleInit(): void {
@@ -131,7 +137,74 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  private async createRequest(dto: CreateGroupRequestDto, bossId: string) {
+  /**
+   * Solicitud grupal desde una conversacion del chat web (decision 6 de la
+   * Fase 5). La crea el jefe: el turno de la IA solo entrega la conversacion
+   * al equipo cuando el cliente pide varias chicas. La conversacion pasa a
+   * manos de quien organiza, para que la IA no conteste mientras se arma el
+   * grupo, y desde ahi todo lo que Telegram le mandaba al cliente sale por
+   * ese chat.
+   */
+  async createFromConversation(conversationId: string, actor: Actor) {
+    if (!['jefe', 'admin'].includes(actor.rol)) {
+      throw new ForbiddenException('No puedes crear solicitudes grupales');
+    }
+    const conversation = await this.grupoWeb.conversacionParaGrupo(
+      conversationId,
+      actor,
+    );
+    // Un cliente solo tiene una solicitud viva. Si ya la organiza otro jefe,
+    // devolverla aqui le daria a este una solicitud que no puede tocar.
+    const enCurso = await this.requests.findOne({
+      where: {
+        clientId: conversation.clientId,
+        status: In([
+          'esperando_jefe',
+          'seleccionando',
+          'reservada',
+          'esperando_pago',
+        ]),
+      },
+      select: { id: true, bossId: true },
+    });
+    if (enCurso && actor.rol !== 'admin' && enCurso.bossId !== actor.id) {
+      throw new ConflictException(
+        'El cliente ya tiene una solicitud grupal en curso con otro jefe',
+      );
+    }
+    const bossId =
+      actor.rol === 'jefe'
+        ? actor.id
+        : (enCurso?.bossId ??
+          (await this.bossAssignment.resolve(
+            conversation.employeeId,
+            actor.id,
+          )));
+    const request = await this.createRequest(
+      {
+        clientId: conversation.clientId,
+        initialEmployeeId: conversation.employeeId,
+      },
+      bossId,
+      conversation.id,
+    );
+    await this.grupoWeb.tomarControl(conversation, actor.id);
+    return this.findOne(request.id, actor);
+  }
+
+  /** Conversaciones del chat que piden un grupo y aun no tienen solicitud. */
+  pendingConversations(actor: Actor): Promise<PedidoGrupalDelChat[]> {
+    if (!['jefe', 'admin'].includes(actor.rol)) {
+      throw new ForbiddenException('No puedes consultar solicitudes grupales');
+    }
+    return this.grupoWeb.pedidosPendientes(actor);
+  }
+
+  private async createRequest(
+    dto: CreateGroupRequestDto,
+    bossId: string,
+    conversationId: string | null = null,
+  ) {
     const client = await this.dataSource
       .getRepository(Clientes)
       .findOneBy({ id: dto.clientId });
@@ -150,7 +223,24 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
       },
       relations: { selections: { employee: true }, client: true, boss: true },
     });
-    if (existing) return existing;
+    if (existing) {
+      // Un cliente solo tiene una solicitud viva. Si ya la tenia (por
+      // Telegram, o creada a mano) y aun no hablaba por ningun chat web, se
+      // le engancha este, para que la cotizacion le llegue donde escribe.
+      if (conversationId && !existing.conversationId) {
+        await this.requests.update(existing.id, { conversationId });
+        existing.conversationId = conversationId;
+        await this.audit(
+          null,
+          existing.id,
+          bossId,
+          'conversacion_web_enlazada',
+          null,
+          { conversationId },
+        );
+      }
+      return existing;
+    }
 
     const request = await this.requests.save(
       this.requests.create({
@@ -158,6 +248,7 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
         bossId,
         initialEmployeeId: dto.initialEmployeeId ?? null,
         bookingSessionId: dto.bookingSessionId ?? null,
+        conversationId,
         serviceId: null,
         status: 'esperando_jefe',
         durationHours: null,
@@ -180,6 +271,7 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
     }
     await this.audit(null, request.id, bossId, 'solicitud_creada', null, {
       initialEmployeeId: dto.initialEmployeeId ?? null,
+      ...(conversationId ? { canal: 'web', conversationId } : {}),
     });
     this.realtime.emitToBoss(bossId, {
       type: 'group_service_request_created',
@@ -361,8 +453,14 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
     return this.findOne(id, actor);
   }
 
+  /**
+   * La conversacion con el cliente. Una solicitud del chat web lee su
+   * conversacion; las de Telegram siguen leyendo `conversaciones_telegram`
+   * hasta que se retire ese canal.
+   */
   async requestMessages(id: string, actor: Actor) {
     const request = await this.findOne(id, actor);
+    if (request.conversationId) return this.grupoWeb.mensajes(request);
     return this.dataSource.getRepository(ConversacionesTelegram).find({
       where: { groupRequestId: request.id },
       order: { enviadoAt: 'ASC' },
@@ -371,6 +469,17 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
 
   async sendRequestMessage(id: string, message: string, actor: Actor) {
     const request = await this.findOne(id, actor);
+    if (request.conversationId) {
+      const enviado: MensajeDelGrupo = await this.grupoWeb.escribirDelJefe(
+        request,
+        message,
+      );
+      this.realtime.emitToBoss(request.bossId, {
+        type: 'group_chat_message',
+        data: enviado,
+      });
+      return enviado;
+    }
     if (!request.client.telegramChatId)
       throw new ConflictException(
         'El cliente no tiene un chat de Telegram disponible',
@@ -386,6 +495,12 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
     const request = await this.findRequestForMutation(id, actor);
     if (request.serviceId)
       throw new ConflictException('La solicitud ya fue confirmada');
+    // Decision 6 de la Fase 5: en el chat web el cliente no elige de un
+    // catalogo con botones; las modelos las reserva el jefe desde el panel.
+    if (request.conversationId)
+      throw new ConflictException(
+        'En las solicitudes del chat web el jefe elige a las modelos desde el panel',
+      );
     request.catalogVersion += 1;
     request.status = 'seleccionando';
     await this.requests.save(request);
@@ -484,6 +599,13 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
 
   async requestClientLocation(id: string, actor: Actor) {
     const request = await this.findOne(id, actor);
+    if (request.conversationId) {
+      await this.grupoWeb.pedirUbicacion(request);
+      await this.audit(null, id, actor.id, 'ubicacion_solicitada', null, {
+        canal: 'web',
+      });
+      return { sent: true };
+    }
     if (!request.client.telegramChatId)
       throw new ConflictException(
         'El cliente no tiene un chat de Telegram disponible',
@@ -657,6 +779,41 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
     return request;
   }
 
+  /**
+   * Usa como ubicacion del grupo el ultimo pin que el cliente mando por el
+   * chat web. En Telegram el pin llegaba a la solicitud solo; en la web lo
+   * aplica el jefe, que es quien lo ve en la conversacion y decide si vale.
+   * La cobertura no se juzga aqui, igual que en `setLocationFromClient`.
+   */
+  async useChatLocation(id: string, actor: Actor) {
+    const request = await this.findRequestForMutation(id, actor);
+    if (request.serviceId)
+      throw new ConflictException(
+        'La solicitud ya generó un servicio; usa las acciones del servicio',
+      );
+    if (!request.conversationId)
+      throw new ConflictException('La solicitud no viene del chat web');
+    const pin = await this.grupoWeb.ultimaUbicacionDelCliente(
+      request.conversationId,
+    );
+    if (!pin)
+      throw new ConflictException(
+        'El cliente todavía no compartió su ubicación en el chat',
+      );
+    const before = this.requestSnapshot(request);
+    request.locationLat = pin.lat;
+    request.locationLng = pin.lng;
+    if (pin.address && !request.locationReference) {
+      request.locationReference = pin.address.slice(0, 240);
+    }
+    const saved = await this.requests.save(request);
+    await this.audit(null, id, actor.id, 'ubicacion_cliente_recibida', before, {
+      ...this.requestSnapshot(saved),
+      canal: 'web',
+    });
+    return this.findOne(id, actor);
+  }
+
   async reserveSelections(
     id: string,
     dto: ReserveGroupSelectionDto,
@@ -796,194 +953,211 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
   }
 
   async confirmQuote(id: string, dto: ConfirmGroupQuoteDto, actor: Actor) {
-    const serviceId = await this.dataSource.transaction(async (manager) => {
-      const request = await manager.findOne(GroupServiceRequest, {
-        where: { id },
-        lock: { mode: 'pessimistic_write' },
-      });
-      if (!request)
-        throw new NotFoundException('Solicitud grupal no encontrada');
-      this.assertOwner(request, actor);
-      if (request.serviceId)
-        throw new ConflictException('La cotización ya fue confirmada');
-      this.assertRequestComplete(request);
+    const { serviceId, conversationId } = await this.dataSource.transaction(
+      async (manager) => {
+        const request = await manager.findOne(GroupServiceRequest, {
+          where: { id },
+          lock: { mode: 'pessimistic_write' },
+        });
+        if (!request)
+          throw new NotFoundException('Solicitud grupal no encontrada');
+        this.assertOwner(request, actor);
+        if (request.serviceId)
+          throw new ConflictException('La cotización ya fue confirmada');
+        this.assertRequestComplete(request);
 
-      const selections = await manager.find(GroupServiceRequestSelection, {
-        where: {
-          requestId: id,
-          status: 'reservada',
-          expiresAt: MoreThan(new Date()),
-        },
-        relations: { employee: true },
-      });
-      if (selections.length < 2)
-        throw new ConflictException(
-          'Se necesitan al menos dos reservas vigentes',
-        );
-      if (
-        !selections.some(
-          (selection) => selection.employeeId === dto.responsibleEmployeeId,
-        )
-      ) {
-        throw new BadRequestException(
-          'La responsable debe pertenecer a la selección',
-        );
-      }
-      this.validateTransportUnits(
-        dto,
-        selections.map((selection) => selection.employeeId),
-      );
-      for (const selection of selections) {
-        await this.assertEmployeeFree(manager, selection.employeeId, id);
-      }
-
-      const setting = await manager.findOneBy(TransportSetting, { id: 1 });
-      const presetLocations = await manager.find(PresetServiceLocation, {
-        where: { active: true },
-      });
-      const presetLocation = presetLocations.find(
-        (location) =>
-          Math.abs(Number(location.latitude) - Number(request.locationLat)) <
-            0.000001 &&
-          Math.abs(Number(location.longitude) - Number(request.locationLng)) <
-            0.000001,
-      );
-      const fee = presetLocation
-        ? 0
-        : Number(setting?.externalLocationFee ?? 0);
-      const internalDriverPayout = presetLocation ? 60 : fee / 2;
-      const vehicleCount = this.billableVehicleCount(dto.transportUnits);
-      const customerTransportCharge = fee * vehicleCount;
-      const responsible = selections.find(
-        (item) => item.employeeId === dto.responsibleEmployeeId,
-      )!;
-      const requiresPayment = request.paymentMethod === 'transferencia';
-      const client = await manager.findOneByOrFail(Clientes, {
-        id: request.clientId,
-      });
-
-      const service = await manager.save(
-        Servicios,
-        manager.create(Servicios, {
-          serviceType: 'grupal',
-          empleadaId: responsible.employeeId,
-          clienteId: request.clientId,
-          jefeId: request.bossId,
-          metodoPago: request.paymentMethod!,
-          duracionPactadaHoras: Number(request.durationHours),
-          duracionFinalHoras: null,
-          ubicacionClienteLat: Number(request.locationLat),
-          ubicacionClienteLng: Number(request.locationLng),
-          presetLocationId: presetLocation?.id ?? null,
-          locationNameSnapshot: presetLocation?.name ?? null,
-          locationAddressSnapshot:
-            presetLocation?.address ?? request.locationReference ?? null,
-          precioBaseHoraPactado: Number(responsible.hourlyRateSnapshot),
-          totalBase: 0,
-          totalExtras: 0,
-          totalFinal: 0,
-          totalPaid: 0,
-          pendingBalance: 0,
-          totalTransporte: customerTransportCharge,
-          customerTransportCharge,
-          transportFeeSnapshot: fee,
-          manualTransportAdjustment: 0,
-          actualTransportCost: 0,
-          estado: 'pendiente',
-          estadoLiquidacion: 'cerrada',
-          iaActiva: false,
-          clienteTelegramId: client.telegramChatId,
-        }),
-      );
-
-      const holdExpiresAt = new Date(Date.now() + GroupServicesService.HOLD_MS);
-      for (const selection of selections) {
-        await manager.save(
-          ServiceParticipant,
-          manager.create(ServiceParticipant, {
-            serviceId: service.id,
-            employeeId: selection.employeeId,
-            role:
-              selection.employeeId === dto.responsibleEmployeeId
-                ? 'responsable'
-                : 'participante',
-            status: requiresPayment ? 'pendiente_pago' : 'reservada',
-            hourlyRateSnapshot: Number(selection.hourlyRateSnapshot),
-            billableHours: Number(request.durationHours),
-            confirmedSubtotal:
-              Number(selection.hourlyRateSnapshot) *
-              Number(request.durationHours),
-            holdExpiresAt,
-            joinedAt: null,
-            removedAt: null,
-          }),
-        );
-      }
-
-      for (const unit of dto.transportUnits) {
-        const provider = unit.provider === 'chofer' ? 'interno' : 'uber';
-        const trip = await manager.save(
-          Viajes,
-          manager.create(Viajes, {
-            servicioId: service.id,
-            choferId: null,
-            tipo: unit.direction,
-            unitNumber: unit.unitNumber,
-            zona: 'domicilio',
-            tarifa: provider === 'interno' ? internalDriverPayout : 0,
-            driverPayout: provider === 'interno' ? internalDriverPayout : 0,
-            estado: provider === 'interno' ? 'notificado' : 'aceptado',
-            proveedorTransporte: provider,
-          }),
-        );
-        await manager.save(
-          TripPassenger,
-          unit.employeeIds.map((employeeId) =>
-            manager.create(TripPassenger, { tripId: trip.id, employeeId }),
-          ),
-        );
-      }
-
-      await manager.update(
-        GroupServiceRequestSelection,
-        { requestId: id, status: 'reservada' },
-        { status: 'confirmada', expiresAt: holdExpiresAt },
-      );
-      request.serviceId = service.id;
-      request.status = requiresPayment ? 'esperando_pago' : 'confirmada';
-      request.holdExpiresAt = holdExpiresAt;
-      await manager.save(GroupServiceRequest, request);
-      await manager.update(
-        ConversacionesTelegram,
-        { groupRequestId: id },
-        { servicioId: service.id, iaActiva: false },
-      );
-      await manager.save(
-        ServiceGroupAudit,
-        manager.create(ServiceGroupAudit, {
-          serviceId: service.id,
-          requestId: id,
-          actorUserId: actor.id,
-          action: 'cotizacion_confirmada',
-          before: null,
-          after: {
-            responsibleEmployeeId: dto.responsibleEmployeeId,
-            employeeIds: selections.map((item) => item.employeeId),
-            durationHours: request.durationHours,
-            vehicleCount,
-            customerTransportCharge,
+        const selections = await manager.find(GroupServiceRequestSelection, {
+          where: {
+            requestId: id,
+            status: 'reservada',
+            expiresAt: MoreThan(new Date()),
           },
-          reason: null,
-        }),
-      );
-      return service.id;
-    });
+          relations: { employee: true },
+        });
+        if (selections.length < 2)
+          throw new ConflictException(
+            'Se necesitan al menos dos reservas vigentes',
+          );
+        if (
+          !selections.some(
+            (selection) => selection.employeeId === dto.responsibleEmployeeId,
+          )
+        ) {
+          throw new BadRequestException(
+            'La responsable debe pertenecer a la selección',
+          );
+        }
+        this.validateTransportUnits(
+          dto,
+          selections.map((selection) => selection.employeeId),
+        );
+        for (const selection of selections) {
+          await this.assertEmployeeFree(manager, selection.employeeId, id);
+        }
+
+        const setting = await manager.findOneBy(TransportSetting, { id: 1 });
+        const presetLocations = await manager.find(PresetServiceLocation, {
+          where: { active: true },
+        });
+        const presetLocation = presetLocations.find(
+          (location) =>
+            Math.abs(Number(location.latitude) - Number(request.locationLat)) <
+              0.000001 &&
+            Math.abs(Number(location.longitude) - Number(request.locationLng)) <
+              0.000001,
+        );
+        const fee = presetLocation
+          ? 0
+          : Number(setting?.externalLocationFee ?? 0);
+        const internalDriverPayout = presetLocation ? 60 : fee / 2;
+        const vehicleCount = this.billableVehicleCount(dto.transportUnits);
+        const customerTransportCharge = fee * vehicleCount;
+        const responsible = selections.find(
+          (item) => item.employeeId === dto.responsibleEmployeeId,
+        )!;
+        const requiresPayment = request.paymentMethod === 'transferencia';
+        const client = await manager.findOneByOrFail(Clientes, {
+          id: request.clientId,
+        });
+
+        const service = await manager.save(
+          Servicios,
+          manager.create(Servicios, {
+            serviceType: 'grupal',
+            empleadaId: responsible.employeeId,
+            clienteId: request.clientId,
+            jefeId: request.bossId,
+            metodoPago: request.paymentMethod!,
+            duracionPactadaHoras: Number(request.durationHours),
+            duracionFinalHoras: null,
+            ubicacionClienteLat: Number(request.locationLat),
+            ubicacionClienteLng: Number(request.locationLng),
+            presetLocationId: presetLocation?.id ?? null,
+            locationNameSnapshot: presetLocation?.name ?? null,
+            locationAddressSnapshot:
+              presetLocation?.address ?? request.locationReference ?? null,
+            precioBaseHoraPactado: Number(responsible.hourlyRateSnapshot),
+            totalBase: 0,
+            totalExtras: 0,
+            totalFinal: 0,
+            totalPaid: 0,
+            pendingBalance: 0,
+            totalTransporte: customerTransportCharge,
+            customerTransportCharge,
+            transportFeeSnapshot: fee,
+            manualTransportAdjustment: 0,
+            actualTransportCost: 0,
+            estado: 'pendiente',
+            estadoLiquidacion: 'cerrada',
+            iaActiva: false,
+            clienteTelegramId: client.telegramChatId,
+          }),
+        );
+
+        const holdExpiresAt = new Date(
+          Date.now() + GroupServicesService.HOLD_MS,
+        );
+        for (const selection of selections) {
+          await manager.save(
+            ServiceParticipant,
+            manager.create(ServiceParticipant, {
+              serviceId: service.id,
+              employeeId: selection.employeeId,
+              role:
+                selection.employeeId === dto.responsibleEmployeeId
+                  ? 'responsable'
+                  : 'participante',
+              status: requiresPayment ? 'pendiente_pago' : 'reservada',
+              hourlyRateSnapshot: Number(selection.hourlyRateSnapshot),
+              billableHours: Number(request.durationHours),
+              confirmedSubtotal:
+                Number(selection.hourlyRateSnapshot) *
+                Number(request.durationHours),
+              holdExpiresAt,
+              joinedAt: null,
+              removedAt: null,
+            }),
+          );
+        }
+
+        for (const unit of dto.transportUnits) {
+          const provider = unit.provider === 'chofer' ? 'interno' : 'uber';
+          const trip = await manager.save(
+            Viajes,
+            manager.create(Viajes, {
+              servicioId: service.id,
+              choferId: null,
+              tipo: unit.direction,
+              unitNumber: unit.unitNumber,
+              zona: 'domicilio',
+              tarifa: provider === 'interno' ? internalDriverPayout : 0,
+              driverPayout: provider === 'interno' ? internalDriverPayout : 0,
+              estado: provider === 'interno' ? 'notificado' : 'aceptado',
+              proveedorTransporte: provider,
+            }),
+          );
+          await manager.save(
+            TripPassenger,
+            unit.employeeIds.map((employeeId) =>
+              manager.create(TripPassenger, { tripId: trip.id, employeeId }),
+            ),
+          );
+        }
+
+        await manager.update(
+          GroupServiceRequestSelection,
+          { requestId: id, status: 'reservada' },
+          { status: 'confirmada', expiresAt: holdExpiresAt },
+        );
+        request.serviceId = service.id;
+        request.status = requiresPayment ? 'esperando_pago' : 'confirmada';
+        request.holdExpiresAt = holdExpiresAt;
+        await manager.save(GroupServiceRequest, request);
+        await manager.update(
+          ConversacionesTelegram,
+          { groupRequestId: id },
+          { servicioId: service.id, iaActiva: false },
+        );
+        if (request.conversationId) {
+          await this.grupoWeb.enlazarServicio(
+            manager,
+            request.conversationId,
+            service.id,
+          );
+        }
+        await manager.save(
+          ServiceGroupAudit,
+          manager.create(ServiceGroupAudit, {
+            serviceId: service.id,
+            requestId: id,
+            actorUserId: actor.id,
+            action: 'cotizacion_confirmada',
+            before: null,
+            after: {
+              responsibleEmployeeId: dto.responsibleEmployeeId,
+              employeeIds: selections.map((item) => item.employeeId),
+              durationHours: request.durationHours,
+              vehicleCount,
+              customerTransportCharge,
+            },
+            reason: null,
+          }),
+        );
+        return {
+          serviceId: service.id,
+          conversationId: request.conversationId,
+        };
+      },
+    );
     this.realtime.emitToBoss(actor.id, {
       type: 'group_quote_confirmed',
       data: { requestId: id, serviceId },
     });
     const result = await this.findService(serviceId, actor);
-    await this.notifyPendingTransfer(result);
+    await this.notifyPendingTransferTelegram(result);
+    // En la web la cotizacion entera, saldo y cuentas incluidos: es lo
+    // primero que el cliente sabe del grupo que se le armo.
+    await this.grupoWeb.avisarCotizacion({ conversationId }, result);
     return result;
   }
 
@@ -1079,7 +1253,7 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
     const result = await this.findService(serviceId, actor);
     if (result.estado === 'en_curso' && Number(result.pendingBalance) <= 0.009)
       await this.dispatchPendingTrips(result);
-    await this.notifyPendingTransfer(result);
+    await this.notifyPendingTransfer(result, { pagoRegistrado: true });
     return result;
   }
 
@@ -1132,6 +1306,14 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
           `Tu comprobante fue rechazado tras revisión manual${reason ? `: ${reason}` : ''}. Por favor envía un nuevo comprobante.`,
         )
         .catch(() => undefined);
+    }
+    if (decision === 'rechazado') {
+      // Por cada canal que tenga el cliente, una vez: el web no depende de
+      // que tambien tenga Telegram.
+      await this.grupoWeb.avisarComprobanteRechazado(
+        await this.origenWeb(serviceId),
+        reason,
+      );
     }
     return result;
   }
@@ -1211,34 +1393,7 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
         },
       });
       this.notifyExternalBoss(result.jefeId, participant.employee);
-      const chatId = participant.employee?.usuario?.telegramChatId;
-      if (chatId) {
-        const responsible = participant.role === 'responsable';
-        await this.bot.telegram.sendMessage(
-          chatId,
-          responsible
-            ? `Fuiste asignada como responsable de un servicio grupal con ${result.participantes.length} participantes. Puedes consultar transporte, registrar extras y finalizar el servicio.`
-            : `Fuiste requerida para un servicio grupal. En este servicio únicamente puedes registrar extras de tu catálogo.`,
-          Markup.inlineKeyboard([
-            ...(responsible
-              ? [
-                  [
-                    Markup.button.callback(
-                      'Finalizar servicio',
-                      `finalizar_servicio:${serviceId}`,
-                    ),
-                  ],
-                ]
-              : []),
-            [
-              Markup.button.callback(
-                'Agregar extra',
-                `agregar_extra_list:${serviceId}`,
-              ),
-            ],
-          ]),
-        );
-      }
+      await this.avisarInicioALaParticipante(serviceId, participant);
     }
     return result;
   }
@@ -2330,6 +2485,39 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+  /**
+   * Push a cada participante al iniciar (Fase 5: el personal no necesita
+   * Telegram). Antes era un mensaje del bot con botones para finalizar y
+   * agregar extras; esas acciones viven en el portal. El texto no lleva
+   * nombres ni importes porque sale en la pantalla de bloqueo. Nunca lanza:
+   * el servicio ya empezo.
+   */
+  private async avisarInicioALaParticipante(
+    serviceId: string,
+    participant: ServiceParticipant,
+  ): Promise<void> {
+    const usuarioId = participant.employee?.usuarioId;
+    if (!usuarioId) return;
+    const responsable = participant.role === 'responsable';
+    try {
+      await this.notifications.notificar(usuarioId, {
+        titulo: 'Servicio grupal iniciado',
+        cuerpo: responsable
+          ? 'Eres la responsable: consulta el transporte, registra extras y finaliza desde el portal.'
+          : 'Puedes registrar los extras de tu catálogo desde el portal.',
+        url: '/empleada/servicio',
+        tag: `grupo-${serviceId}`,
+        requireInteraction: true,
+        relatedEntityId: serviceId,
+        dedupeKey: `group_service_started:${serviceId}:${participant.employeeId}`,
+      });
+    } catch (error) {
+      this.logger.error(
+        `No se pudo avisar del inicio del grupal ${serviceId} a ${participant.employeeId}: ${String(error)}`,
+      );
+    }
+  }
+
   private notifyExternalBoss(organizerBossId: string, employee?: Empleadas) {
     if (employee?.jefeId && employee.jefeId !== organizerBossId) {
       this.realtime.emitToBoss(employee.jefeId, {
@@ -2349,7 +2537,42 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  private async notifyPendingTransfer(service: Servicios) {
+  /**
+   * Saldo por transferir, por cada canal del cliente. En la web, ademas, el
+   * aviso de pago completo cuando un pago registrado deja el saldo en cero.
+   */
+  private async notifyPendingTransfer(
+    service: Servicios,
+    opciones: { pagoRegistrado?: boolean } = {},
+  ) {
+    await this.notifyPendingTransferTelegram(service);
+    await this.grupoWeb.avisarSaldo(
+      await this.origenWeb(service.id),
+      service,
+      opciones,
+    );
+  }
+
+  /** La conversacion web de la que nacio el servicio, si nacio de una. */
+  private async origenWeb(
+    serviceId: string,
+  ): Promise<{ conversationId: string | null }> {
+    try {
+      const request = await this.requests.findOne({
+        where: { serviceId },
+        select: { id: true, conversationId: true },
+      });
+      return { conversationId: request?.conversationId ?? null };
+    } catch (error) {
+      // Solo decide si hay aviso web; la operacion que lo origina ya se hizo.
+      this.logger.warn(
+        `No se pudo leer la solicitud del servicio grupal ${serviceId}: ${String(error)}`,
+      );
+      return { conversationId: null };
+    }
+  }
+
+  private async notifyPendingTransferTelegram(service: Servicios) {
     if (
       service.metodoPago !== 'transferencia' ||
       Number(service.pendingBalance) <= 0.009 ||
@@ -2357,13 +2580,6 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
     )
       return;
     const bankDetails = await this.servicesService.bankTransferDetails();
-    // El servicio grupal nace de una solicitud: el bot por el que se le habla
-    // al cliente es el de la modelo desde cuyo chat se originó, no el de la
-    // responsable del servicio (a esa puede no haberla iniciado nunca).
-    const originRequest = await this.requests.findOne({
-      where: { serviceId: service.id },
-      select: { id: true, initialEmployeeId: true },
-    });
     await this.bot.telegram.sendMessage(
       service.cliente.telegramChatId,
       `Cotización del servicio grupal\nTotal: $${Number(service.totalFinal).toFixed(2)}\nPagado: $${Number(service.totalPaid).toFixed(2)}\nSaldo por transferir: $${Number(service.pendingBalance).toFixed(2)}\n\n${bankDetails}\n\nEnvía una foto del comprobante en este chat. El servicio o incremento se activará después de validarlo.`,

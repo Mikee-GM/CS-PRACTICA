@@ -11,6 +11,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { Clientes } from '../../clients/entities/client.entity';
+import { Conversation } from '../../conversations/entities/conversation.entity';
 import { Empleadas } from '../../employees/entities/employee.entity';
 import { Servicios } from '../../services/entities/service.entity';
 import { Usuarios } from '../../users/entities/user.entity';
@@ -47,6 +48,23 @@ export class GroupServiceRequest {
 
   @Column('uuid', { name: 'booking_session_id', nullable: true })
   bookingSessionId: string | null;
+
+  /**
+   * Conversacion web de la que nacio. Con ella, mensajes, cotizacion y
+   * comprobante van por el chat web y no por Telegram.
+   */
+  @Index('idx_group_requests_conversation', {
+    where: '"conversation_id" IS NOT NULL',
+  })
+  @Column('uuid', { name: 'conversation_id', nullable: true })
+  conversationId: string | null;
+
+  @ManyToOne(() => Conversation, { onDelete: 'SET NULL', nullable: true })
+  @JoinColumn({
+    name: 'conversation_id',
+    foreignKeyConstraintName: 'fk_group_requests_conversation',
+  })
+  conversation: Conversation | null;
 
   @Column('varchar', { length: 30, default: 'esperando_jefe' })
   status: GroupRequestStatus;
