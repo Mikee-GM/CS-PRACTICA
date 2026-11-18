@@ -1813,3 +1813,25 @@ los archivos tocados.
 - Verificacion: tsc sin errores, jest completo 217 suites / 2221 tests verdes,
   el `rg` de simbolos sin coincidencias, eslint sin errores (7 warnings
   previos de `any` en el scheduler).
+
+### Fase 5, E3-4 (e2e del servicio sin Telegram)
+
+- Nuevo `backend/test/servicio-sin-telegram.e2e-spec.ts`, con el mismo arranque
+  que `app.e2e-spec.ts` pero sin sustituir el bot: se espia
+  `bot.telegram.callApi` (instancia de `getBotToken()`). Datos: jefe, empleada y
+  chofer con `telegram_chat_id` nulo y un cliente web (`clientes.usuario_id`,
+  sin chat). Recorrido por HTTP con cookie firmada y `x-csrf-token`: jefe
+  `aceptar`, empleada `accept`, jefe `internal-transport`, chofer
+  `accept/arrived/picked-up/finished` de ida, empleada `start` y `finish`,
+  `internal-transport` de regreso y el viaje de regreso del chofer hasta
+  `finalizado`; asevera `callApi` 0 veces. Cierre de accesos: `?token=<jwt>`
+  sin cookie da 401, `POST /auth/portal-session` y `/auth/panel-access` dan 404
+  y una sesion de jefe en `/employee-portal/me` da 403.
+- Nuevo `backend/test/LISTA-MANUAL-SIN-TELEGRAM.md` con la lista de navegador.
+- Verificado: compila (`tsc` con un tsconfig temporal que incluye el spec),
+  prettier aplicado y eslint sin errores (7 warnings de tipos `any` de
+  supertest, como en el e2e existente).
+- PENDIENTE: el e2e NO se ejecuto, porque esta maquina no tiene Docker. Correr
+  con Docker `corepack pnpm --filter backend run test:e2e` y ajustar si algun
+  estado intermedio asumido (p. ej. `empleada_en_camino`, `empleada_de_regreso`)
+  o algun codigo HTTP difiere. La lista manual tampoco se ha recorrido.
