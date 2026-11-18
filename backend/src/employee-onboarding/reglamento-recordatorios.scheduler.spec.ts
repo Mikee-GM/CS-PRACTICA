@@ -48,13 +48,10 @@ describe('ReglamentoRecordatoriosScheduler', () => {
     reglamentoWeb.enviarRecordatorio.mockResolvedValue(undefined);
   });
 
-  it('usa su propia clave de lock y no la del ciclo de Telegram', async () => {
+  it('usa su propia clave de lock', async () => {
     await scheduler.run(ahora);
 
     expect(consultas[0]).toEqual([ADVISORY_LOCKS.onboardingWebReminders]);
-    expect(ADVISORY_LOCKS.onboardingWebReminders).not.toBe(
-      ADVISORY_LOCKS.onboardingReminders,
-    );
   });
 
   it('asigna primero y recuerda con las horas configuradas', async () => {

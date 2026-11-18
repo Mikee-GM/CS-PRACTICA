@@ -93,7 +93,6 @@ export const ADVISORY_LOCKS = {
   serviceSchedule: 811_001,
   challenges: 811_002,
   weeklyContent: 811_003,
-  onboardingReminders: 811_004,
   authCleanup: 811_005,
   workShiftReset: 811_006,
   waitTimeoutSweep: 811_007,
@@ -101,12 +100,9 @@ export const ADVISORY_LOCKS = {
   // Antes estas dos se declaraban sueltas en sus archivos reutilizando 811_005 y
   // 811_006, de modo que authCleanup y workShiftReset se excluian con ellas.
   realtimeOutboxSweep: 811_009,
-  telegramSessionSweep: 811_010,
   // Namespace, no clave fija: se combina con el id de cada conversacion en
   // `withAdvisoryLockPorClave` para que nunca corran dos turnos de la IA a la
   // vez sobre la misma conversacion, tampoco entre replicas.
   conversationTurn: 811_011,
-  // Propia y no `onboardingReminders`: el ciclo de Telegram y este arrancan con
-  // el mismo intervalo, y compartiendo clave uno se saltaria siempre el turno.
   onboardingWebReminders: 811_021,
 } as const;

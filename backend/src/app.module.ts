@@ -8,7 +8,6 @@ import * as Joi from 'joi';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { HttpThrottlerGuard } from './common/guards/http-throttler.guard';
-import { TelegramModule } from './telegram/telegram.module';
 import { UsersModule } from './users/users.module';
 import { AiModule } from './ai/ai.module';
 import { DriversModule } from './drivers/drivers.module';
@@ -17,7 +16,6 @@ import { EmployeesModule } from './employees/employees.module';
 import { ServicesModule } from './services/services.module';
 import { CatalogExtrasModule } from './catalog-extras/catalog-extras.module';
 import { ExtensionsModule } from './extensions/extensions.module';
-import { TelegramConversationsModule } from './telegram-conversations/telegram-conversations.module';
 import { EmployeePhotosModule } from './employee-photos/employee-photos.module';
 import { AuthModule } from './auth/auth.module';
 import { MailModule } from './common/mail/mail.module';
@@ -75,14 +73,6 @@ import { ServiceFeedbackModule } from './service-feedback/service-feedback.modul
         COOKIE_SECRET: Joi.string().min(32).required(),
         AUTH_COOKIE_DOMAIN: Joi.string().allow('').optional(),
         AUTH_COOKIE_SAME_SITE: Joi.string().valid('lax', 'none').default('lax'),
-        TELEGRAM_BOT_TOKEN: Joi.string().required(),
-        TELEGRAM_PROVIDER_TOKEN: Joi.string().allow('').optional(),
-        TELEGRAM_WEBHOOK_BASE_URL: Joi.string().uri().allow('').optional(),
-        // Cuantas instancias del backend se arrancan. Solo se usa para impedir
-        // una combinacion que rompe el bot en silencio: con long polling, dos
-        // procesos pidiendo getUpdates sobre el mismo token hacen que Telegram
-        // devuelva 409 y uno de los dos deje de recibir mensajes.
-        APP_INSTANCE_COUNT: Joi.number().integer().min(1).default(1),
         DEFAULT_ADMIN_EMAIL: Joi.string().email().required(),
         DEFAULT_ADMIN_PASSWORD: Joi.string().min(12).required(),
         R2_ENDPOINT: Joi.string().uri().required(),
@@ -189,7 +179,6 @@ import { ServiceFeedbackModule } from './service-feedback/service-feedback.modul
         limit: 100,
       },
     ]),
-    TelegramModule,
     UsersModule,
     DriversModule,
     ClientsModule,
@@ -199,7 +188,6 @@ import { ServiceFeedbackModule } from './service-feedback/service-feedback.modul
     CatalogExtrasModule,
     ExtensionsModule,
     LocationsModule,
-    TelegramConversationsModule,
     EmployeePhotosModule,
     ApartmentsModule,
     EmployeeReportsModule,
@@ -227,8 +215,7 @@ import { ServiceFeedbackModule } from './service-feedback/service-feedback.modul
     AppService,
     // Sin este guard global el ThrottlerModule no aplica a nada: quedaba
     // configurado pero inerte, y el login admitia intentos ilimitados. Se usa
-    // la variante que se salta los contextos no-HTTP para no romper los
-    // handlers de Telegram, que pasan por este mismo pipeline.
+    // la variante que se salta los contextos no-HTTP.
     { provide: APP_GUARD, useClass: HttpThrottlerGuard },
   ],
 })
