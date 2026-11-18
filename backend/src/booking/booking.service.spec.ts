@@ -439,7 +439,6 @@ describe('BookingService (turno web)', () => {
     expect(bookingAi.callModel).toHaveBeenCalledTimes(1);
     const [prompt] = bookingAi.callModel.mock.calls[0] as [string];
     expect(prompt).toContain('conversa por este chat');
-    expect(prompt).not.toContain('Telegram');
     const respuesta = canal.ultimo();
     expect(respuesta?.remitente).toBe('ia');
     expect(respuesta?.texto).toContain('soy una IA');

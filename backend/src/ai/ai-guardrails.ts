@@ -6,11 +6,9 @@
  * una garantia: un modelo se deja convencer. Este modulo es la parte que si se
  * cumple siempre, porque no depende de lo que el modelo decida hacer.
  *
- * El unico canal es el chat web (ver `CanalChat`): ahi el personaje no niega
- * ser una IA, asi que la pregunta de identidad llega al modelo y la respuesta
- * honesta no se descarta.
+ * En el chat web el personaje no niega ser una IA, asi que la pregunta de
+ * identidad llega al modelo y la respuesta honesta no se descarta.
  */
-import type { CanalChat } from './prompts/prompts';
 
 /** Marcas de control que la IA puede emitir y que el backend ejecuta. */
 const CONTROL_MARKER_PATTERN =
@@ -216,15 +214,8 @@ export function detectTareaAjena(message: string): boolean {
  *
  * La pregunta de identidad no entra: se deja pasar al modelo para que la
  * conteste con honestidad. Los jailbreaks y los encargos ajenos si se cortan.
- *
- * El segundo parametro se conserva solo por las llamadas que aun lo pasan; no
- * hay mas canal que el web.
  */
-export function detectSonda(
-  message: string,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _canal?: CanalChat,
-): boolean {
+export function detectSonda(message: string): boolean {
   if (detectJailbreak(message)) return true;
   return detectTareaAjena(message);
 }
@@ -293,11 +284,7 @@ export const IN_CHARACTER_DEFLECTIONS_WEB: string[] = [
 ];
 
 /** Elige un desvío distinto al anterior para que no suene enlatado. */
-export function pickDeflection(
-  previous?: string | null,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _canal?: CanalChat,
-): string {
+export function pickDeflection(previous?: string | null): string {
   const options = IN_CHARACTER_DEFLECTIONS_WEB.filter(
     (option) => option !== previous,
   );
@@ -632,14 +619,12 @@ export function contarEmojis(texto: string): number {
 
 /**
  * Quita los emojis de una respuesta: en el chat web no hay cadencia, no se usa
- * ninguno. Se conserva con esta forma por las llamadas que aun pasan la cuenta
- * de mensajes y el canal; ambos se ignoran.
+ * ninguno. Se conserva la cuenta de mensajes por las llamadas que aun la
+ * pasan; se ignora.
  */
 export function limitarEmojis(
   texto: string,
   _mensajesDesdeElUltimo?: number,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _opciones: { canal?: CanalChat } = {},
 ): { texto: string; llevaEmoji: boolean } {
   return { texto: quitarEmojis(texto), llevaEmoji: false };
 }

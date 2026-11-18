@@ -34,19 +34,15 @@ exports[`filtros de salida del canal web (snapshot) limitarEmojis web quita todo
 exports[`filtros de salida del canal web (snapshot) looksLikeAssistantRegister con permitirIdentidad deja pasar declararse IA pero no el registro de asistente 1`] = `
 {
   "Claro mor, son 1500 la hora": {
-    "telegram": false,
     "web": false,
   },
   "Como asistente puedo ayudarte con eso": {
-    "telegram": true,
     "web": true,
   },
   "No puedo ayudarte con eso": {
-    "telegram": true,
     "web": true,
   },
   "Soy una asistente virtual con inteligencia artificial, con mi nombre y mi estilo": {
-    "telegram": true,
     "web": false,
   },
 }

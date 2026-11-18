@@ -30,7 +30,7 @@ export type ConversationMode = (typeof CONVERSATION_MODES)[number];
 /**
  * Chat web entre un cliente y el asistente de una modelo.
  *
- * Sustituye a `conversaciones_telegram` para el canal web. Solo puede haber
+ * Solo puede haber
  * una conversacion abierta por pareja cliente-modelo (indice unico parcial):
  * al cerrarse, la siguiente reserva abre otra y el historial queda intacto.
  * `state` guarda el estado de la reserva que lleva el asistente y

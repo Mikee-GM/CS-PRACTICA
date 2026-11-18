@@ -1152,7 +1152,6 @@ export interface SolicitudServicioManual {
 export interface ClienteResumen {
   id: string;
   nombre: string | null;
-  telefono?: string | null;
   primerContactoAt: string;
   createdAt: string;
 }
@@ -1169,7 +1168,6 @@ export interface ClientDossier {
   cliente: {
     id: string;
     nombre: string | null;
-    telefono?: string | null;
     primerContactoAt: string;
     createdAt: string;
     diasDesdePrimerContacto: number;

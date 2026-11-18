@@ -6,7 +6,6 @@ import {
   softenCommercialTone,
   stripFrontDeskOffer,
 } from '../ai/ai-guardrails';
-import type { CanalDeReserva } from './chat-channel';
 
 /**
  * Lo que queda de una respuesta del modelo despues de los filtros de salida.
@@ -37,7 +36,7 @@ export interface RespuestaVestida {
  */
 export function vestirRespuestaIa(
   respuesta: string,
-  opciones: { canal?: CanalDeReserva; ultimoDesvio?: string | null } = {},
+  opciones: { ultimoDesvio?: string | null } = {},
 ): RespuestaVestida {
   const saneado = softenCommercialTone(sanitizeAiReply(respuesta || ''));
   const sinMostrador = stripFrontDeskOffer(saneado);

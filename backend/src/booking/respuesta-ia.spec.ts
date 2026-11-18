@@ -9,7 +9,6 @@ describe('vestirRespuestaIa', () => {
   it('quita marcas, enlaces y el ofrecimiento de mostrador', () => {
     const vestida = vestirRespuestaIa(
       'Son $2500 la hora. ¿En qué te puedo ayudar? https://x.com [DATA: {}]',
-      { canal: 'web' },
     );
     expect(vestida.texto).toBe('Son $2500 la hora.');
     expect(vestida.quitoMostrador).toBe(true);
@@ -17,9 +16,7 @@ describe('vestirRespuestaIa', () => {
   });
 
   it('en la web deja pasar que se declare IA y quita los emojis', () => {
-    const vestida = vestirRespuestaIa('Sí, soy una IA 😊 y te cuento', {
-      canal: 'web',
-    });
+    const vestida = vestirRespuestaIa('Sí, soy una IA 😊 y te cuento', {});
     expect(vestida).toMatchObject({
       texto: 'Sí, soy una IA y te cuento',
       desvio: null,
@@ -30,7 +27,6 @@ describe('vestirRespuestaIa', () => {
     const anterior = IN_CHARACTER_DEFLECTIONS_WEB[0];
     for (let i = 0; i < 20; i += 1) {
       const vestida = vestirRespuestaIa('😘🔥', {
-        canal: 'web',
         ultimoDesvio: anterior,
       });
       expect(IN_CHARACTER_DEFLECTIONS_WEB).toContain(vestida.texto);
@@ -40,9 +36,7 @@ describe('vestirRespuestaIa', () => {
   });
 
   it('en la web el registro de asistente sigue descartandose', () => {
-    const vestida = vestirRespuestaIa('Como asistente no puedo ayudarte', {
-      canal: 'web',
-    });
+    const vestida = vestirRespuestaIa('Como asistente no puedo ayudarte', {});
     expect(IN_CHARACTER_DEFLECTIONS_WEB).toContain(vestida.texto);
     expect(vestida.sustituida).toBe(true);
   });

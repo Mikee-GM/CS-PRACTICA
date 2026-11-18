@@ -2,8 +2,8 @@
  * Errores tipados del dominio de reserva.
  *
  * Son clases propias, y no excepciones HTTP de Nest, porque el dominio de
- * reserva lo usan tanto un controller web como un handler de Telegram: cada
- * canal decide como traducirlos (un 429, un mensaje en personaje...) sin que
+ * reserva lo usan los controllers web y los servicios del chat: cada
+ * capa decide como traducirlos (un 429, un mensaje en personaje...) sin que
  * el dominio sepa por donde llego el cliente.
  */
 

@@ -43,15 +43,6 @@ export type UploadedFilePayload = {
  */
 export const UPLOAD_MAX_BYTES = 20 * 1024 * 1024;
 
-/**
- * Unicos hosts desde los que se descarga evidencia. `uploadEvidenceFromUrl`
- * hace una peticion saliente desde el backend, asi que sin lista blanca seria
- * un SSRF hacia la red interna o al endpoint de metadatos del proveedor.
- */
-const EVIDENCE_SOURCE_HOSTS = new Set(['api.telegram.org']);
-
-/** Timeout de la descarga de evidencia, para no colgar el handler. */
-const EVIDENCE_FETCH_TIMEOUT_MS = 15_000;
 const IMAGE_EXTENSIONS: Record<string, string> = {
   'image/jpeg': 'jpg',
   'image/jpg': 'jpg',
@@ -346,78 +337,6 @@ export class UploadService {
       );
       throw new InternalServerErrorException(
         'No fue posible almacenar la evidencia en la nube',
-      );
-    }
-  }
-
-  async uploadEvidenceFromUrl(input: {
-    sourceUrl: string;
-    folder: 'uber' | 'transferencias';
-    scopeId?: string;
-  }): Promise<{ url: string; key: string }> {
-    this.assertAllowedSource(input.sourceUrl);
-
-    let response: Response;
-    const controller = new AbortController();
-    const timeout = setTimeout(
-      () => controller.abort(),
-      EVIDENCE_FETCH_TIMEOUT_MS,
-    );
-    try {
-      response = await fetch(input.sourceUrl, { signal: controller.signal });
-    } catch (error) {
-      this.logger.error(`Error descargando evidencia: ${describeError(error)}`);
-      throw new InternalServerErrorException(
-        'No fue posible descargar la evidencia recibida',
-      );
-    } finally {
-      clearTimeout(timeout);
-    }
-    if (!response.ok) {
-      throw new InternalServerErrorException(
-        'No fue posible descargar la evidencia recibida',
-      );
-    }
-
-    // El Content-Length puede mentir o faltar, asi que el tope real lo impone
-    // uploadEvidence sobre el buffer ya materializado; esto solo corta pronto
-    // lo que ya se anuncia como demasiado grande.
-    const declaredLength = Number(response.headers.get('content-length') ?? 0);
-    if (declaredLength > EVIDENCE_MAX_BYTES) {
-      throw new BadRequestException(
-        'La evidencia recibida supera el límite permitido',
-      );
-    }
-
-    const buffer = Buffer.from(await response.arrayBuffer());
-    return this.uploadEvidence({
-      buffer,
-      contentType: response.headers.get('content-type') ?? '',
-      folder: input.folder,
-      scopeId: input.scopeId,
-    });
-  }
-
-  /**
-   * Solo se descarga de los hosts de la lista blanca y siempre por https. Sin
-   * esto, cualquier ruta que llegue a alimentar `sourceUrl` convierte al
-   * backend en un proxy hacia su propia red interna.
-   */
-  private assertAllowedSource(sourceUrl: string): void {
-    let parsed: URL;
-    try {
-      parsed = new URL(sourceUrl);
-    } catch {
-      throw new BadRequestException('El origen de la evidencia no es válido');
-    }
-    if (parsed.protocol !== 'https:') {
-      throw new BadRequestException(
-        'El origen de la evidencia debe usar https',
-      );
-    }
-    if (!EVIDENCE_SOURCE_HOSTS.has(parsed.hostname)) {
-      throw new BadRequestException(
-        'El origen de la evidencia no está autorizado',
       );
     }
   }

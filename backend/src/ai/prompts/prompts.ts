@@ -1,18 +1,8 @@
 import { APP_LOCALE, APP_TIME_ZONE } from '../../common/locale';
 import { PALABRAS_VETADAS_WEB } from '../vocabulario-vetado';
 
-/**
- * Canal por el que escribe el cliente. Desde que se retiro Telegram solo existe
- * el chat web, donde el personaje no niega ser una IA porque la web lo dice en
- * su propio encabezado ("Asistente virtual de ..."). Se conserva el tipo para
- * que quien arma el prompt siga declarando el canal de forma explicita.
- */
-export type CanalChat = 'web';
-
 export interface EmpleadaPromptParams {
   nombreArtistico: string;
-  /** Unico canal que existe: el chat web. */
-  canal?: CanalChat;
   precioBaseHora: number | string;
   descripcion?: string | null;
   extras?: {

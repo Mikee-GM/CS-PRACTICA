@@ -408,7 +408,7 @@ export async function enlazarComprobanteAServicio(
 
 /**
  * Las cuentas autorizadas como se le escriben al cliente. Mismo formato que
- * `ServicesService.bankTransferDetails`, sin el Markdown de Telegram. Devuelve
+ * `ServicesService.bankTransferDetails`, sin formato Markdown. Devuelve
  * `null` si no hay ninguna con numero que dar, para que quien llama decida el
  * texto alternativo.
  */

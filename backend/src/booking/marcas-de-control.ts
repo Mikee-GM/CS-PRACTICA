@@ -142,7 +142,7 @@ export function duracionCorroborada(
 
 /**
  * El metodo de pago que dijo el cliente, del mensaje mas reciente al mas
- * antiguo. El de la marca no cuenta por si solo: en Telegram bastaba con que
+ * antiguo. El de la marca no cuenta por si solo: antes bastaba con que
  * el modelo lo escribiera, y asi un "pago" que el cliente nunca eligio podia
  * cerrar la reserva.
  */

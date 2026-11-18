@@ -67,13 +67,6 @@ export class EmployeeOnboardingController {
     return this.onboardingService.findByEmployee(employeeId);
   }
 
-  @Post('employees/:employeeId/resend')
-  @Roles('admin')
-  @ApiOperation({ summary: 'Programar el reenvío del reglamento vigente' })
-  resend(@Param('employeeId') employeeId: string) {
-    return this.onboardingService.requeueDelivery(employeeId);
-  }
-
   @Get('staff')
   @Roles('admin')
   @ApiOperation({ summary: 'Consultar evaluaciones de todo el personal' })
@@ -104,12 +97,5 @@ export class EmployeeOnboardingController {
   })
   findAttemptDetails(@Param('attemptId') attemptId: string) {
     return this.onboardingService.findAttemptDetails(attemptId);
-  }
-
-  @Post('staff/:userId/resend')
-  @Roles('admin')
-  @ApiOperation({ summary: 'Programar el reenvío a un trabajador' })
-  resendToStaff(@Param('userId') userId: string) {
-    return this.onboardingService.requeueUserDelivery(userId);
   }
 }

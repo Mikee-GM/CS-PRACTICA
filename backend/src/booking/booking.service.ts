@@ -1061,7 +1061,6 @@ export class BookingService {
     }));
 
     return getHireSystemPrompt({
-      canal: 'web',
       nombreArtistico: empleada.nombreArtistico,
       faltaPorCerrar,
       precioBaseHora: empleada.precioBaseHora,
@@ -1110,7 +1109,6 @@ export class BookingService {
   /** Filtros de salida de la web; ver `vestirRespuestaIa`. */
   private vestir(t: Turno, respuesta: string): string {
     const vestida = vestirRespuestaIa(respuesta, {
-      canal: 'web',
       ultimoDesvio: t.estado.ultimoDesvio,
     });
     if (vestida.quitoMostrador) {

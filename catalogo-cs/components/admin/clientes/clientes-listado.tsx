@@ -11,8 +11,7 @@ import type { ClienteResumen } from "@/lib/types";
  *
  * La busqueda va contra el servidor y no filtrando en memoria: la tabla de
  * clientes crece sin techo y traerla entera al navegador para filtrarla seria
- * lento justo cuando mas gente hay. Acepta el nombre y tambien el
- * telefono, que es como se reconoce al cliente en los avisos al jefe.
+ * lento justo cuando mas gente hay. Busca por nombre.
  */
 export default function ClientesListado({
   inicial,
@@ -62,7 +61,7 @@ export default function ClientesListado({
           type="search"
           value={busqueda}
           onChange={(evento) => setBusqueda(evento.target.value)}
-          placeholder="Buscar por nombre o telefono"
+          placeholder="Buscar por nombre"
           className="w-full max-w-sm rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-2.5 text-sm text-white placeholder:text-zinc-600 focus:border-[#C5A55A] focus:outline-none"
         />
       </div>
@@ -72,7 +71,6 @@ export default function ClientesListado({
           <thead>
             <tr className="border-b border-zinc-800 text-[10px] uppercase tracking-[0.14em] text-zinc-500">
               <th className="px-5 py-3 font-semibold">Cliente</th>
-              <th className="px-5 py-3 font-semibold">Telefono</th>
               <th className="px-5 py-3 font-semibold">Primer contacto</th>
               <th className="px-5 py-3" />
             </tr>
@@ -80,13 +78,13 @@ export default function ClientesListado({
           <tbody>
             {cargando && clientes.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-5 py-10 text-center text-zinc-500">
+                <td colSpan={3} className="px-5 py-10 text-center text-zinc-500">
                   Buscando...
                 </td>
               </tr>
             ) : clientes.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-5 py-10 text-center text-zinc-500">
+                <td colSpan={3} className="px-5 py-10 text-center text-zinc-500">
                   {busqueda.trim()
                     ? `Ningún cliente coincide con "${busqueda.trim()}".`
                     : "Todavía no hay clientes registrados."}
@@ -102,9 +100,6 @@ export default function ClientesListado({
                     {cliente.nombre || (
                       <span className="text-zinc-600">Sin nombre</span>
                     )}
-                  </td>
-                  <td className="px-5 py-3.5 tabular-nums text-zinc-400">
-                    {cliente.telefono || "-"}
                   </td>
                   <td className="px-5 py-3.5 text-zinc-500">
                     {fecha(cliente.primerContactoAt)}

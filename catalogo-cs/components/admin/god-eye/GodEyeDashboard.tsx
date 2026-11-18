@@ -1449,7 +1449,6 @@ export default function GodEyeDashboard({
                                       <p className="text-zinc-200 font-medium">
                                         <span className="text-zinc-400 font-semibold">Cliente:</span>{" "}
                                         {s.clienteNombre || "Sin nombre"}
-                                        {s.clienteTelefono ? ` (${s.clienteTelefono})` : ""}
                                       </p>
                                       {s.viajes && s.viajes.length > 0 ? (
                                         <div className="space-y-1 pt-1">

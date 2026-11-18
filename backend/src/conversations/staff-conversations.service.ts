@@ -27,7 +27,6 @@ import {
 } from '../booking/booking-state';
 import { ConflictoDeVersionError } from '../booking/booking.errors';
 import type { ConversationRef } from '../booking/chat-channel';
-import { Clientes } from '../clients/entities/client.entity';
 import { describeError } from '../common/errors/error-message';
 import { Empleadas } from '../employees/entities/employee.entity';
 import { RealtimeEventsService } from '../realtime/realtime.service';
@@ -229,8 +228,6 @@ export class StaffConversationsService {
     private readonly conversationsRepository: Repository<Conversation>,
     @InjectRepository(Empleadas)
     private readonly empleadasRepository: Repository<Empleadas>,
-    @InjectRepository(Clientes)
-    private readonly clientesRepository: Repository<Clientes>,
     @InjectRepository(CustomerBookingSession)
     private readonly borradoresRepository: Repository<CustomerBookingSession>,
     @InjectRepository(Servicios)
@@ -666,7 +663,7 @@ export class StaffConversationsService {
   }
 
   /**
-   * Rechaza el borrador. Como en Telegram, el chat no se cierra: el cliente
+   * Rechaza el borrador. El chat no se cierra: el cliente
    * puede volver a intentarlo en la misma conversacion, que vuelve a `activa`
    * con la reserva en blanco. La entrega al equipo, si la habia, se conserva:
    * la retira quien devuelva el control.
@@ -1091,7 +1088,7 @@ function refDe(conversation: Conversation): ConversationRef {
 }
 
 /**
- * Jefe al que queda el servicio. Telegram usa el principal de la modelo; un
+ * Jefe al que queda el servicio. Lo normal es el principal de la modelo; un
  * jefe que acepta por relevo (no es ni principal ni secundario) se lo queda
  * el, porque `ServicesService.ofrecerAEmpleada` solo deja gestionarlo al jefe
  * del servicio o a los de la modelo.

@@ -3,9 +3,8 @@ import { Column, Entity, Index, PrimaryColumn } from 'typeorm';
 /**
  * Persisted pre-service booking draft.
  *
- * TelegramSession remains the transport/session state machine for backwards
- * compatibility, but this row is the source of truth for the booking data
- * shown and edited by the boss panel. A draft is deliberately not a service:
+ * This row is the source of truth for the booking data shown and edited by
+ * the boss panel. A draft is deliberately not a service:
  * the service_id is populated only after a boss accepts it.
  */
 @Entity('customer_booking_sessions', { schema: 'public' })

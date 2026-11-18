@@ -4,7 +4,7 @@
  * Corren sobre cada mensaje del cliente antes de llamar a la IA, y son los que
  * dejan en el estado de la reserva la duracion, el metodo de pago o si se pide
  * un servicio grupal. No dependen del canal: el mismo texto se interpreta
- * igual llegue por Telegram o por la web.
+ * igual llegue por cualquier via.
  */
 
 export type MetodoPagoReserva =

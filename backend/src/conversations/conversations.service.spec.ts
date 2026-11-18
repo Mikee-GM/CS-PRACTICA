@@ -174,7 +174,7 @@ describe('ConversationsService', () => {
       await crearServicio().listForClient(USUARIO);
 
       const [sql] = dataSource.query.mock.calls[0] as [string];
-      expect(sql).not.toMatch(/nombre_real|telefono|email|telegram/);
+      expect(sql).not.toMatch(/nombre_real|telefono|email/);
     });
   });
 

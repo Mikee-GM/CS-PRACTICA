@@ -5,8 +5,8 @@ import type { MetodoPagoReserva } from './extractores-de-reserva';
  * Lo que la conversacion con el cliente va dejando decidido sobre su reserva.
  *
  * Es solo la parte que hace falta para cobrar y crear el servicio, con campos
- * opcionales porque se rellena mensaje a mensaje. La sesion de Telegram la
- * cumple tal cual; el estado de la reserva web tendra que cumplirla tambien.
+ * opcionales porque se rellena mensaje a mensaje. El estado de la reserva
+ * web la cumple tal cual.
  */
 export interface BorradorDeReserva {
   duracionPactadaHoras?: number;

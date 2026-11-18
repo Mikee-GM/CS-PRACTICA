@@ -68,7 +68,6 @@ describe('StaffConversationsService', () => {
   let mensajeExistente: Message | null;
   let conversationsRepository: { findOne: jest.Mock };
   let empleadasRepository: { findOne: jest.Mock; find: jest.Mock };
-  let clientesRepository: { findOne: jest.Mock };
   let borrador: Record<string, unknown>;
   let borradoresRepository: {
     findOne: jest.Mock;
@@ -96,7 +95,6 @@ describe('StaffConversationsService', () => {
       dataSource as any,
       conversationsRepository as any,
       empleadasRepository as any,
-      clientesRepository as any,
       borradoresRepository as any,
       serviciosRepository as any,
       validacionesRepository as any,
@@ -231,11 +229,6 @@ describe('StaffConversationsService', () => {
     empleadasRepository = {
       findOne: jest.fn(() => Promise.resolve({ ...modelo })),
       find: jest.fn(() => Promise.resolve([{ ...modelo }])),
-    };
-    clientesRepository = {
-      findOne: jest
-        .fn()
-        .mockResolvedValue({ id: 'cliente-1', telegramChatId: null }),
     };
     borrador = {
       id: 'borrador-1',
@@ -779,7 +772,7 @@ describe('StaffConversationsService', () => {
   });
 
   describe('aceptar', () => {
-    it('con un cliente sin Telegram crea el servicio, enlaza la conversacion y el comprobante', async () => {
+    it('con un cliente sin cuenta web crea el servicio, enlaza la conversacion y el comprobante', async () => {
       estado.state = {
         esquema: 1,
         lifecycle: 'READY',

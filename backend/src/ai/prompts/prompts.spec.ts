@@ -383,7 +383,7 @@ describe('AI Prompts Generation (prompts.ts)', () => {
    * cambia es que la estructura interna sigue sin contarse.
    */
   describe('canal web', () => {
-    const web = getHireSystemPrompt({ ...baseParams, canal: 'web' });
+    const web = getHireSystemPrompt(baseParams);
 
     it('no le pide hacerse pasar por una persona', () => {
       expect(web).not.toContain('ERES UNA PERSONA REAL');
@@ -434,8 +434,7 @@ describe('AI Prompts Generation (prompts.ts)', () => {
       expect(contarEmojis(web)).toBe(0);
     });
 
-    it('no menciona Telegram', () => {
-      expect(web).not.toMatch(/telegram/i);
+    it('habla de este chat', () => {
       expect(web).toContain('por este chat');
     });
 

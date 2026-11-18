@@ -621,16 +621,6 @@ export class EmployeeOnboardingService {
     return this.sanitize(onboarding);
   }
 
-  async requeueDelivery(employeeId: string) {
-    const onboarding = await this.onboardingRepository.findOne({
-      where: { employeeId, active: true },
-    });
-    if (!onboarding) throw new NotFoundException('Incorporación no encontrada');
-    onboarding.lastDeliveryError = null;
-    await this.onboardingRepository.save(onboarding);
-    return { queued: true };
-  }
-
   async findAllStaff() {
     const [staff, onboardings] = await Promise.all([
       this.userRepository.find({
@@ -809,16 +799,6 @@ export class EmployeeOnboardingService {
       employee,
       answers: questionBreakdown,
     };
-  }
-
-  async requeueUserDelivery(userId: string) {
-    const onboarding = await this.onboardingRepository.findOne({
-      where: { userId, active: true },
-    });
-    if (!onboarding) throw new NotFoundException('Incorporación no encontrada');
-    onboarding.lastDeliveryError = null;
-    await this.onboardingRepository.save(onboarding);
-    return { queued: true };
   }
 
   private sanitize(onboarding: EmployeeOnboarding) {

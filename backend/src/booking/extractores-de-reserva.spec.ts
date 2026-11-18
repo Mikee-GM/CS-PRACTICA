@@ -8,7 +8,7 @@ import {
 
 /*
  * Pruebas directas de los extractores. Los casos de conversacion completos
- * siguen en las pruebas de Telegram, que los importan a traves del handler.
+ * siguen en las pruebas del servicio de reserva.
  */
 
 describe('extractHireDuration', () => {
