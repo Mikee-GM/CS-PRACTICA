@@ -1835,3 +1835,50 @@ los archivos tocados.
   con Docker `corepack pnpm --filter backend run test:e2e` y ajustar si algun
   estado intermedio asumido (p. ej. `empleada_en_camino`, `empleada_de_regreso`)
   o algun codigo HTTP difiere. La lista manual tampoco se ha recorrido.
+
+### Fase 6, spec de prompt web
+
+- Nuevo `backend/src/ai/prompts/prompt-web-snapshot.spec.ts` con su snapshot
+  versionado en `backend/src/ai/prompts/__snapshots__/`. Fija, con
+  `fechaHoraActual` fija y `Math.random` simulado, el prompt de sistema del
+  canal `web` en 19 variantes (sin datos, ficha completa, duracion/pago/
+  ubicacion pactados, indefinida, comprobante, servicio aceptado, trio
+  confirmado y en consulta, los tres `faltaPorCerrar`, fuera de cobertura,
+  cliente inseguro o en fuga, aperturas y extras cotizados, sin fotos
+  exclusivas, politicas de besos, speech de parejas), ademas de
+  `REGLAS_PERMANENTES_WEB` y `PALABRAS_VETADAS_WEB`.
+- Tambien fija las salidas de los filtros web: desvios `IN_CHARACTER_DEFLECTIONS_WEB`,
+  `pickDeflection`, `detectSonda` (en web la pregunta de identidad pasa al
+  modelo), `limitarEmojis`/`quitarEmojis` (todo emoji fuera, sin cadencia),
+  `looksLikeAssistantRegister` con `permitirIdentidad`, `vestirRespuestaIa`
+  (enlaces, telefonos, arrobas, mostrador, tono, sustitucion) y
+  `palabrasVetadasEn`.
+- Uso: al retirar Telegram de la IA, `jest prompt-web-snapshot --ci` debe seguir
+  verde sin tocar el `.snap`; si falla, el texto web cambio.
+
+### Fase 6, 0.3: cuenta final del servicio abierto en el chat web
+
+- `ServicesService.requestOpenEndedFinalPayment` (`backend/src/services/services.service.ts`)
+  ya no corta si el cliente no tiene `telegramChatId`: sale si no hay ni
+  Telegram ni cuenta web. Arma la cuenta una sola vez (total con
+  `Intl.NumberFormat(APP_LOCALE, MXN)`, horas y tiempo real) y la manda por cada
+  canal que el cliente tenga: Telegram como antes (con `recordAgencyMessage`) y
+  el chat web con `avisarClienteWeb`, que ya pasa por `textoWebSeguro` (sin
+  emojis, sin Markdown, sin `PALABRAS_VETADAS_WEB`).
+- El caller (`finalizar`) pasa el servicio releido (con el total del trigger)
+  mezclado con `cliente` y `empleada` del original; el relectura no los traia y
+  sin `cliente.usuarioId` el aviso web no se habria enviado.
+- Transferencia: se marca `cobroFinalPendiente` siempre (antes solo corria con
+  el envio a Telegram en el mismo bloque); esa marca es la que hace que
+  `servicioEsperaComprobante`/`admiteComprobante` dejen subir el comprobante en
+  el chat web, sin tocar `conversation-receipts.service.ts`. Las cuentas son las
+  de `bankTransferDetails()`. Si una cuenta trae una palabra vetada, el texto web
+  cae a un respaldo sin cuentas ("te paso los datos").
+- Pruebas: bloque nuevo en `services.avisos-chat-web.spec.ts` (7 casos: total y
+  cuentas en web, marca de cobro pendiente sin Telegram, efectivo, Telegram sin
+  web, fallo de Telegram, palabra vetada, sin canal).
+- Pendiente: la parte de Telegram sigue intacta y se borra despues. El
+  `montoEsperado` del comprobante de un servicio abierto sale del borrador de la
+  reserva (puede ser `null` si no tiene duracion pactada); no se valida contra
+  `totalFinal`. Es una decision de producto si el chat web debe validar contra
+  la cuenta final.
