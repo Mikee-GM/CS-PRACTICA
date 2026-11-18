@@ -2,24 +2,33 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomBytes } from 'crypto';
-import { In, Repository } from 'typeorm';
+import { In, Not, QueryFailedError, Repository } from 'typeorm';
+import { NotificationsService } from '../notifications/notifications.service';
 import { RealtimeEventsService } from '../realtime/realtime.service';
+import { Usuarios } from '../users/entities/user.entity';
 import {
   CreateCandidateScreeningDto,
   CreateScreeningQuestionDto,
   ReorderScreeningQuestionsDto,
+  ResponderEvaluacionDto,
   UpdateScreeningQuestionDto,
 } from './dto/candidate-screening.dto';
-import { CandidateScreening } from './entities/candidate-screening.entity';
+import {
+  CandidateScreening,
+  CandidateScreeningStatus,
+} from './entities/candidate-screening.entity';
 import { CandidateScreeningAnswer } from './entities/candidate-screening-answer.entity';
 import { ScreeningQuestion } from './entities/screening-question.entity';
 
 @Injectable()
 export class CandidateScreeningService {
+  private readonly logger = new Logger(CandidateScreeningService.name);
+
   constructor(
     @InjectRepository(ScreeningQuestion)
     private readonly questions: Repository<ScreeningQuestion>,
@@ -27,7 +36,10 @@ export class CandidateScreeningService {
     private readonly screenings: Repository<CandidateScreening>,
     @InjectRepository(CandidateScreeningAnswer)
     private readonly answers: Repository<CandidateScreeningAnswer>,
+    @InjectRepository(Usuarios)
+    private readonly usuarios: Repository<Usuarios>,
     private readonly realtime: RealtimeEventsService,
+    private readonly notificaciones: NotificationsService,
   ) {}
 
   // ---------- Banco de preguntas ----------
@@ -176,27 +188,259 @@ export class CandidateScreeningService {
     const next = await this.getNextQuestion(screeningId);
     if (!next) throw new ConflictException('No quedan preguntas por responder');
 
-    await this.answers.save(
-      this.answers.create({
-        screeningId,
-        questionId: next.question.id,
-        questionText: next.question.text,
-        answerText: answerText.trim().slice(0, 4000),
-      }),
-    );
+    return this.registrarRespuesta(screening, next.question, answerText);
+  }
 
-    const remaining = await this.getNextQuestion(screeningId);
-    if (!remaining) {
-      screening.status = 'completado';
-      screening.completedAt = new Date();
-      await this.screenings.save(screening);
+  // ---------- Flujo web publico (sin sesion, por token) ----------
+
+  /**
+   * Lo que ve la candidata al abrir su enlace.
+   *
+   * Es una lectura pura: no marca la evaluacion como iniciada. Los enlaces se
+   * comparten por mensajeria y la vista previa del enlace hace un GET; si eso
+   * contara como inicio, el admin veria "en progreso" a quien nunca lo abrio.
+   */
+  async evaluacionPublica(token: string): Promise<EvaluacionPublica> {
+    const screening = await this.buscarPorTokenPublico(token);
+    if (screening.status === 'completado') {
+      return {
+        nombre: screening.candidateName,
+        estado: 'completado',
+        pregunta: null,
+      };
+    }
+    const next = await this.getNextQuestion(screening.id);
+    return {
+      nombre: screening.candidateName,
+      estado: screening.status,
+      pregunta: next ? preguntaParaCandidata(next) : null,
+    };
+  }
+
+  async responderPublica(
+    token: string,
+    dto: ResponderEvaluacionDto,
+  ): Promise<AvanceDeCandidata> {
+    const screening = await this.buscarPorTokenPublico(token);
+    if (screening.status === 'completado') {
+      throw new ConflictException('Esta evaluación ya fue completada');
+    }
+    const next = await this.getNextQuestion(screening.id);
+    if (!next) throw new ConflictException('No quedan preguntas por responder');
+    if (next.question.id !== dto.preguntaId) {
+      throw new ConflictException(
+        'Esa pregunta ya fue respondida. Recarga la evaluación para continuar.',
+      );
+    }
+
+    const answerText = respuestaElegida(next.question, dto);
+
+    // Sin Telegram no hay vinculo que marque el inicio: lo marca la primera
+    // respuesta. Condicionado a `pendiente` para no pisar el `startedAt` que
+    // ya dejo Telegram ni el de una respuesta simultanea.
+    if (screening.status === 'pendiente') {
+      await this.screenings.update(
+        { id: screening.id, status: 'pendiente' },
+        { status: 'en_progreso', startedAt: new Date() },
+      );
+    }
+
+    const result = await this.registrarRespuesta(
+      screening,
+      next.question,
+      answerText,
+    );
+    if (result.completed) return { completado: true };
+    return {
+      completado: false,
+      pregunta: preguntaParaCandidata(result.question),
+    };
+  }
+
+  /**
+   * Guarda la respuesta y, si era la ultima, cierra la evaluacion y avisa.
+   *
+   * Comun a Telegram y a la web para que las dos vias cierren y avisen igual.
+   */
+  private async registrarRespuesta(
+    screening: CandidateScreening,
+    question: ScreeningQuestion,
+    answerText: string,
+  ) {
+    try {
+      await this.answers.save(
+        this.answers.create({
+          screeningId: screening.id,
+          questionId: question.id,
+          questionText: question.text,
+          answerText: answerText.trim().slice(0, 4000),
+        }),
+      );
+    } catch (error) {
+      // El indice unico (evaluacion, pregunta) decide entre dos envios
+      // simultaneos de la misma pregunta: el segundo llega aqui.
+      if (esViolacionDeUnicidad(error)) {
+        throw new ConflictException('Esa pregunta ya fue respondida');
+      }
+      throw error;
+    }
+
+    const remaining = await this.getNextQuestion(screening.id);
+    if (remaining) {
+      return { completed: false as const, question: remaining };
+    }
+
+    // Condicionado a que no estuviera completada: solo la llamada que la cierra
+    // avisa, aunque dos lleguen a la vez a este punto.
+    const cierre = await this.screenings.update(
+      { id: screening.id, status: Not('completado') },
+      { status: 'completado', completedAt: new Date() },
+    );
+    if (cierre.affected) {
       this.realtime.emitToJefes({
         type: 'candidate_screening.completed',
         screeningId: screening.id,
         candidateName: screening.candidateName,
       });
-      return { completed: true as const };
+      await this.avisarAdminsDeEvaluacionCompletada(screening.id);
     }
-    return { completed: false as const, question: remaining };
+    return { completed: true as const };
   }
+
+  /**
+   * Push a cada admin activo. El texto no lleva el nombre de la candidata: el
+   * aviso se lee en la pantalla de bloqueo y las respuestas viven detras del
+   * toque, donde ya hay sesion. Solo admins porque `/admin/candidatas` es solo
+   * suyo.
+   */
+  private async avisarAdminsDeEvaluacionCompletada(
+    screeningId: string,
+  ): Promise<void> {
+    try {
+      const admins = await this.usuarios.find({
+        where: { rol: 'admin', activo: true },
+        select: { id: true },
+      });
+      await Promise.allSettled(
+        admins.map((admin) =>
+          this.notificaciones.notificar(admin.id, {
+            titulo: 'Evaluación de candidata completada',
+            cuerpo: 'Toca para revisar sus respuestas.',
+            url: `/admin/candidatas/${screeningId}`,
+            tag: `candidata-${screeningId}`,
+            relatedEntityId: screeningId,
+            dedupeKey: `candidate_screening:completed:${screeningId}`,
+          }),
+        ),
+      );
+    } catch (error) {
+      // La evaluacion ya quedo cerrada y visible en el panel; un aviso perdido
+      // no justifica devolverle un error a la candidata.
+      this.logger.warn(
+        `No se pudo avisar a administracion de la evaluacion ${screeningId}: ${String(error)}`,
+      );
+    }
+  }
+
+  /**
+   * El enlace publico es la unica credencial de la candidata. Un token con
+   * forma imposible se descarta sin consultar, y cualquier fallo responde el
+   * mismo 404 para no distinguir entre "no existe" y "mal escrito".
+   */
+  private async buscarPorTokenPublico(
+    token: string,
+  ): Promise<CandidateScreening> {
+    const screening = FORMATO_DE_TOKEN.test(token)
+      ? await this.screenings.findOne({
+          where: { token },
+          select: {
+            id: true,
+            candidateName: true,
+            status: true,
+            questionIds: true,
+          },
+        })
+      : null;
+    if (!screening) {
+      throw new NotFoundException('Este enlace de evaluación no es válido');
+    }
+    return screening;
+  }
+}
+
+/** Mismo alfabeto que genera `createScreening` (base64url). */
+const FORMATO_DE_TOKEN = /^[A-Za-z0-9_-]{8,64}$/;
+
+const LARGO_MINIMO_DE_RESPUESTA = 2;
+
+export type PreguntaDeCandidata = {
+  id: string;
+  texto: string;
+  /** Posicion dentro de la evaluacion, empezando en 1. */
+  numero: number;
+  total: number;
+  /** Vacio cuando la pregunta se contesta por escrito. */
+  opciones: { indice: number; texto: string }[];
+};
+
+export type EvaluacionPublica = {
+  nombre: string;
+  estado: CandidateScreeningStatus;
+  pregunta: PreguntaDeCandidata | null;
+};
+
+export type AvanceDeCandidata =
+  { completado: false; pregunta: PreguntaDeCandidata } | { completado: true };
+
+/**
+ * Lista cerrada copiada campo por campo: las opciones del banco traen
+ * `isCorrect`, y la candidata no debe ver cual es la respuesta esperada.
+ */
+function preguntaParaCandidata(next: {
+  question: ScreeningQuestion;
+  index: number;
+  total: number;
+}): PreguntaDeCandidata {
+  return {
+    id: next.question.id,
+    texto: next.question.text,
+    numero: next.index,
+    total: next.total,
+    opciones: (next.question.options ?? []).map((opcion, indice) => ({
+      indice,
+      texto: opcion.text,
+    })),
+  };
+}
+
+/**
+ * Traduce lo que mando la candidata al texto que se guarda, igual que el bot:
+ * en una pregunta con opciones se guarda el texto de la opcion elegida.
+ */
+function respuestaElegida(
+  question: ScreeningQuestion,
+  dto: ResponderEvaluacionDto,
+): string {
+  const opciones = question.options ?? [];
+  if (opciones.length > 0) {
+    const elegida = dto.opcion === undefined ? undefined : opciones[dto.opcion];
+    if (!elegida) {
+      throw new BadRequestException('Elige una de las opciones de la pregunta');
+    }
+    return elegida.text;
+  }
+  const texto = dto.texto?.trim() ?? '';
+  if (texto.length < LARGO_MINIMO_DE_RESPUESTA) {
+    throw new BadRequestException(
+      'Tu respuesta debe tener entre 2 y 4000 caracteres',
+    );
+  }
+  return texto;
+}
+
+function esViolacionDeUnicidad(error: unknown): boolean {
+  return (
+    error instanceof QueryFailedError &&
+    (error as QueryFailedError & { code?: string }).code === '23505'
+  );
 }
