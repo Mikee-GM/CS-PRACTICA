@@ -69,11 +69,6 @@ export type Employee = {
   precioBaseHora: string;
   disponible: boolean;
   catalogoActivo: boolean;
-  /**
-   * Si true, la empleada usa el app de Telegram normalmente.
-   * Si false, el sistema avanza automaticamente sin esperar su confirmacion.
-   */
-  modoBot?: boolean;
   availabilityStatus?: "disponible" | "ocupada" | "inactiva";
   estimatedAvailableAt?: string | null;
   canScheduleNext?: boolean;
@@ -98,14 +93,11 @@ export type Driver = {
   nombre: string;
   telefono: string;
   disponible: boolean;
-  /**
-   * Si true, el chofer recibe ofertas por Telegram normalmente.
-   * Si false, el viaje se despacha como Uber automatico.
-   */
-  modoBot?: boolean;
   ubicacionLat: string | null;
   ubicacionLng: string | null;
   ultimaUbicacionAt?: string | null;
+  /** Calculado por el backend: sin posicion o con mas de 15 minutos. */
+  ubicacionVieja?: boolean;
   createdAt?: string;
   usuario?: ApiUser;
 };
@@ -366,6 +358,8 @@ export type GroupRequestSelection = {
 };
 
 export type GroupServiceRequest = {
+  /** Presente cuando la solicitud nace de un chat web. */
+  conversationId?: string | null;
   id: string;
   clientId: string;
   bossId: string;
@@ -925,6 +919,8 @@ export type EmployeePortalCashDelivery = {
  * dejar pasar el ultimo.
  */
 export type EmployeeWeeklyContent = {
+  /** Primera semana sin ciclo previo: no se cobra multa. */
+  semanaDeGracia?: boolean;
   semanaInicio: string;
   estado: "al_dia" | "atrasado" | "pendiente_revision" | "sin_solicitar";
   recordatoriosEnviados: number;
@@ -1295,4 +1291,13 @@ export type ReporteSobreMi = {
   subjectStatement: string | null;
   subjectStatementAt: string | null;
   serviceId: string | null;
+};
+
+export type PedidoGrupalDelChat = {
+  conversationId: string;
+  clientId: string;
+  clientNombre: string | null;
+  employeeId: string;
+  nombreArtistico: string;
+  lastMessageAt: string | null;
 };
