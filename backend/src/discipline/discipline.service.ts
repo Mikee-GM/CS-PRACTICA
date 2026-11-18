@@ -116,27 +116,9 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     return this.persistRating(dto, interaction);
   }
 
-  async createClientRating(
-    clientId: string,
-    dto: CreateRatingDto,
-  ): Promise<InteractionRating> {
-    if (dto.direction !== 'client_to_employee') {
-      throw new ForbiddenException('Dirección de calificación no permitida');
-    }
-    const interaction = await this.resolveInteractionForPerson(
-      dto.direction,
-      dto.interactionId,
-      'client',
-      clientId,
-      dto.employeeId,
-    );
-    return this.persistRating(dto, interaction);
-  }
-
   /**
-   * Entrada idempotente para botones de Telegram. Un doble toque o un callback
-   * reintentado por Telegram devuelve la primera calificación y no duplica sus
-   * efectos disciplinarios.
+   * Entrada idempotente: un doble envio o un reintento devuelve la primera
+   * calificación y no duplica sus efectos disciplinarios.
    */
   async createClientRatingIdempotent(
     clientId: string,
@@ -1326,9 +1308,8 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
   /**
    * Apela una calificacion propia.
    *
-   * Existia solo detras del boton del chat, asi que quien no usa Telegram no
-   * tenia forma de defenderse de una calificacion baja --y una calificacion
-   * baja alimenta el score de confianza y puede acabar en sancion--.
+   * Sin esto nadie podria defenderse de una calificacion baja --y una
+   * calificacion baja alimenta el score de confianza y puede acabar en sancion--.
    */
   async apelarPropia(actor: Actor, ratingId: string, reason: string) {
     const identity = await this.identityForActor(actor);

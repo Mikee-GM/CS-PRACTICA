@@ -17,7 +17,7 @@ import { ReglamentoWebService } from './reglamento-web.service';
  * Recordatorio push del reglamento (decision 7 de la Fase 5): a las
  * `ONBOARDING_REMINDER_HOURS` de asignarlo y despues uno al dia, con tope.
  *
- * No depende de Telegram ni del token del bot: corre siempre. Si el push no
+ * No depende de ningun bot ni de su token: corre siempre. Si el push no
  * esta configurado, `NotificationsService` lo registra como omitido y el
  * contador avanza igual, asi que tampoco se acumulan pendientes.
  */
@@ -42,7 +42,7 @@ export class ReglamentoRecordatoriosScheduler
     );
     this.timer = setInterval(() => void this.run(), intervalMs);
     this.timer.unref();
-    // Desfasado del ciclo de Telegram (5 s) para no competir en el arranque.
+    // Desfasado de los demas ciclos del arranque para no competir en el arranque.
     setTimeout(() => void this.run(), 20_000).unref();
   }
 

@@ -5,10 +5,9 @@ import { LocationsService } from './locations.service';
  * La posicion que mandan los portales.
  *
  * Lo que se comprueba es la espera entre escrituras y que el evento salga con
- * el mismo nombre que el camino de Telegram: si esas dos cosas no se
- * sostuvieran, un telefono quieto seria una escritura por segundo sobre una
- * fila que ademas se lee en el reparto por cercania, y el mapa del jefe
- * dependeria de por donde llego la posicion.
+ * el mismo nombre de siempre: si esas dos cosas no se sostuvieran, un
+ * telefono quieto seria una escritura por segundo sobre una fila que ademas se
+ * lee en el reparto por cercania.
  */
 describe('LocationsService', () => {
   const CENTRO = { lat: 19.4326, lng: -99.1332 };
@@ -150,70 +149,5 @@ describe('LocationsService', () => {
     await expect(service.registrar('usuario-1', 91, 0)).rejects.toBeInstanceOf(
       BadRequestException,
     );
-  });
-
-  /*
-   * La entrada por chat es la que atendia el manejador del bot con su propia
-   * copia de todo esto. Lo que se fija aqui es que llegue al mismo sitio: la
-   * misma tabla, el mismo evento y la misma espera entre escrituras.
-   */
-  describe('cuando la posicion llega por Telegram', () => {
-    it('la anota igual y dice de quien es, que el bot contesta por su nombre', async () => {
-      const { service, actualizarEmpleada, emitToJefes } = armar('empleada');
-
-      const registro = await service.registrarPorTelegram(
-        '555',
-        CENTRO.lat,
-        CENTRO.lng,
-      );
-
-      expect(registro).toEqual({
-        guardada: true,
-        rol: 'empleada',
-        nombre: 'Ana',
-      });
-      expect(actualizarEmpleada).toHaveBeenCalledWith(
-        'empleada-1',
-        expect.objectContaining({ ubicacionLat: CENTRO.lat }),
-      );
-      expect(emitToJefes).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'EMPLOYEE_LOCATION_UPDATE' }),
-      );
-    });
-
-    it('devuelve null para un cliente, que no es de la casa', async () => {
-      const { service, actualizarChofer, actualizarEmpleada } =
-        armar('ninguno');
-
-      const registro = await service.registrarPorTelegram(
-        '999',
-        CENTRO.lat,
-        CENTRO.lng,
-      );
-
-      expect(registro).toBeNull();
-      expect(actualizarChofer).not.toHaveBeenCalled();
-      expect(actualizarEmpleada).not.toHaveBeenCalled();
-    });
-
-    /*
-     * Telegram refresca una ubicacion en vivo cada pocos segundos. La espera
-     * frena la escritura, pero el evento sale igual: quien mira el mapa quiere
-     * ver moverse el punto, y publicar no cuesta una escritura.
-     */
-    it('un refresco mueve el punto del mapa aunque no se escriba', async () => {
-      const { service, actualizarChofer, emitToJefes } = armar('chofer');
-
-      await service.registrarPorTelegram('555', CENTRO.lat, CENTRO.lng);
-      const segundo = await service.registrarPorTelegram(
-        '555',
-        CENTRO.lat,
-        CENTRO.lng,
-      );
-
-      expect(segundo?.guardada).toBe(false);
-      expect(actualizarChofer).toHaveBeenCalledTimes(1);
-      expect(emitToJefes).toHaveBeenCalledTimes(2);
-    });
   });
 });

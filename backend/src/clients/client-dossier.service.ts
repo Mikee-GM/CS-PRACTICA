@@ -43,8 +43,7 @@ const TOPE_DETALLE = 20;
 export interface ClientDossier {
   cliente: {
     id: string;
-    nombreTelegram: string | null;
-    telegramChatId: string | null;
+    nombre: string | null;
     primerContactoAt: Date;
     createdAt: Date;
     diasDesdePrimerContacto: number;
@@ -174,8 +173,7 @@ export class ClientDossierService {
     return {
       cliente: {
         id: cliente.id,
-        nombreTelegram: cliente.nombreTelegram,
-        telegramChatId: cliente.telegramChatId,
+        nombre: cliente.nombre,
         primerContactoAt: cliente.primerContactoAt,
         createdAt: cliente.createdAt,
         diasDesdePrimerContacto: diasDesde(cliente.primerContactoAt) ?? 0,

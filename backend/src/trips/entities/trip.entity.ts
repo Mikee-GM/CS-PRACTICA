@@ -189,10 +189,6 @@ export class Viajes {
   @ApiPropertyOptional({ description: 'Enlace compartido del viaje externo' })
   externalSharedLink: string | null;
 
-  @Column('varchar', { name: 'telegram_uber_file_id', nullable: true })
-  @ApiPropertyOptional({ description: 'File ID de la captura de Uber' })
-  telegramUberFileId: string | null;
-
   @Column('text', { name: 'uber_screenshot_url', nullable: true })
   @ApiPropertyOptional({ description: 'URL permanente de la captura de Uber' })
   uberScreenshotUrl: string | null;
@@ -301,26 +297,6 @@ export class Viajes {
   })
   horaFinViaje: Date | null;
 
-  @Column('varchar', {
-    name: 'telegram_empleada_msg_chofer_camino_id',
-    nullable: true,
-  })
-  @ApiPropertyOptional({
-    description: 'Telegram Empleada Msg Chofer Camino Id',
-    example: '00000000-0000-4000-8000-000000000000',
-  })
-  telegramEmpleadaMsgChoferCaminoId: string | null;
-
-  @Column('varchar', {
-    name: 'telegram_empleada_msg_chofer_llegado_id',
-    nullable: true,
-  })
-  @ApiPropertyOptional({
-    description: 'Telegram Empleada Msg Chofer Llegado Id',
-    example: '00000000-0000-4000-8000-000000000000',
-  })
-  telegramEmpleadaMsgChoferLlegadoId: string | null;
-
   @Column('jsonb', {
     name: 'choferes_notificados',
     default: () => "'[]'::jsonb",
@@ -331,16 +307,6 @@ export class Viajes {
     example: [],
   })
   choferesNotificados: string[];
-
-  @Column('varchar', {
-    name: 'telegram_chofer_msg_oferta_id',
-    nullable: true,
-  })
-  @ApiPropertyOptional({
-    description: 'Telegram Chofer Msg Oferta Id',
-    example: '00000000-0000-4000-8000-000000000000',
-  })
-  telegramChoferMsgOfertaId: string | null;
 
   @ManyToOne(() => Choferes, (choferes) => choferes.viajes, {
     onDelete: 'RESTRICT',

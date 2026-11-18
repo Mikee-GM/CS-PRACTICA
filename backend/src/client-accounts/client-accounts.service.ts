@@ -119,8 +119,7 @@ export class ClientAccountsService {
           await manager.save(
             manager.create(Clientes, {
               usuarioId: creado.id,
-              nombreTelegram: null,
-              telegramChatId: null,
+              nombre: creado.nombre,
               mayorDeEdadDeclaradoAt: ahora,
               terminosAceptadosAt: ahora,
               correoVerificadoAt: null,

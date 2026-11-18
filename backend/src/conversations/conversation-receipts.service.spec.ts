@@ -411,8 +411,6 @@ describe('ConversationReceiptsService', () => {
           estado: 'PROCESANDO',
           imageUrl: URL_R2,
           tipoCobro: 'reserva',
-          chatId: undefined,
-          telegramFileId: undefined,
         }),
       );
       expect(manager.create).toHaveBeenCalledWith(Message, {

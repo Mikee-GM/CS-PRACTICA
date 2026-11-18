@@ -122,7 +122,7 @@ describe('registro y resultado de la validacion', () => {
 
   beforeEach(() => jest.clearAllMocks());
 
-  /** El canal web no tiene chat ni archivo de Telegram: solo la URL de R2. */
+  /** El canal web solo conoce la URL de R2. */
   it('registra en PROCESANDO una imagen ya subida', async () => {
     const validacion = await registrarValidacion(repositorio as any, {
       imageUrl: 'https://media.example.com/evidencias/transferencias/a.jpg',
@@ -137,8 +137,6 @@ describe('registro y resultado de la validacion', () => {
         imageUrl: 'https://media.example.com/evidencias/transferencias/a.jpg',
         tipoCobro: 'reserva',
         horaRecepcion: '20:05:07',
-        chatId: undefined,
-        telegramFileId: undefined,
       }),
     );
     expect(validacion.id).toBe('validacion-1');

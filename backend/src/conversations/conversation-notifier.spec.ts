@@ -11,8 +11,8 @@ const CONVERSACION = '11111111-1111-4111-8111-111111111111';
 /**
  * Los avisos del ciclo de vida del servicio llegan al chat web del cliente.
  *
- * Antes solo salian por Telegram: quien reservo desde la web no se enteraba
- * de que su servicio se acepto, se rechazo o iba en camino.
+ * Quien reservo desde la web se entera de que su servicio se acepto, se
+ * rechazo o va en camino sin salir del chat.
  */
 describe('ConversationNotifier', () => {
   let dataSource: { query: jest.Mock; transaction: jest.Mock };

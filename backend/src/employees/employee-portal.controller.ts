@@ -111,8 +111,7 @@ export class EmployeePortalController {
    * Avance del viaje: voy en camino y ya llegue.
    *
    * Son las dos acciones del ciclo del servicio que la modelo hacia solo desde
-   * el chat, y las dos que mas prisa tienen: el cliente esta esperando y hasta
-   * ahora dependian de encontrar el mensaje correcto en Telegram.
+   * el chat, y las dos que mas prisa tienen: el cliente esta esperando.
    *
    * `updateUberStatus` ya comprueba que quien actualiza sea la empleada del
    * viaje, asi que aqui no se repite la verificacion: hacerlo dos veces invita
@@ -209,7 +208,7 @@ export class EmployeePortalController {
      * lo rechaza a proposito, asi que hay que preguntar antes de que rebote.
      *
      * Sin esto, la responsable de un grupal se quedaba sin poder cerrarlo desde
-     * la aplicacion: el flujo del chat pedia su id de Telegram.
+     * la aplicacion.
      */
     if (await this.esGrupal(servicioId)) {
       const cerrado = await this.groupServicesService.finishByResponsibleUser(
@@ -262,7 +261,7 @@ export class EmployeePortalController {
   /**
    * Subida de las fotos semanales.
    *
-   * Es la unica via desde que se retiro la de Telegram. El tope de tamaño se
+   * El tope de tamaño se
    * declara aqui ademas de en el servicio para que un archivo enorme se corte
    * en el interceptor y no despues de haberlo cargado entero en memoria.
    */
@@ -327,8 +326,7 @@ export class EmployeePortalController {
   /**
    * Donde esta ahora mismo.
    *
-   * Hasta ahora la unica via era compartir ubicacion en vivo desde Telegram, y
-   * dependia de acordarse de hacerlo. El portal la manda solo mientras esta
+   * No depende de acordarse de compartirla: el portal la manda solo mientras esta
    * abierto, que es justo cuando la persona esta trabajando.
    *
    * La espera entre escrituras la aplica el servicio, asi que un navegador que

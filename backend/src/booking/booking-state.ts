@@ -11,8 +11,8 @@ import type { MetodoPagoReserva } from './extractores-de-reserva';
 
 /**
  * Paso del formulario en el que esta la reserva. Solo los del flujo de
- * reserva: la `SessionData` de Telegram mezcla aqui calificaciones, reportes y
- * flujos del jefe que no pertenecen a una conversacion con el cliente.
+ * reserva, no los de otros flujos (calificaciones, reportes, flujos del jefe)
+ * que no pertenecen a una conversacion con el cliente.
  */
 export type PasoDeReserva =
   | 'AWAITING_DURATION'
@@ -32,15 +32,13 @@ export interface UbicacionDeReserva {
 /**
  * Estado de una reserva que lleva la IA, independiente del canal.
  *
- * Es el subconjunto de la `SessionData` de Telegram que pertenece al flujo de
- * reserva, y nada mas: se guarda serializado (en la web, en
+ * Solo lleva lo que pertenece al flujo de reserva: se guarda serializado (en la web, en
  * `conversations.state`) y cada campo que entre aqui se lee y se escribe en
  * cada turno. Por eso no lleva historial: el historial ya vive en los mensajes
  * de la conversacion, y duplicarlo aqui lo haria crecer sin limite.
  *
  * Extiende `BorradorDeReserva` para que `datosDeReserva` y
- * `montoEsperadoDeTransferencia` funcionen igual sobre la web que sobre
- * Telegram.
+ * `montoEsperadoDeTransferencia` funcionen sobre la web.
  */
 export interface BookingState extends BorradorDeReserva {
   /** Version del formato, para poder migrar estados guardados. */

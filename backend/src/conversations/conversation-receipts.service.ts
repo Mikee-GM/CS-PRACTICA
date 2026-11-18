@@ -103,9 +103,8 @@ interface ComprobanteRecibido {
  * ventana de analisis, el cliente puede mandar otro: no hace falta ningun
  * trabajo periodico que la rescate.
  *
- * El registro y el analisis son los mismos que Telegram
- * (`booking/booking-receipts`); lo propio de la web es recibir el archivo por
- * multipart, el mensaje de la conversacion y los avisos por SSE.
+ * El registro y el analisis viven en `booking/booking-receipts`; lo propio
+ * de la web es recibir el archivo por multipart, el mensaje de la conversacion y los avisos por SSE.
  */
 @Injectable()
 export class ConversationReceiptsService {
@@ -210,7 +209,7 @@ export class ConversationReceiptsService {
         {
           imageUrl: subida.url,
           tipoCobro: cobroVigente.tipoCobro,
-          // El grupal ya tiene servicio: como en Telegram, la foto nace
+          // El grupal ya tiene servicio: la foto nace
           // enganchada a el para que el jefe la vea en su ficha.
           servicioId:
             cobroVigente.tipoCobro === 'grupal' && cobroVigente.servicioId
@@ -340,8 +339,7 @@ export class ConversationReceiptsService {
         {
           jefeId: cobro.jefeId ?? empleada?.jefeId ?? undefined,
           expectedAmount: cobro.montoEsperado ?? undefined,
-          // Solo para rastrear de donde vino. No es el borrador de Telegram:
-          // ese lo lee el boton "Aprobar" del bot, que aqui no existe.
+          // Solo para rastrear de donde vino; no es el borrador de la reserva.
           draftPayload: {
             canal: 'web',
             conversationId: conversation.id,
@@ -527,7 +525,7 @@ export class ConversationReceiptsService {
 
     // El grupal se cobra por su saldo, que ya fijo el jefe al confirmar la
     // cotizacion; el borrador de la IA no interviene. Mismo monto esperado y
-    // mismo jefe que en Telegram (`tipoCobro: 'grupal'`).
+    // mismo jefe del cobro grupal (`tipoCobro: 'grupal'`).
     if (servicio?.serviceType === 'grupal') {
       return {
         tipoCobro: 'grupal',

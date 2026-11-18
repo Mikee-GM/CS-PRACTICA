@@ -14,7 +14,6 @@ import { Servicios } from '../../services/entities/service.entity';
 @Index('usuarios_email_key', ['email'], { unique: true })
 @Index('usuarios_pkey', ['id'], { unique: true })
 @Index('idx_usuarios_rol', ['rol'], {})
-@Index('usuarios_telegram_chat_id_key', ['telegramChatId'], { unique: true })
 @Entity('usuarios', { schema: 'public' })
 export class Usuarios {
   @Column('uuid', {
@@ -139,43 +138,6 @@ export class Usuarios {
     format: 'date-time',
   })
   jornadaMotivoAt: Date | null;
-
-  @Column('bigint', { name: 'telegram_chat_id', nullable: true, unique: true })
-  @ApiPropertyOptional({
-    description: 'Telegram Chat Id',
-    example: '00000000-0000-4000-8000-000000000000',
-  })
-  telegramChatId: string | null;
-
-  @Column('bigint', { name: 'grupo_telegram_id', nullable: true })
-  @ApiPropertyOptional({
-    description: 'Grupo Telegram Id',
-    example: '00000000-0000-4000-8000-000000000000',
-  })
-  grupoTelegramId: string | null;
-
-  @Column('character varying', {
-    name: 'telegram_verification_code',
-    nullable: true,
-    length: 255,
-  })
-  @ApiPropertyOptional({
-    description: 'Telegram Verification Code',
-    example: 'Ejemplo',
-  })
-  telegramVerificationCode: string | null;
-
-  @Column('timestamp with time zone', {
-    name: 'telegram_verification_expires_at',
-    nullable: true,
-  })
-  @ApiPropertyOptional({
-    description: 'Telegram Verification Expires At',
-    type: String,
-    format: 'date-time',
-    example: '2026-07-09T12:00:00.000Z',
-  })
-  telegramVerificationExpiresAt: Date | null;
 
   @Column('character varying', { name: 'telefono', nullable: true, length: 50 })
   @ApiPropertyOptional({ description: 'Telefono', example: '+525512345678' })

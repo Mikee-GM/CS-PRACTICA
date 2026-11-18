@@ -42,14 +42,6 @@ export class CandidateScreening {
   @ApiProperty()
   token: string;
 
-  @Column('character varying', {
-    name: 'telegram_chat_id',
-    length: 64,
-    nullable: true,
-  })
-  @ApiPropertyOptional()
-  telegramChatId: string | null;
-
   @Column('enum', {
     name: 'status',
     enum: ['pendiente', 'en_progreso', 'completado'],

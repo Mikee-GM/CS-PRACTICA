@@ -55,28 +55,9 @@ export class EmployeeReportsService {
     }
   }
 
-  async createFromClient(
-    telegramChatId: string,
-    serviceId: string,
-    category: ReportCategory,
-    description: string,
-  ) {
-    const client = await this.dataSource.getRepository(Clientes).findOne({
-      where: { telegramChatId },
-    });
-    return this.reportarServicioDelCliente(
-      client,
-      serviceId,
-      category,
-      description,
-    );
-  }
-
   /**
-   * Mismo reporte que el boton del bot, levantado desde el chat web.
-   *
-   * El cliente web no tiene `telegramChatId`, asi que su ficha se encuentra por
-   * la cuenta de la sesion. Lo demas --que el servicio sea suyo, que este
+   * Reporte del cliente desde el chat web: su ficha se encuentra por la cuenta
+   * de la sesion. Lo demas --que el servicio sea suyo, que este
    * finalizado y la ventana de 24 horas-- es comun a las dos vias.
    */
   async createFromClientAccount(
@@ -126,55 +107,14 @@ export class EmployeeReportsService {
     });
   }
 
-  async createFromDriver(
-    telegramChatId: string,
-    serviceId: string,
-    category: ReportCategory,
-    description: string,
-  ) {
-    const user = await this.dataSource.getRepository(Usuarios).findOne({
-      where: { telegramChatId, rol: 'chofer' },
-      relations: { choferes: true },
-    });
-    const driver = user?.choferes;
-    if (!driver) throw new ForbiddenException('Chofer no vinculado');
-
-    const trip = await this.dataSource.getRepository(Viajes).findOne({
-      where: {
-        servicioId: serviceId,
-        choferId: driver.id,
-        estado: 'finalizado',
-      },
-      relations: { servicio: true },
-      order: { horaFinViaje: 'DESC' },
-    });
-    if (!trip) {
-      throw new ForbiddenException(
-        'No existe un viaje finalizado de este chofer',
-      );
-    }
-    this.assertWithinWindow(trip.horaFinViaje, 'El viaje');
-
-    return this.createVerified({
-      service: trip.servicio,
-      category,
-      description,
-      origin: 'chofer',
-      clientId: null,
-      driverId: driver.id,
-      reporterKey: `chofer:${driver.id}`,
-    });
-  }
-
   /**
    * Reporte del chofer desde su portal.
    *
    * Se pide por viaje y no por servicio porque el portal solo conoce viajes:
    * es lo que le lista `ratings/pending-employees`. El viaje tiene que ser suyo
    * y estar finalizado; uno ajeno responde igual que uno inexistente para no
-   * revelar que existe. La clave del reportero es la misma que en el bot, asi
-   * que reportar por las dos vias la misma categoria sigue chocando con el
-   * indice unico.
+   * revelar que existe. La clave del reportero evita que la misma categoria se
+   * reporte dos veces: choca con el indice unico.
    */
   async createFromDriverAccount(
     usuarioId: string,

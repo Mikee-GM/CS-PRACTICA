@@ -14,10 +14,7 @@ import { BookingService } from './booking.service';
 /**
  * Dominio de reserva, independiente del canal.
  *
- * No importa nada de Telegram a proposito: tanto el bot como el chat web lo
- * usan, y si dependiera del bot la web arrastraria Telegraf para reservar.
- * `CustomerBookingSession` es solo la entidad del borrador; el servicio de
- * Telegram que tambien la escribe no se importa.
+ * `CustomerBookingSession` es solo la entidad del borrador.
  */
 @Module({
   imports: [

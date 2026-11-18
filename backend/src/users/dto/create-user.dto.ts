@@ -71,14 +71,4 @@ export class CreateUserDto {
   @IsString({ message: 'El apellido debe ser una cadena de texto' })
   @IsOptional()
   readonly apellido?: string;
-
-  @ApiPropertyOptional({
-    description: 'Chat ID de Telegram vinculado al usuario',
-    example: '123456789',
-  })
-  @IsString({
-    message: 'El ID de chat de Telegram debe ser una cadena de texto',
-  })
-  @IsOptional()
-  readonly telegramChatId?: string;
 }

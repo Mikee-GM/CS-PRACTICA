@@ -27,8 +27,8 @@ describe('EmployeeReportsService', () => {
       },
     });
     await expect(
-      service.createFromClient(
-        '123',
+      service.createFromClientAccount(
+        'usuario-1',
         'service-1',
         'otro',
         'Descripción válida',
@@ -37,7 +37,7 @@ describe('EmployeeReportsService', () => {
   });
 
   describe('desde la cuenta web del cliente', () => {
-    it('busca la ficha por la cuenta de la sesion, no por Telegram', async () => {
+    it('busca la ficha por la cuenta de la sesion', async () => {
       const clientes = { findOne: jest.fn().mockResolvedValue(null) };
       const service = buildService({ Clientes: clientes });
 

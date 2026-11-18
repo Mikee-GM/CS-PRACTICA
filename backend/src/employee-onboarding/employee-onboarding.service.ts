@@ -230,7 +230,6 @@ export class EmployeeOnboardingService {
             attemptCount: 0,
             bestScore: 0,
             trustScore: 1,
-            welcomeSentAt: previous?.welcomeSentAt ? publishedAt : null,
           }),
         );
       }
@@ -303,7 +302,6 @@ export class EmployeeOnboardingService {
           attemptCount: 0,
           bestScore: 0,
           trustScore: 1,
-          welcomeSentAt: previous?.welcomeSentAt ? new Date() : null,
         }),
       );
     });
@@ -571,57 +569,6 @@ export class EmployeeOnboardingService {
     return items[hash % items.length];
   }
 
-  async findPendingDeliveries(limit = 50) {
-    return this.onboardingRepository
-      .createQueryBuilder('onboarding')
-      .innerJoinAndSelect('onboarding.user', 'user')
-      .leftJoinAndSelect('onboarding.employee', 'employee')
-      .where('onboarding.active = true')
-      .andWhere('user.telegramChatId IS NOT NULL')
-      .andWhere(
-        '(onboarding.welcomeSentAt IS NULL OR onboarding.regulationSentAt IS NULL)',
-      )
-      .orderBy('onboarding.assignedAt', 'ASC')
-      .take(limit)
-      .getMany();
-  }
-
-  async findDueReminders(cutoff: Date, limit = 50) {
-    return this.onboardingRepository
-      .createQueryBuilder('onboarding')
-      .innerJoinAndSelect('onboarding.user', 'user')
-      .leftJoinAndSelect('onboarding.employee', 'employee')
-      .where('onboarding.active = true')
-      .andWhere('onboarding.status = :status', { status: 'pending' })
-      .andWhere('onboarding.regulationSentAt <= :cutoff', { cutoff })
-      .andWhere('onboarding.reminderSentAt IS NULL')
-      .andWhere('user.telegramChatId IS NOT NULL')
-      .orderBy('onboarding.regulationSentAt', 'ASC')
-      .take(limit)
-      .getMany();
-  }
-
-  async markWelcomeSent(id: string) {
-    await this.onboardingRepository.update(id, {
-      welcomeSentAt: new Date(),
-      lastDeliveryError: null,
-    });
-  }
-
-  async markRegulationSent(id: string) {
-    await this.onboardingRepository.update(id, {
-      regulationSentAt: new Date(),
-      lastDeliveryError: null,
-    });
-  }
-
-  async markReminderSent(id: string) {
-    await this.onboardingRepository.update(id, {
-      reminderSentAt: new Date(),
-      lastDeliveryError: null,
-    });
-  }
-
   async markDeliveryError(id: string, error: unknown) {
     const message = describeError(error);
     await this.onboardingRepository.update(id, {
@@ -679,8 +626,6 @@ export class EmployeeOnboardingService {
       where: { employeeId, active: true },
     });
     if (!onboarding) throw new NotFoundException('Incorporación no encontrada');
-    onboarding.regulationSentAt = null;
-    onboarding.reminderSentAt = null;
     onboarding.lastDeliveryError = null;
     await this.onboardingRepository.save(onboarding);
     return { queued: true };
@@ -871,8 +816,6 @@ export class EmployeeOnboardingService {
       where: { userId, active: true },
     });
     if (!onboarding) throw new NotFoundException('Incorporación no encontrada');
-    onboarding.regulationSentAt = null;
-    onboarding.reminderSentAt = null;
     onboarding.lastDeliveryError = null;
     await this.onboardingRepository.save(onboarding);
     return { queued: true };
@@ -892,29 +835,15 @@ export class EmployeeOnboardingService {
   }
 
   private sanitizeUser(user: Usuarios) {
-    const {
-      passwordHash: omittedPassword,
-      telegramVerificationCode: omittedCode,
-      telegramVerificationExpiresAt: omittedExpiration,
-      ...safeUser
-    } = user;
+    const { passwordHash: omittedPassword, ...safeUser } = user;
     void omittedPassword;
-    void omittedCode;
-    void omittedExpiration;
     return safeUser;
   }
 
   private sanitizeEmployee(employee: Empleadas) {
     if (!employee.usuario) return employee;
-    const {
-      passwordHash: omittedPassword,
-      telegramVerificationCode: omittedCode,
-      telegramVerificationExpiresAt: omittedExpiration,
-      ...safeUser
-    } = employee.usuario;
+    const { passwordHash: omittedPassword, ...safeUser } = employee.usuario;
     void omittedPassword;
-    void omittedCode;
-    void omittedExpiration;
     return {
       ...employee,
       usuario: safeUser,

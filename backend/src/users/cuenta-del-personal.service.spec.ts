@@ -14,7 +14,7 @@ import { Usuarios } from './entities/user.entity';
 type Condicion = { sql: string; params: Record<string, unknown> };
 
 /*
- * El acceso del personal sin Telegram ni correo (Fase 5, B-acceso). Lo que se
+ * El acceso del personal sin correo (Fase 5, B-acceso). Lo que se
  * fija aqui es lo que hace segura la temporal: quien puede pedirla, que se
  * guarda hasheada, que tumba las sesiones y que nunca acaba en un log.
  */

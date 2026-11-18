@@ -3,7 +3,7 @@ import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class ListClientsDto {
-  @ApiPropertyOptional({ description: 'Filtro por nombre de Telegram' })
+  @ApiPropertyOptional({ description: 'Filtro por nombre' })
   @IsString()
   @IsOptional()
   readonly search?: string;

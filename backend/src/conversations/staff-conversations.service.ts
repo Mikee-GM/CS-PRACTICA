@@ -575,12 +575,9 @@ export class StaffConversationsService {
   // -------------------------------------------------- borrador de reserva
 
   /**
-   * Acepta el borrador que dejo la IA: crea el servicio con el mismo protocolo
-   * que Telegram (`aceptarBorradorDeReserva`), lo engancha a la conversacion,
-   * le pasa el comprobante que ya hubiera y avisa al cliente.
-   *
-   * No supone un cliente de Telegram: el chat del cliente sale de su ficha y
-   * es `null` si reservo solo por la web.
+   * Acepta el borrador que dejo la IA: crea el servicio con
+   * `aceptarBorradorDeReserva`, lo engancha a la conversacion, le pasa el
+   * comprobante que ya hubiera y avisa al cliente.
    */
   async aceptar(
     actor: Usuarios,
@@ -606,10 +603,6 @@ export class StaffConversationsService {
       await this.enlazarServicio(conversationId, draft.serviceId);
       resultado = { draft, idempotent: true };
     } else {
-      const cliente = await this.clientesRepository.findOne({
-        where: { id: conversation.clientId },
-        select: { id: true, telegramChatId: true },
-      });
       const estado = normalizarEstado(conversation.state);
       resultado = await aceptarBorradorDeReserva(
         {
@@ -622,9 +615,6 @@ export class StaffConversationsService {
         {
           actorId: actor.id,
           jefeId: jefeDelServicio(actor, employee),
-          // Si ademas tiene Telegram, los avisos del servicio le llegan por
-          // los dos canales, como el resto (paso 9).
-          clienteTelegramId: cliente?.telegramChatId ?? null,
           comprobantePendiente: Boolean(estado.esperandoComprobante),
           enlazarConversacion: (serviceId) =>
             this.enlazarServicio(conversationId, serviceId),

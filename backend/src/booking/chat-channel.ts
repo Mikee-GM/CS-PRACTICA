@@ -2,11 +2,9 @@
  * Contratos entre el dominio de reserva y los canales por los que habla el
  * cliente.
  *
- * Hoy toda la reserva vive dentro del handler de Telegram y le habla a
- * `ctx` directamente. Para que la web reutilice esa misma logica, el dominio
- * tiene que expresar "dile esto al cliente" o "guarda donde va la reserva" sin
- * saber si detras hay un chat de Telegram o una pagina. Estas interfaces son
- * ese limite; cada canal aporta su implementacion.
+ * El dominio expresa "dile esto al cliente" o "guarda donde va la reserva" sin
+ * saber como se entrega ni donde se guarda. Estas interfaces son ese limite;
+ * el canal aporta su implementacion.
  *
  * Solo hay tipos: cada canal aporta su implementacion (la web, en
  * `conversations/web-chat-channel.ts`).
@@ -15,14 +13,12 @@
 import type { HistorialDeReserva } from './booking-ai.service';
 
 /** Canales por los que un cliente puede conversar con una modelo. */
-export type CanalDeReserva = 'telegram' | 'web';
+export type CanalDeReserva = 'web';
 
 /**
  * A quien y en que conversacion se habla.
  *
- * Identifica por `clienteId` y `empleadaId`, no por chat de Telegram: un
- * cliente web no tiene chat id, y el mismo cliente puede pasar de un canal a
- * otro sin dejar de ser el mismo.
+ * Identifica por `clienteId` y `empleadaId`: un cliente web no tiene chat id.
  */
 export interface ConversationRef {
   clienteId: string;
@@ -31,9 +27,9 @@ export interface ConversationRef {
   bookingSessionId: string | null;
   channel: CanalDeReserva;
   /**
-   * La conversacion web concreta. Telegram no la tiene (su conversacion es el
-   * chat); la web si, y con ella el estado y los mensajes se localizan sin
-   * depender de que solo haya una conversacion abierta por pareja.
+   * La conversacion web concreta: con ella el estado y los mensajes se
+   * localizan sin depender de que solo haya una conversacion abierta por
+   * pareja.
    */
   conversationId?: string;
 }
@@ -54,8 +50,8 @@ export interface InboundMessage {
   receivedAt: Date;
   attachments: InboundAttachment[];
   /**
-   * Identificador del mensaje en su canal. Sirve para descartar reintentos:
-   * Telegram reentrega un update si no se confirma a tiempo.
+   * Identificador del mensaje en su canal. Sirve para descartar reintentos si
+   * el canal reentrega un mensaje que no llego a confirmarse.
    */
   channelMessageId?: string;
 }
@@ -66,7 +62,7 @@ export type RemitenteDeMensaje = 'ia' | 'jefe' | 'sistema';
 export interface SendTextOptions {
   sender?: RemitenteDeMensaje;
   /**
-   * Pausa antes de enviar. En Telegram simula el tiempo de escribir; el canal
+   * Pausa antes de enviar. Simula el tiempo de escribir; el canal
    * decide como representarla, por eso es una sugerencia y no una espera que
    * haga el dominio.
    */

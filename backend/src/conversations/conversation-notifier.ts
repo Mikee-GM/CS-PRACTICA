@@ -18,14 +18,14 @@ export type AvisoAlCliente = {
   clienteId: string;
   serviceId?: string | null;
   employeeId?: string | null;
-  /** Texto final, ya sin emojis ni formato de Telegram: se guarda tal cual. */
+  /** Texto final, ya sin emojis ni formato: se guarda tal cual. */
   texto: string;
 };
 
 /**
  * Deja en el chat web del cliente los avisos del ciclo de vida del servicio
- * (aceptado, rechazado, en camino...), que hasta ahora solo salian por
- * Telegram y no llegaban a quien reservo desde la web.
+ * (aceptado, rechazado, en camino...) para que lleguen a quien
+ * reservo desde la web.
  *
  * No depende de `services/` a proposito: `ServicesModule` lo importa, y si el
  * notificador conociera al servicio se cerraria un ciclo entre modulos. Por eso

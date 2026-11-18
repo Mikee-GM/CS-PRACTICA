@@ -20,8 +20,7 @@ export const METODOS_CON_COMPROBANTE = ['transferencia', 'mixto'] as const;
 export const SERVICIO_CERRADO = ['cancelado', 'finalizado'] as const;
 
 /**
- * Cuanto se considera vivo un analisis en `PROCESANDO`. Igual que en
- * Telegram: el analizador corta a los 60 s, asi que tres minutos solo los
+ * Cuanto se considera vivo un analisis en `PROCESANDO`. El analizador corta a los 60 s, asi que tres minutos solo los
  * pasa un analisis que se quedo colgado.
  */
 export const VENTANA_ANALISIS_MS = 3 * 60 * 1000;

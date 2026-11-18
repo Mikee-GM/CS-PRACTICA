@@ -9,13 +9,11 @@ import {
 } from 'typeorm';
 import { Usuarios } from '../../users/entities/user.entity';
 import { AlertasClientes } from '../../client-alerts/entities/client-alert.entity';
-import { ConversacionesTelegram } from '../../telegram-conversations/entities/telegram-conversation.entity';
 import { Servicios } from '../../services/entities/service.entity';
 import { ClientMembership } from '../../loyalty/entities/client-membership.entity';
 import { LoyaltyTransaction } from '../../loyalty/entities/loyalty-transaction.entity';
 
 @Index('clientes_pkey', ['id'], { unique: true })
-@Index('clientes_telegram_chat_id_key', ['telegramChatId'], { unique: true })
 @Entity('clientes', { schema: 'public' })
 export class Clientes {
   @Column('uuid', {
@@ -28,14 +26,6 @@ export class Clientes {
     example: '00000000-0000-4000-8000-000000000000',
   })
   id: string;
-
-  /** Nulo en las cuentas web; desaparece al retirar Telegram. */
-  @Column('bigint', { name: 'telegram_chat_id', unique: true, nullable: true })
-  @ApiPropertyOptional({
-    description: 'Telegram Chat Id',
-    example: '00000000-0000-4000-8000-000000000000',
-  })
-  telegramChatId: string | null;
 
   @Column('uuid', { name: 'usuario_id', nullable: true, unique: true })
   @ApiPropertyOptional({ description: 'Cuenta web del cliente' })
@@ -87,8 +77,8 @@ export class Clientes {
     nullable: true,
     length: 255,
   })
-  @ApiPropertyOptional({ description: 'Nombre Telegram', example: 'Ejemplo' })
-  nombreTelegram: string | null;
+  @ApiPropertyOptional({ description: 'Nombre', example: 'Ejemplo' })
+  nombre: string | null;
 
   @Column('timestamp with time zone', {
     name: 'created_at',
@@ -114,10 +104,6 @@ export class Clientes {
   })
   primerContactoAt: Date;
 
-  @Column('integer', { name: 'admin_topic_id', nullable: true })
-  @ApiPropertyOptional({ description: 'Thread ID en el supergrupo admin' })
-  adminTopicId: number | null;
-
   @OneToMany(
     () => AlertasClientes,
     (alertasClientes) => alertasClientes.cliente,
@@ -128,17 +114,6 @@ export class Clientes {
     example: [],
   })
   alertasClientes: AlertasClientes[];
-
-  @OneToMany(
-    () => ConversacionesTelegram,
-    (conversacionesTelegram) => conversacionesTelegram.cliente,
-  )
-  @ApiProperty({
-    description: 'Conversaciones Telegrams',
-    type: () => [ConversacionesTelegram],
-    example: [],
-  })
-  conversacionesTelegrams: ConversacionesTelegram[];
 
   @OneToMany(() => Servicios, (servicios) => servicios.cliente)
   @ApiProperty({

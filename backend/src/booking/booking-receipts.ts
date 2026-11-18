@@ -11,12 +11,10 @@ import type { Servicios } from '../services/entities/service.entity';
 /**
  * Comprobantes de transferencia, independientes del canal.
  *
- * Telegram baja la foto con `getFileLink` y la web la recibe por multipart,
- * pero a partir de tener la imagen ya subida a R2 todo es igual: se registra la
+ * La web recibe la foto por multipart y, una vez subida a R2, se registra la
  * validacion, se analiza, se guarda el resultado y, si procede, se engancha al
- * servicio que la esperaba. Esa parte comun vive aqui como funciones que
- * reciben sus repositorios, para que `TelegramBookingUpdate` delegue sin
- * cambiar sus dependencias (sus pruebas construyen el handler a mano).
+ * servicio que la esperaba. Vive aqui como funciones que reciben sus
+ * repositorios, para que quien las use no cambie sus dependencias.
  *
  * Regla que no se toca: el analisis de la IA solo lee la foto. Ni un
  * `APROBADO` confirma el dinero; eso solo lo hace una persona contrastando el
@@ -253,9 +251,6 @@ export interface NuevaValidacion {
   tipoCobro: TipoDeCobro;
   servicioId?: string;
   clienteNombre?: string | null;
-  /** Solo Telegram: quien la mando y el archivo en sus servidores. */
-  chatId?: string;
-  telegramFileId?: string;
   recibidaEn?: Date;
 }
 
@@ -273,13 +268,11 @@ export function registrarValidacion(
   return repositorio.save(
     repositorio.create({
       fechaRecepcion: recibidaEn,
-      // Telegram siempre guardo aqui la hora en UTC; se conserva para no
-      // mezclar dos criterios en la misma columna.
+      // Las filas historicas guardan aqui la hora en UTC; se conserva para
+      // no mezclar dos criterios en la misma columna.
       horaRecepcion: recibidaEn.toISOString().slice(11, 19),
-      clienteTelegram: datos.clienteNombre ?? undefined,
-      chatId: datos.chatId,
+      clienteNombre: datos.clienteNombre ?? undefined,
       imageUrl: datos.imageUrl,
-      telegramFileId: datos.telegramFileId,
       esComprobante: false,
       estado: 'PROCESANDO',
       servicioId: datos.servicioId,

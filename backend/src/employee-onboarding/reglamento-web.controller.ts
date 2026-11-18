@@ -25,7 +25,7 @@ import {
 } from './reglamento-web.service';
 
 /**
- * El reglamento y el cuestionario del propio trabajador, sin Telegram.
+ * El reglamento y el cuestionario del propio trabajador.
  *
  * Admin no aparece: no tiene reglamento propio y ya gestiona los de todos desde
  * `EmployeeOnboardingController`.

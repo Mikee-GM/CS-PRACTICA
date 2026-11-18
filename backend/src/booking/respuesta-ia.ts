@@ -30,10 +30,7 @@ export interface RespuestaVestida {
  * promete pero no puede garantizar-- y sustituye la respuesta entera cuando
  * suena a asistente ("no puedo ayudarte con eso").
  *
- * Es la parte pura de `dressAiReply` de Telegram, que delega aqui y conserva
- * la cadencia de emojis, porque esa depende de su sesion.
- *
- * En la web cambian dos cosas. Declararse IA no descarta la respuesta (es la
+ * Declararse IA no descarta la respuesta (es la
  * contestacion honesta que se le pide), y los emojis se quitan ANTES de decidir
  * si queda algo: una respuesta que era solo emojis se queda vacia y se desvia,
  * en vez de salir en blanco.
@@ -42,20 +39,16 @@ export function vestirRespuestaIa(
   respuesta: string,
   opciones: { canal?: CanalDeReserva; ultimoDesvio?: string | null } = {},
 ): RespuestaVestida {
-  const web = opciones.canal === 'web';
   const saneado = softenCommercialTone(sanitizeAiReply(respuesta || ''));
   const sinMostrador = stripFrontDeskOffer(saneado);
   const quitoMostrador = sinMostrador !== saneado;
-  const limpio = web ? quitarEmojis(sinMostrador).trim() : sinMostrador;
+  const limpio = quitarEmojis(sinMostrador).trim();
 
   if (
     !limpio ||
-    looksLikeAssistantRegister(limpio, { permitirIdentidad: web })
+    looksLikeAssistantRegister(limpio, { permitirIdentidad: true })
   ) {
-    const desvio = pickDeflection(
-      opciones.ultimoDesvio,
-      web ? 'web' : 'telegram',
-    );
+    const desvio = pickDeflection(opciones.ultimoDesvio);
     return {
       texto: desvio,
       desvio,
@@ -78,7 +71,6 @@ const PIDE_DURACION =
  * cambia por la del paso siguiente.
  *
  * Devuelve el texto que la sustituye, o `null` si no hay nada que corregir.
- * `enforceBookingProgression` de Telegram delega aqui.
  */
 export function corregirRetrocesoDeDuracion(
   texto: string,

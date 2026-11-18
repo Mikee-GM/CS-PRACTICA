@@ -803,7 +803,6 @@ describe('StaffConversationsService', () => {
         expect.objectContaining({
           clienteId: 'cliente-1',
           bookingSessionId: 'borrador-1',
-          clienteTelegramId: null,
           comprobantePendiente: true,
           jefeId: 'jefe-1',
         }),

@@ -133,7 +133,6 @@ export class EmployeesService {
     const {
       email,
       password,
-      telegramChatId,
       nombreReal,
       nombreArtistico,
       slugCatalogo,
@@ -186,7 +185,6 @@ export class EmployeesService {
         email,
         passwordHash,
         rol: 'empleada',
-        telegramChatId: telegramChatId || null,
         // La contraseña la tecleo el admin: es temporal y se cambia al entrar.
         debeCambiarPassword: true,
       });
@@ -326,7 +324,7 @@ export class EmployeesService {
 
   /**
    * Quita del objeto las relaciones que son `Usuarios`. Son datos internos
-   * (email, telefono, telegramChatId) que no deben salir por una ruta publica.
+   * (email, telefono) que no deben salir por una ruta publica.
    */
   private stripUserRelations(employee: Empleadas): Empleadas {
     const {
@@ -1229,9 +1227,8 @@ export class EmployeesService {
         /*
          * Los datos con los que decide como alistarse.
          *
-         * Estaban solo en el mensaje de Telegram, asi que quien usa el portal
-         * --que es desde donde ahora avisa que ya esta lista-- tenia que ir a
-         * buscar el chat para leer las notas del jefe.
+         * Desde el portal --que es donde avisa que ya esta lista-- se leen las
+         * notas del jefe sin buscarlas en otro sitio.
          */
         notasJefe: activeOrUpcoming.notasJefe || null,
         habitacion: activeOrUpcoming.habitacion || null,
@@ -1252,7 +1249,7 @@ export class EmployeesService {
               estado: activeTrip.estado,
               choferNombre: activeTrip.chofer?.nombre || undefined,
               // La captura del Uber: con transporte externo es lo unico que
-              // le dice en que coche se sube. Llegaba solo por Telegram.
+              // le dice en que coche se sube.
               uberScreenshotUrl: activeTrip.uberScreenshotUrl || undefined,
               externalPlatform: activeTrip.externalPlatform || undefined,
               externalSharedLink: activeTrip.externalSharedLink || undefined,

@@ -106,7 +106,7 @@ export class ReglamentoWebService {
    * Reglamento vigente del rol y el estado del cuestionario propio.
    *
    * Si la persona aun no tenia asignacion (personal dado de alta despues de la
-   * ultima publicacion, que antes la recibia al vincular Telegram), se crea
+   * ultima publicacion, que antes la recibia al vincular su cuenta), se crea
    * aqui. Sin reglamento publicado para su rol responde vacio y no 404: no
    * tener reglamento no es un error de quien lo consulta.
    */
@@ -193,7 +193,7 @@ export class ReglamentoWebService {
    * Crea la asignacion al personal activo que no tiene ninguna y cuyo rol ya
    * tiene reglamento.
    *
-   * Antes la asignacion nacia al vincular Telegram. Sin este paso, quien se da
+   * Antes la asignacion nacia al vincular la cuenta. Sin este paso, quien se da
    * de alta despues de la ultima publicacion y nunca abre la web no tendria
    * asignacion y por tanto nunca recibiria el recordatorio.
    *

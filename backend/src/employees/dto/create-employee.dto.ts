@@ -87,16 +87,6 @@ export class CreateEmployeeDto {
   @MinLength(6, { message: 'La contraseña debe tener al menos 6 caracteres' })
   readonly password: string;
 
-  @ApiPropertyOptional({
-    description: 'Chat ID de Telegram vinculado al usuario',
-    example: '123456789',
-  })
-  @IsString({
-    message: 'El ID de chat de Telegram debe ser una cadena de texto',
-  })
-  @IsOptional()
-  readonly telegramChatId?: string;
-
   @ApiProperty({
     description: 'Nombre real de la empleada',
     example: 'Ana Garcia',
@@ -254,23 +244,12 @@ export class CreateEmployeeDto {
   readonly linkX?: string;
 
   @ApiPropertyOptional({
-    description: 'Etiqueta para iniciar contacto (WhatsApp/Telegram)',
+    description: 'Etiqueta para iniciar contacto (WhatsApp)',
     example: 'Escribeme por WhatsApp',
   })
   @IsString({ message: 'La etiqueta de contacto debe ser una cadena de texto' })
   @IsOptional()
   readonly contactLabel?: string;
-
-  @ApiPropertyOptional({
-    description:
-      'Si true, la empleada usa el app de Telegram normalmente. ' +
-      'Si false, el sistema avanza automaticamente sin esperar su confirmacion.',
-    example: true,
-    default: true,
-  })
-  @IsBoolean({ message: 'modoBot debe ser un valor booleano' })
-  @IsOptional()
-  readonly modoBot?: boolean;
 
   @ApiPropertyOptional({
     description: 'URLs de fotos adicionales',

@@ -31,7 +31,7 @@ export type ModeloConJefes = {
  * principal o el secundario, y los dos ven siempre sus chats. Si ninguno puede
  * atender ahora (inactivo, no disponible o con la jornada cerrada), el chat no
  * puede quedarse sin nadie: pasa a cualquier jefe, como hacen
- * `ServicesService.create` y `findAssignedJefe` en Telegram con la asignacion
+ * `ServicesService.create` y `findAssignedJefe` con la asignacion
  * del servicio. La regla de "puede atender" es la misma `puedeAtender`.
  *
  * El admin ve todo y no pasa por aqui.

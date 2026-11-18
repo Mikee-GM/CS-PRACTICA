@@ -293,7 +293,7 @@ describe('CandidateScreeningService (flujo web publico)', () => {
     });
   });
 
-  describe('submitAnswer (Telegram)', () => {
+  describe('submitAnswer', () => {
     it('sigue cerrando y avisando por el mismo camino', async () => {
       respondidas = [P1];
       evaluacion.status = 'en_progreso';

@@ -12,15 +12,11 @@ import { CustomerBookingSession } from './entities/customer-booking-session.enti
 /**
  * Aceptar un borrador de reserva, independiente del canal.
  *
- * Extraido de `TelegramConversationsService.acceptBookingDraft`, que ahora
- * delega aqui: el bot y el chat web aceptan el mismo borrador
- * (`customer_booking_sessions`) con el mismo protocolo. Lo propio de cada
- * canal (de donde sale el chat del cliente, que conversacion se enlaza al
- * servicio, que avisos salen) llega como opciones; aqui no se toca ni
- * Telegram ni la conversacion web.
+ * Acepta el borrador (`customer_booking_sessions`) con un protocolo unico. Lo
+ * propio de cada llamador (que conversacion se enlaza al servicio, que avisos
+ * salen) llega como opciones; aqui no se toca la conversacion web.
  *
- * Son funciones que reciben sus repositorios, como `booking-receipts`, porque
- * los specs de Telegram construyen su servicio a mano con dobles.
+ * Son funciones que reciben sus repositorios, como `booking-receipts`.
  */
 
 /** Lo que se toca del borrador; cuadra con los dobles de los specs. */
@@ -40,8 +36,6 @@ export interface OpcionesDeAceptacion {
   actorId: string;
   /** Jefe al que queda asignado el servicio. */
   jefeId: string;
-  /** Chat de Telegram del cliente; `null` si reservo desde la web. */
-  clienteTelegramId: string | null;
   /** Si el servicio nace esperando el comprobante de la transferencia. */
   comprobantePendiente: boolean;
   /**
@@ -186,7 +180,6 @@ export async function aceptarBorradorDeReserva(
       estado: 'pendiente',
       notas: draft.locationNotes || null,
       habitacion: draft.room,
-      clienteTelegramId: opciones.clienteTelegramId,
       comprobantePendiente: opciones.comprobantePendiente,
       iaActiva: false,
       presetLocationId: draft.presetLocationId,

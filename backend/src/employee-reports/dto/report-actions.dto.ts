@@ -39,17 +39,3 @@ export class CloseReportDto {
   @MaxLength(4000)
   resolution: string;
 }
-
-export class CreateTelegramReportDto {
-  @IsUUID('4') serviceId: string;
-  @IsEnum([
-    'trato_inadecuado',
-    'demora_impuntualidad',
-    'incumplimiento',
-    'cobro',
-    'seguridad',
-    'otro',
-  ])
-  category: ReportCategory;
-  @IsString() @MinLength(3) @MaxLength(2000) description: string;
-}

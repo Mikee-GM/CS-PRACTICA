@@ -97,7 +97,7 @@ describe('BookingAiService.callModel', () => {
     expect(ai.generateChatResponse).not.toHaveBeenCalled();
   });
 
-  /** Lo que usa Telegram: se cuenta, pero el limite no se pasa a la base. */
+  /** Sin aplicar el limite: se cuenta, pero el limite no se pasa a la base. */
   it('sin aplicar el limite solo cuenta y nunca corta', async () => {
     const { servicio, query, ai } = nuevoServicio({
       filas: [{ llamadas: 40, existe: true }],

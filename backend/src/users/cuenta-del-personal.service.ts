@@ -39,7 +39,7 @@ export type PerfilDelPersonal = Pick<
 const NO_ENCONTRADO = 'Usuario no encontrado';
 
 /**
- * Acceso del personal sin Telegram ni correo (Fase 5, B-acceso): cambio de
+ * Acceso del personal sin correo (Fase 5, B-acceso): cambio de
  * contraseña y perfil propios, y restablecimiento por el admin o el jefe con
  * una contraseña temporal.
  *

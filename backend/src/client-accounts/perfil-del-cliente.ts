@@ -64,9 +64,8 @@ export async function serviciosFinalizados(
  * Si el cliente tiene ahora mismo una sancion que lo restringe.
  *
  * Se consulta la tabla directamente en vez de inyectar `DisciplineService`:
- * `DisciplineModule` arrastra `TelegramModule`, que acaba importando
- * `AuthModule`, y este importa `ClientAccountsModule`; inyectarlo cerraria un
- * ciclo. Ademas `getActiveSanction` ejecuta antes `expireSanctions`, que
+ * `DisciplineModule` acaba importando `AuthModule`, y este importa
+ * `ClientAccountsModule`; inyectarlo cerraria un ciclo. Ademas `getActiveSanction` ejecuta antes `expireSanctions`, que
  * escribe y emite eventos, y una lectura de perfil no debe tener efectos.
  * Las condiciones son las mismas que las suyas: una suspension cuyo
  * `ends_at` ya paso no cuenta aunque siga marcada `active`.

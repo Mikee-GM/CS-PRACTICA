@@ -16,8 +16,7 @@ describe('ClientDossierService', () => {
 
   const CLIENTE = {
     id: 'cli-1',
-    nombreTelegram: 'Carlos',
-    telegramChatId: '123456',
+    nombre: 'Carlos',
     primerContactoAt: new Date('2026-01-01T00:00:00Z'),
     createdAt: new Date('2026-01-01T00:00:00Z'),
   };
@@ -122,7 +121,7 @@ describe('ClientDossierService', () => {
     expect(ficha.resumen.gastoTotal).toBe(9600);
     expect(ficha.resumen.calificacionPromedioQueDio).toBe(4.5);
     expect(ficha.resumen.calificacionPromedioQueRecibio).toBe(3);
-    expect(ficha.cliente.nombreTelegram).toBe('Carlos');
+    expect(ficha.cliente.nombre).toBe('Carlos');
   });
 
   /** Una linea que salta de enero a junio miente sobre lo que paso en medio. */

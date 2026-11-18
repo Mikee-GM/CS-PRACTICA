@@ -242,8 +242,7 @@ function refDe(conversation: Conversation): ConversationRef {
 }
 
 /**
- * Una rafaga de mensajes como un solo mensaje entrante, igual que hacia el
- * buffer de Telegram: textos unidos por salto de linea y, de las ubicaciones,
+ * Una rafaga de mensajes como un solo mensaje entrante, con textos unidos por salto de linea y, de las ubicaciones,
  * la ultima.
  */
 function aMensajeEntrante(pendientes: FilaPendiente[]): InboundMessage {

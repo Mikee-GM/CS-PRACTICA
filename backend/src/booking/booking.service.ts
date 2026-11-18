@@ -174,8 +174,7 @@ type UbicacionActiva = Awaited<
 /**
  * Un turno de la conversacion de reserva, independiente del canal.
  *
- * Reimplementa lo esencial del turno de Telegram (`flushClientMessageBuffer`)
- * sobre las piezas puras de `booking/` y `ai/`, hablando con el cliente solo a
+ * Se apoya en las piezas puras de `booking/` y `ai/`, hablando con el cliente solo a
  * traves de `ChatChannel` y guardando el estado con `BookingStateStore`. El
  * orden es el mismo: barreras que no pasan por el modelo, router de
  * intenciones globales, extractores deterministas, modelo, filtros de salida y
@@ -265,8 +264,7 @@ export class BookingService {
     // Con la conversacion en manos de una persona la IA no contesta: lo que
     // escriba el cliente ya lo ve el equipo en el panel.
     if (t.estado.entregadaAlEquipo) return;
-    // Con el borrador ya convertido en servicio la IA tampoco contesta, como
-    // en Telegram (`iaActiva: false` al aceptar): seguir la reserva desde aqui
+    // Con el borrador ya convertido en servicio la IA tampoco contesta: seguir la reserva desde aqui
     // abriria otra encima de la aceptada. Del servicio se ocupa el equipo.
     if (t.estado.lifecycle === 'SERVICE_CREATED') return;
 
@@ -292,7 +290,7 @@ export class BookingService {
         });
         return;
       }
-      if (detectSonda(mensaje, 'web')) {
+      if (detectSonda(mensaje)) {
         await this.desviar(t);
         return;
       }
@@ -575,8 +573,7 @@ export class BookingService {
 
   /**
    * Un pin del cliente. La cobertura se decide solo con las coordenadas; sin
-   * area configurada (o sin poder leerla) se acepta, igual que en Telegram:
-   * un servicio fuera de zona que se cuele todavia pasa por el jefe.
+   * area configurada (o sin poder leerla) se acepta: un servicio fuera de zona que se cuele todavia pasa por el jefe.
    */
   private async aplicarPin(
     t: Turno,
@@ -866,7 +863,7 @@ export class BookingService {
    * el panel del jefe sabe revisar y aceptar, y deja la conversacion en
    * revision. Con transferencia la reserva se cierra igual y queda esperando
    * el comprobante: el jefe tiene que enterarse aunque el cliente no vuelva a
-   * escribir (ver `cerrarReservaEsperandoComprobante` en Telegram).
+   * escribir.
    */
   private async cerrarReserva(t: Turno, empleada: Empleadas): Promise<void> {
     const estado = t.estado;
@@ -895,7 +892,7 @@ export class BookingService {
       mensajeAlCliente: resumenDeReserva(estado, empleada),
     });
 
-    // Igual que Telegram al elegir transferencia: los datos para pagar salen
+    // Al elegir transferencia los datos para pagar salen
     // en el mismo momento en que la reserva queda esperando el comprobante.
     if (estado.esperandoComprobante) {
       const cuentas = await this.cuentasParaPagar();
@@ -928,7 +925,7 @@ export class BookingService {
   }
 
   /**
-   * Mismo borrador que escribe Telegram (`upsertBookingDraftFromSession`), con
+   * Escribe el borrador de la reserva, con
    * su control de version: si un jefe lo edito entre medias, gana su version.
    * Un borrador que ya paso a manos del jefe (aceptandose, con servicio) no se
    * toca.
@@ -1133,7 +1130,7 @@ export class BookingService {
   }
 
   private async desviar(t: Turno): Promise<void> {
-    const desvio = pickDeflection(t.estado.ultimoDesvio, 'web');
+    const desvio = pickDeflection(t.estado.ultimoDesvio);
     t.estado.ultimoDesvio = desvio;
     await this.decir(t, desvio);
   }

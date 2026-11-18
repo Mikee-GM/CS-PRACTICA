@@ -1,7 +1,4 @@
-import {
-  IN_CHARACTER_DEFLECTIONS,
-  IN_CHARACTER_DEFLECTIONS_WEB,
-} from '../ai/ai-guardrails';
+import { IN_CHARACTER_DEFLECTIONS_WEB } from '../ai/ai-guardrails';
 import {
   corregirRetrocesoDeDuracion,
   evaluarMarca,
@@ -27,12 +24,6 @@ describe('vestirRespuestaIa', () => {
       texto: 'Sí, soy una IA y te cuento',
       desvio: null,
     });
-  });
-
-  it('en Telegram declararse IA se sustituye por un desvio', () => {
-    const vestida = vestirRespuestaIa('Sí, soy una IA', { canal: 'telegram' });
-    expect(IN_CHARACTER_DEFLECTIONS).toContain(vestida.texto);
-    expect(vestida.sustituida).toBe(true);
   });
 
   it('en la web una respuesta de solo emojis se desvia sin repetir el anterior', () => {

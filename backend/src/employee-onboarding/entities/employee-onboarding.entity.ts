@@ -70,28 +70,8 @@ export class EmployeeOnboarding {
   })
   assignedAt: Date;
 
-  @Column('timestamp with time zone', {
-    name: 'welcome_sent_at',
-    nullable: true,
-  })
-  @ApiPropertyOptional()
-  welcomeSentAt: Date | null;
-
-  @Column('timestamp with time zone', {
-    name: 'regulation_sent_at',
-    nullable: true,
-  })
-  @ApiPropertyOptional()
-  regulationSentAt: Date | null;
-
   @Column('timestamp with time zone', { name: 'read_at', nullable: true })
   readAt: Date | null;
-
-  @Column('timestamp with time zone', {
-    name: 'reminder_sent_at',
-    nullable: true,
-  })
-  reminderSentAt: Date | null;
 
   /** Recordatorios push del reglamento ya enviados; se cortan en un tope. */
   @Column('smallint', { name: 'web_reminder_count', default: 0 })

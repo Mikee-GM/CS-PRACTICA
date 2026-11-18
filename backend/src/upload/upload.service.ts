@@ -37,8 +37,8 @@ export type UploadedFilePayload = {
  * los catorce, y quien sube la captura de su viaje se encontraba con que el
  * servidor la rechazaba. El cliente comprime antes de mandar
  * (`lib/comprimir-imagen.ts`), asi que lo normal es que llegue alrededor de un
- * mega; este numero es el margen para lo que entre sin pasar por ahi --el bot
- * de Telegram, una version vieja de la aplicacion instalada-- no el tamaño que
+ * mega; este numero es el margen para lo que entre sin pasar por ahi --una
+ * version vieja de la aplicacion instalada-- no el tamaño que
  * se espera.
  */
 export const UPLOAD_MAX_BYTES = 20 * 1024 * 1024;

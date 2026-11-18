@@ -30,8 +30,8 @@ export class ClientsService {
   }
 
   /**
-   * Paginado siempre: la tabla de clientes crece con cada conversacion de
-   * Telegram y devolverla entera acabaria tumbando el panel.
+   * Paginado siempre: la tabla de clientes crece con cada cuenta que se
+   * registra y devolverla entera acabaria tumbando el panel.
    */
   async findAll(query: ClientListQuery = {}) {
     const limit = Math.min(
@@ -41,22 +41,7 @@ export class ClientsService {
     const offset = Math.max(0, Math.trunc(query.offset ?? 0));
     const search = query.search?.trim();
 
-    /*
-     * Se busca por nombre y tambien por id de Telegram.
-     *
-     * En la practica al cliente se le identifica por ese numero --es lo unico
-     * que aparece en los avisos al jefe y en las fichas de servicio-- y antes
-     * pegarlo en el buscador no devolvia nada: solo se miraba el nombre, que
-     * ademas muchos clientes no tienen puesto.
-     */
-    const where = search
-      ? [
-          { nombreTelegram: ILike(`%${search}%`) },
-          ...(/^\d+$/.test(search)
-            ? [{ telegramChatId: ILike(`%${search}%`) }]
-            : []),
-        ]
-      : undefined;
+    const where = search ? { nombre: ILike(`%${search}%`) } : undefined;
 
     const [items, total] = await this.clientesRepository.findAndCount({
       where,

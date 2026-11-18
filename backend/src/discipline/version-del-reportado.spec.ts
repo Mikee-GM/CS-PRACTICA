@@ -57,7 +57,7 @@ describe('DisciplineService: la version de quien fue reportado', () => {
      */
     it('avisa por push, sin poder apagarlo', async () => {
       const { service, notifications, query } = armar();
-      query.mockResolvedValue([{ telegramChatId: '555' }]);
+      query.mockResolvedValue([{ id: 'user-emp' }]);
       (service as any).usuarioDelSujeto = jest
         .fn()
         .mockResolvedValue('user-emp');

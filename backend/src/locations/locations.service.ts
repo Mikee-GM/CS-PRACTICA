@@ -19,10 +19,8 @@ type UltimaUbicacion = Sujeto & {
  * Cada cuanto se escribe como mucho, y cuanto hay que moverse para escribir
  * antes de que pase ese rato.
  *
- * Son los mismos numeros que ya usaba el flujo de Telegram, a proposito: las
- * dos vias escriben las mismas columnas y alimentan el mismo mapa, asi que si
- * se comportaran distinto la posicion de alguien dependeria de por donde la
- * mando.
+ * Frenan la escritura de un telefono quieto sobre una fila que ademas se lee
+ * en el reparto por cercania.
  */
 const MINIMO_ENTRE_ESCRITURAS_MS = 60 * 1000;
 const METROS_QUE_SALTAN_LA_ESPERA = 50;
@@ -30,15 +28,9 @@ const METROS_QUE_SALTAN_LA_ESPERA = 50;
 /**
  * Donde estan las modelos y los choferes.
  *
- * Existe porque hasta ahora la unica forma de mandar la posicion era compartir
- * ubicacion en vivo desde Telegram: si alguien tenia el chat silenciado, o
- * simplemente no se acordaba, el mapa del jefe se quedaba con la ultima
- * posicion escrita a mano y el reparto por cercania elegia sobre datos viejos.
- * Los portales ya son aplicaciones instaladas en el telefono, asi que pueden
- * mandarla ellos.
- *
- * No sustituye al camino de Telegram: escribe las mismas columnas y emite los
- * mismos eventos, asi que las dos vias se pueden usar a la vez.
+ * Los portales son aplicaciones instaladas en el telefono y mandan la posicion
+ * ellos: sin ella el mapa del jefe se queda con la ultima posicion escrita a
+ * mano y el reparto por cercania elige sobre datos viejos.
  */
 @Injectable()
 export class LocationsService {
@@ -137,65 +129,6 @@ export class LocationsService {
     return { guardada: true };
   }
 
-  /**
-   * Lo mismo, para quien comparte ubicacion en vivo desde Telegram.
-   *
-   * El chat identifica por `telegramChatId` y el portal por id de usuario, pero
-   * de ahi para dentro es el mismo camino: la misma espera entre escrituras, las
-   * mismas columnas y el mismo evento. Antes cada via tenia su copia dentro del
-   * manejador del bot, y bastaba tocar una para que la posicion de alguien
-   * dependiera de como la mandaba.
-   *
-   * Devuelve tambien quien es, porque el bot le contesta por su nombre.
-   */
-  async registrarPorTelegram(
-    telegramId: string,
-    lat: number,
-    lng: number,
-  ): Promise<{
-    guardada: boolean;
-    rol: 'chofer' | 'empleada';
-    nombre: string;
-  } | null> {
-    const sujeto = await this.sujetoPorTelegram(telegramId);
-    if (!sujeto) return null;
-
-    const { guardada } = await this.registrarSujeto(
-      `tg:${telegramId}`,
-      sujeto,
-      lat,
-      lng,
-    );
-    return { guardada, rol: sujeto.rol, nombre: sujeto.nombre };
-  }
-
-  /** Quien es, buscando por el chat en vez de por la sesion. */
-  private async sujetoPorTelegram(telegramId: string): Promise<Sujeto | null> {
-    const chofer = await this.choferes.findOne({
-      where: { usuario: { telegramChatId: telegramId } },
-      relations: { usuario: true },
-      select: { id: true, nombre: true },
-    });
-    if (chofer) {
-      return { rol: 'chofer', id: chofer.id, nombre: chofer.nombre };
-    }
-
-    const empleada = await this.empleadas.findOne({
-      where: { usuario: { telegramChatId: telegramId } },
-      relations: { usuario: true },
-      select: { id: true, nombreArtistico: true },
-    });
-    if (empleada) {
-      return {
-        rol: 'empleada',
-        id: empleada.id,
-        nombre: empleada.nombreArtistico,
-      };
-    }
-
-    return null;
-  }
-
   /** Quien es esta persona en el mapa: una modelo, un chofer, o nadie. */
   private async sujetoDe(usuarioId: string): Promise<Sujeto | null> {
     const chofer = await this.choferes.findOne({
@@ -222,8 +155,7 @@ export class LocationsService {
   /**
    * Guarda la posicion y la publica en el mapa del jefe.
    *
-   * El evento sale con el mismo nombre que emite el camino de Telegram, que es
-   * lo que hace que el mapa no tenga que saber por donde llego la posicion.
+   * El evento sale con el mismo nombre de siempre: asi el mapa no tiene que saber por donde llego la posicion.
    */
   private async escribir(
     rol: 'chofer' | 'empleada',
@@ -248,8 +180,7 @@ export class LocationsService {
   /**
    * Publica la posicion en el mapa del jefe.
    *
-   * El nombre del evento es el mismo que emitia el camino de Telegram, que es
-   * lo que hace que el mapa no tenga que saber por donde llego la posicion.
+   * El nombre del evento es el de siempre: asi el mapa no tiene que saber por donde llego la posicion.
    */
   private publicar(
     rol: 'chofer' | 'empleada',

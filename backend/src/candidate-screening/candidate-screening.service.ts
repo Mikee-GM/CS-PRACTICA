@@ -139,26 +139,6 @@ export class CandidateScreeningService {
     return this.screenings.save(screening);
   }
 
-  // ---------- Flujo por Telegram ----------
-
-  async getScreeningByToken(token: string) {
-    return this.screenings.findOne({ where: { token } });
-  }
-
-  async bindTelegram(screeningId: string, telegramChatId: string) {
-    const screening = await this.screenings.findOneBy({ id: screeningId });
-    if (!screening) throw new NotFoundException('Evaluación no encontrada');
-    if (screening.status === 'completado') {
-      throw new ConflictException('Esta evaluación ya fue completada');
-    }
-    screening.telegramChatId = telegramChatId;
-    if (screening.status === 'pendiente') {
-      screening.status = 'en_progreso';
-      screening.startedAt = new Date();
-    }
-    return this.screenings.save(screening);
-  }
-
   /** Regresa la siguiente pregunta sin responder, o null si ya se contestaron todas. */
   async getNextQuestion(screeningId: string) {
     const screening = await this.screenings.findOneBy({ id: screeningId });
@@ -235,9 +215,9 @@ export class CandidateScreeningService {
 
     const answerText = respuestaElegida(next.question, dto);
 
-    // Sin Telegram no hay vinculo que marque el inicio: lo marca la primera
-    // respuesta. Condicionado a `pendiente` para no pisar el `startedAt` que
-    // ya dejo Telegram ni el de una respuesta simultanea.
+    // No hay vinculo que marque el inicio: lo marca la primera respuesta.
+    // Condicionado a `pendiente` para no pisar el `startedAt` de una respuesta
+    // simultanea.
     if (screening.status === 'pendiente') {
       await this.screenings.update(
         { id: screening.id, status: 'pendiente' },
@@ -260,7 +240,7 @@ export class CandidateScreeningService {
   /**
    * Guarda la respuesta y, si era la ultima, cierra la evaluacion y avisa.
    *
-   * Comun a Telegram y a la web para que las dos vias cierren y avisen igual.
+   * Cierra y avisa en un solo sitio, sea cual sea la respuesta que cierra.
    */
   private async registrarRespuesta(
     screening: CandidateScreening,

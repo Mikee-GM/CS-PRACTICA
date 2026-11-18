@@ -19,10 +19,7 @@ export interface OpcionesDeLlamadaIa {
   /**
    * Si se hace cumplir `MAX_DAILY_AI_CALLS`. Por defecto si.
    *
-   * Telegram lo desactiva a proposito: hasta ahora el limite solo se declaraba
-   * y nunca se aplicaba, y cortarle la IA a un cliente de Telegram a media
-   * conversacion es un cambio de comportamiento que esta fase no pretende.
-   * Para Telegram solo se sigue contando.
+   * Con `false` solo se cuenta la llamada, sin cortar al pasar del limite.
    */
   aplicarLimiteDiario?: boolean;
 }
@@ -32,9 +29,8 @@ const LIMITE_DIARIO_POR_DEFECTO = 15;
 /**
  * Llamada al modelo de la conversacion de reserva, independiente del canal.
  *
- * Identifica al cliente por su id y no por su chat de Telegram, porque un
- * cliente web no tiene chat. Cuenta cada llamada en `clientes` y, en los
- * canales que lo aplican, corta al pasar del limite diario antes de gastar
+ * Identifica al cliente por su id, porque un cliente web no tiene
+ * chat. Cuenta cada llamada en `clientes` y, cuando se aplica el limite, corta al pasar del limite diario antes de gastar
  * una llamada al proveedor.
  */
 @Injectable()
@@ -90,7 +86,7 @@ export class BookingAiService {
    * corta a medianoche de Mexico, la hora del negocio, no la del servidor.
    *
    * Un fallo de la base al contar no bloquea la conversacion: se registra y se
-   * sigue, igual que hacia el contador de Telegram. Lo unico que corta es el
+   * sigue. Lo unico que corta es el
    * limite alcanzado.
    */
   private async registrarLlamada(

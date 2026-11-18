@@ -59,7 +59,6 @@ describe('aceptarBorradorDeReserva', () => {
   const opciones = () => ({
     actorId: 'jefe-1',
     jefeId: 'jefe-1',
-    clienteTelegramId: null,
     comprobantePendiente: true,
     enlazarConversacion: enlazar,
   });
@@ -87,7 +86,7 @@ describe('aceptarBorradorDeReserva', () => {
 
   const deps = () => ({ borradores, servicios, reservas }) as any;
 
-  it('crea el servicio sin chat de Telegram y enlaza la conversacion', async () => {
+  it('crea el servicio y enlaza la conversacion', async () => {
     const resultado = await aceptarBorradorDeReserva(
       deps(),
       borrador(),
@@ -99,7 +98,6 @@ describe('aceptarBorradorDeReserva', () => {
       expect.objectContaining({
         clienteId: 'cliente-1',
         bookingSessionId: 'borrador-1',
-        clienteTelegramId: null,
         comprobantePendiente: true,
         iaActiva: false,
         jefeId: 'jefe-1',

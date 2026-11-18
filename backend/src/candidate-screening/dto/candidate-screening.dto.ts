@@ -56,7 +56,7 @@ export class PromoteCandidateScreeningDto {
  * Respuesta de la candidata desde la web publica.
  *
  * `preguntaId` es la pregunta que la candidata tiene en pantalla: si ya no es
- * la pendiente (doble envio, otra pestana, Telegram a la vez) se rechaza en
+ * la pendiente (doble envio, otra pestana) se rechaza en
  * lugar de guardar esa respuesta como si fuera de la pregunta siguiente.
  * Segun la pregunta se manda `opcion` (indice de la opcion elegida) o `texto`.
  */

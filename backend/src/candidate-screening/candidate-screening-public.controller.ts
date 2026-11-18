@@ -17,7 +17,7 @@ import {
 import { ResponderEvaluacionDto } from './dto/candidate-screening.dto';
 
 /**
- * La evaluacion de una candidata, sin Telegram y sin sesion.
+ * La evaluacion de una candidata, sin sesion.
  *
  * Publica a proposito: la candidata todavia no tiene cuenta, y la unica
  * credencial es el token de su enlace. Por eso no lleva `JwtAuthGuard`,
