@@ -282,10 +282,10 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
 
   async findAll(actor: Actor) {
     await this.releaseExpiredHolds();
-    return this.requests.find({
+    const solicitudes = await this.requests.find({
       where: actor.rol === 'admin' ? {} : { bossId: actor.id },
       relations: {
-        client: true,
+        client: { usuario: true },
         boss: true,
         initialEmployee: true,
         selections: { employee: true },
@@ -298,6 +298,14 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
       },
       order: { createdAt: 'DESC' },
     });
+    // Un cliente web no tiene nombreTelegram: su nombre vive en el usuario. Se
+    // expone solo ese dato como clientNombre para no filtrar la entidad
+    // Usuarios completa en la respuesta.
+    return solicitudes.map(({ client, ...resto }) => ({
+      ...resto,
+      client: client ? { ...client, usuario: undefined } : client,
+      clientNombre: client?.usuario?.nombre ?? null,
+    }));
   }
 
   async findOne(id: string, actor: Actor) {

@@ -95,7 +95,7 @@ import {
   getCanalSinLeer,
   preguntarMotivoDeJornada,
 } from "@/lib/actions/team-channel";
-import type { GroupServiceRequest } from "@/lib/types";
+import type { GroupServiceRequest, PedidoGrupalDelChat } from "@/lib/types";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 import {
   canAssignTransport,
@@ -112,6 +112,7 @@ export default function TeamOperations({
   initialServices,
   initialCashSummary,
   initialGroupRequests,
+  initialGroupChatRequests = [],
   tabInicial,
   fixedTab,
 }: {
@@ -119,6 +120,7 @@ export default function TeamOperations({
   initialServices: Service[];
   initialCashSummary: CashObligationSummary;
   initialGroupRequests: GroupServiceRequest[];
+  initialGroupChatRequests?: PedidoGrupalDelChat[];
   tabInicial?: "grupos";
   fixedTab?: "activos" | "equipo" | "grupos" | "historial" | "efectivo";
 }) {
@@ -672,7 +674,10 @@ export default function TeamOperations({
           />
         </section>
       ) : tab === "grupos" ? (
-        <GroupServiceOrganizer initialRequests={groupRequests} />
+        <GroupServiceOrganizer
+          initialRequests={groupRequests}
+          initialChatRequests={initialGroupChatRequests}
+        />
       ) : tab === "efectivo" ? (
         <CashDeliveryPanel
           summary={cashSummary}

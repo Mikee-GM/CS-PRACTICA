@@ -8,6 +8,7 @@ import type {
   ConversationMessage,
   Employee,
   GroupServiceRequest,
+  PedidoGrupalDelChat,
   PreServiceConversation,
   Service,
 } from "@/lib/types";
@@ -686,6 +687,28 @@ async function groupMutation<T = GroupServiceRequest>(
 export async function getGroupServiceRequests() {
   await requireJefe();
   return apiFetch<GroupServiceRequest[]>("/group-services/requests");
+}
+
+/** Pedidos de grupo que los clientes dejaron en el chat web y aun no son solicitud. */
+export async function getGroupChatRequests() {
+  await requireJefe();
+  return apiFetch<PedidoGrupalDelChat[]>("/group-services/chat-requests");
+}
+
+export async function createGroupRequestFromConversation(
+  conversationId: string,
+) {
+  return groupMutation("/group-services/requests/from-conversation", "POST", {
+    conversationId,
+  });
+}
+
+/** Toma el ultimo pin del chat; el backend responde 409 si el cliente no mando uno. */
+export async function useGroupChatLocation(requestId: string) {
+  return groupMutation(
+    `/group-services/requests/${requestId}/location-from-chat`,
+    "POST",
+  );
 }
 
 export async function getGroupCandidates() {

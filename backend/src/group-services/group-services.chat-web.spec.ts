@@ -72,6 +72,27 @@ describe('GroupServicesService en el chat web', () => {
     service.findOne = jest.fn().mockResolvedValue({ ...solicitudWeb });
   });
 
+  describe('findAll', () => {
+    it('expone el nombre del cliente web sin filtrar el usuario', async () => {
+      service.releaseExpiredHolds = jest.fn().mockResolvedValue(undefined);
+      requests.find = jest.fn().mockResolvedValue([
+        {
+          id: 'solicitud-1',
+          client: {
+            id: 'cliente-1',
+            nombreTelegram: null,
+            usuario: { nombre: 'Carlos' },
+          },
+        },
+      ]);
+
+      const [fila] = await service.findAll(JEFE);
+
+      expect(fila.clientNombre).toBe('Carlos');
+      expect(fila.client.usuario).toBeUndefined();
+    });
+  });
+
   describe('createFromConversation', () => {
     beforeEach(() => {
       service.createRequest = jest

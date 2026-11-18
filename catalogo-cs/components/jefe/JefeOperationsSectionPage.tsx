@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import TeamOperations from "@/components/jefe/TeamOperations";
+import { optionalSource } from "@/lib/optional-source";
 import {
+  getGroupChatRequests,
   getGroupServiceRequests,
   getJefeCashObligations,
   getJefeEmployees,
@@ -20,11 +22,14 @@ export default async function JefeOperationsSectionPage({
 }: {
   section: JefeOperationsSection;
 }) {
-  const [employees, services, cashSummary, groupRequests] = await Promise.all([
+  const [employees, services, cashSummary, groupRequests, groupChatRequests] =
+    await Promise.all([
     getJefeEmployees(),
     getJefeServices(),
     getJefeCashObligations(),
     getGroupServiceRequests(),
+    // Sin esta fuente el organizador sigue sirviendo; solo faltan los pedidos del chat.
+    optionalSource(getGroupChatRequests(), [], "operaciones del jefe"),
   ]);
 
   return (
@@ -40,6 +45,7 @@ export default async function JefeOperationsSectionPage({
         initialServices={services}
         initialCashSummary={cashSummary}
         initialGroupRequests={groupRequests}
+        initialGroupChatRequests={groupChatRequests}
         fixedTab={section}
       />
     </>

@@ -13,8 +13,10 @@ import {
   changeGroupResponsible,
   configureGroupTransports,
   confirmGroupQuote,
+  createGroupRequestFromConversation,
   extendGroupHold,
   getGroupCandidates,
+  getGroupChatRequests,
   getGroupRequestMessages,
   getGroupServiceRequests,
   removeGroupParticipant,
@@ -24,12 +26,14 @@ import {
   sendGroupRequestMessage,
   startGroupService,
   updateGroupRequest,
+  useGroupChatLocation as tomarUbicacionDelChat,
   uploadUberScreenshot,
   type GroupTransportUnitInput,
 } from "@/lib/actions/jefe-panel";
-import type { ConversationMessage, Employee, GroupServiceRequest, Trip } from "@/lib/types";
+import type { ConversationMessage, Employee, GroupServiceRequest, PedidoGrupalDelChat, Trip } from "@/lib/types";
 import { formatCurrency } from "@/lib/calculations";
 import { comprimirCaptura } from "@/lib/comprimir-imagen";
+import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 
 const LocationMap = dynamic(
   () => import("@/components/admin/transport-location-map"),
@@ -43,10 +47,23 @@ const buttonClass =
 const clientActionButtonClass =
   "flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#C5A55A] px-4 py-3 text-xs font-bold uppercase tracking-wider text-black shadow-[0_0_24px_rgba(197,165,90,0.12)] transition hover:bg-[#D8BA72] disabled:opacity-40";
 
+/**
+ * Un cliente web no tiene nombreTelegram: el backend manda su nombre aparte
+ * como clientNombre, y solo es respaldo cuando falta el de Telegram.
+ */
+function nombreDelCliente(request: GroupServiceRequest) {
+  const { clientNombre } = request as GroupServiceRequest & {
+    clientNombre?: string | null;
+  };
+  return request.client?.nombreTelegram || clientNombre || "Cliente";
+}
+
 export default function GroupServiceOrganizer({
   initialRequests,
+  initialChatRequests = [],
 }: {
   initialRequests: GroupServiceRequest[];
+  initialChatRequests?: PedidoGrupalDelChat[];
 }) {
   const visibleInitialRequests = initialRequests.filter(
     (item) => item.status !== "cancelada" && item.service?.estado !== "cancelado",
@@ -65,6 +82,7 @@ export default function GroupServiceOrganizer({
    */
   const [vistaMovil, setVistaMovil] = useState<"lista" | "detalle">("lista");
   const [pending, startTransition] = useTransition();
+  const [chatRequests, setChatRequests] = useState(initialChatRequests);
   const selected = requests.find((item) => item.id === selectedId) ?? null;
 
   useEffect(() => {
@@ -78,6 +96,30 @@ export default function GroupServiceOrganizer({
         : visible[0]?.id ?? "",
     );
   }, [initialRequests]);
+
+  useEffect(() => {
+    setChatRequests(initialChatRequests);
+  }, [initialChatRequests]);
+
+  function armarGrupo(pedido: PedidoGrupalDelChat) {
+    startTransition(async () => {
+      const result = await createGroupRequestFromConversation(
+        pedido.conversationId,
+      );
+      if (!result.success) {
+        toast.error(result.error);
+        return;
+      }
+      // Se quita antes de recargar: la solicitud ya existe y el pedido no debe
+      // quedar duplicado si la recarga tarda o falla.
+      setChatRequests((current) =>
+        current.filter((item) => item.conversationId !== pedido.conversationId),
+      );
+      await reload(result.data.id);
+      setVistaMovil("detalle");
+      toast.success("Grupo armado");
+    });
+  }
 
   async function reload(preferredId?: string) {
     const next = (await getGroupServiceRequests()).filter(
@@ -108,6 +150,7 @@ export default function GroupServiceOrganizer({
       }
       await reload(selectedId);
       setCandidates(await getGroupCandidates());
+      void getGroupChatRequests().then(setChatRequests).catch(() => undefined);
       toast.success(success);
     });
   }
@@ -121,6 +164,38 @@ export default function GroupServiceOrganizer({
           </p>
           <h2 className="mt-0.5 font-heading text-2xl">{requests.length}</h2>
         </header>
+        {chatRequests.length > 0 && (
+          <section className="space-y-2 rounded-2xl border border-[#C5A55A]/45 bg-[#C5A55A]/5 p-3">
+            <p className="px-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#C5A55A]">
+              Pedidos del chat
+            </p>
+            {chatRequests.map((pedido) => (
+              <article
+                key={pedido.conversationId}
+                className="rounded-xl border border-zinc-800 bg-black p-3"
+              >
+                <p className="truncate font-heading text-lg text-white">
+                  {pedido.clientNombre || "Cliente"}
+                </p>
+                <p className="mt-0.5 truncate text-[11px] text-zinc-500">
+                  {pedido.nombreArtistico}
+                  {pedido.lastMessageAt
+                    ? ` · ${new Date(pedido.lastMessageAt).toLocaleString(APP_LOCALE, { timeZone: APP_TIME_ZONE, day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}`
+                    : ""}
+                </p>
+                <button
+                  type="button"
+                  className={`${buttonClass} mt-3 w-full`}
+                  disabled={pending}
+                  aria-busy={pending}
+                  onClick={() => armarGrupo(pedido)}
+                >
+                  Armar grupo
+                </button>
+              </article>
+            ))}
+          </section>
+        )}
         {requests.map((request) => {
           const seleccionadas = activeSelectionIds(request).length;
           return (
@@ -139,7 +214,7 @@ export default function GroupServiceOrganizer({
             >
               <div className="flex items-start justify-between gap-3">
                 <p className="min-w-0 truncate font-heading text-xl text-white">
-                  {request.client?.nombreTelegram || "Cliente"}
+                  {nombreDelCliente(request)}
                 </p>
                 <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${tonoEstadoGrupo(request.status)}`}>
                   {etiquetaEstadoGrupo(request.status)}
@@ -355,7 +430,7 @@ function GroupRequestEditor({
               Organizador grupal
             </p>
             <h2 className="mt-1 font-heading text-3xl">
-              {request.client?.nombreTelegram || "Cliente"}
+              {nombreDelCliente(request)}
             </h2>
           </div>
           <span className="rounded-full border border-zinc-700 px-3 py-1 text-xs uppercase text-zinc-400">
@@ -385,7 +460,7 @@ function GroupRequestEditor({
               </span>
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#C5A55A]">
-                  Acciones hacia Telegram
+                  {request.conversationId ? "Acciones hacia el chat" : "Acciones hacia Telegram"}
                 </p>
                 <h3 className="mt-1 font-heading text-2xl">
                   Comunicación con el cliente
@@ -410,20 +485,37 @@ function GroupRequestEditor({
                 <MapPin size={16} />
                 Pedir pin de ubicación
               </button>
-              <button
-                className={clientActionButtonClass}
-                disabled={pending}
-                aria-busy={pending}
-                onClick={() =>
-                  run(
-                    () => sendGroupCatalog(request.id),
-                    "Catálogo enviado",
-                  )
-                }
-              >
-                <Send size={16} />
-                Enviar catálogo
-              </button>
+              {request.conversationId ? (
+                <button
+                  className={clientActionButtonClass}
+                  disabled={pending}
+                  aria-busy={pending}
+                  onClick={() =>
+                    run(
+                      () => tomarUbicacionDelChat(request.id),
+                      "Ubicación del chat aplicada",
+                    )
+                  }
+                >
+                  <MapPin size={16} />
+                  Usar ubicación del chat
+                </button>
+              ) : (
+                <button
+                  className={clientActionButtonClass}
+                  disabled={pending}
+                  aria-busy={pending}
+                  onClick={() =>
+                    run(
+                      () => sendGroupCatalog(request.id),
+                      "Catálogo enviado",
+                    )
+                  }
+                >
+                  <Send size={16} />
+                  Enviar catálogo
+                </button>
+              )}
             </div>
           </section>
 
