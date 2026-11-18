@@ -7,6 +7,8 @@ import EmployeePortalView from "@/components/empleada/EmployeePortalView";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/auth";
 import { getMyWorkShift } from "@/lib/actions/work-shift";
+import { obtenerMisRetos } from "@/lib/actions/retos-del-personal";
+import { optionalSource } from "@/lib/optional-source";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 
@@ -30,7 +32,7 @@ interface PageProps {
 }
 
 /** Pestañas a las que puede apuntar un enlace. Nada mas abre el portal por defecto. */
-const SECCIONES = ["resumen", "ranking", "servicios", "reputacion", "fotos", "canal"] as const;
+const SECCIONES = ["resumen", "ranking", "servicios", "reputacion", "fotos", "canal", "retos"] as const;
 type Seccion = (typeof SECCIONES)[number];
 
 export default async function EmployeePortalPage({ searchParams }: PageProps) {
@@ -61,7 +63,16 @@ export default async function EmployeePortalPage({ searchParams }: PageProps) {
   if (!sesion && (!result.success || !result.data)) {
     redirect("/ingresar");
   }
-  const workShift = sesion ? await getMyWorkShift() : null;
+  /*
+   * /challenges/mine exige cookie y no acepta `?token=`: sin sesion no se pide.
+   * Va en paralelo con la jornada porque ninguna depende de la otra.
+   */
+  const [workShift, retos] = sesion
+    ? await Promise.all([
+        getMyWorkShift(),
+        optionalSource(obtenerMisRetos(), [], "portal de la empleada"),
+      ])
+    : [null, []];
 
   if (!result.success || !result.data) {
     return (
@@ -106,6 +117,7 @@ export default async function EmployeePortalPage({ searchParams }: PageProps) {
       workShift={workShift}
       weeklyPhotos={fotosSemanales.envios ?? []}
       seccionInicial={seccionInicial}
+      retos={retos}
     />
   );
 }

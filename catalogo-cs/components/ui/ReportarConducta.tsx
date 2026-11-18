@@ -28,7 +28,7 @@ const CATEGORIAS = [
   { valor: "otro", texto: "Otro" },
 ] as const;
 
-/** El minimo del backend. Se avisa antes de mandar, no despues. */
+/** El minimo de conducta en el backend. Se avisa antes de mandar, no despues. */
 const MINIMO_DESCRIPCION = 15;
 
 export default function ReportarConducta({
@@ -37,6 +37,9 @@ export default function ReportarConducta({
   sujeto,
   reportar,
   token,
+  etiqueta,
+  minimoDescripcion = MINIMO_DESCRIPCION,
+  revisor = "un jefe",
 }: {
   servicioId: string;
   /** Quien reporta a quien, en el vocabulario del backend. */
@@ -53,6 +56,15 @@ export default function ReportarConducta({
     token?: string,
   ) => Promise<{ success: boolean; error?: string }>;
   token?: string;
+  /**
+   * Texto del boton cerrado. Por defecto "Reportar {sujeto}"; permite montar dos
+   * reportes distintos sobre el mismo viaje sin duplicar el formulario.
+   */
+  etiqueta?: string;
+  /** El reporte a administracion acepta descripciones mas cortas que el de conducta. */
+  minimoDescripcion?: number;
+  /** Quien lee el reporte, para no prometer un jefe cuando lo ve administracion. */
+  revisor?: string;
 }) {
   const router = useRouter();
   const [abierto, setAbierto] = useState(false);
@@ -68,7 +80,7 @@ export default function ReportarConducta({
 
   function enviar() {
     const texto = descripcion.trim();
-    if (texto.length < MINIMO_DESCRIPCION) {
+    if (texto.length < minimoDescripcion) {
       toast.error("Cuenta qué pasó: quien lo revise solo tiene esto.");
       return;
     }
@@ -86,7 +98,7 @@ export default function ReportarConducta({
         toast.error(resultado.error);
         return;
       }
-      toast.success("Reporte enviado. Lo va a revisar un jefe.");
+      toast.success(`Reporte enviado. Lo va a revisar ${revisor}.`);
       cerrar();
       router.refresh();
     });
@@ -100,7 +112,7 @@ export default function ReportarConducta({
         className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] py-3 text-xs font-semibold uppercase tracking-wider text-gray-400 transition-colors hover:border-[#C5A55A] hover:text-[#C5A55A]"
       >
         <ShieldAlert size={16} />
-        Reportar {sujeto}
+        {etiqueta ?? `Reportar ${sujeto}`}
       </button>
     );
   }
@@ -108,7 +120,7 @@ export default function ReportarConducta({
   return (
     <div className="rounded-xl border border-[#C5A55A]/30 bg-[#C5A55A]/[0.05] p-3.5">
       <p className="mb-3 text-[11px] leading-relaxed text-gray-400">
-        Lo que escribas lo lee un jefe y puede terminar en una sanción. Sé
+        Lo que escribas lo lee {revisor} y puede terminar en una sanción. Sé
         concreto con lo que pasó.
       </p>
 

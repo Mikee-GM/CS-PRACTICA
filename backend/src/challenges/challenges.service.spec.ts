@@ -85,7 +85,7 @@ describe('ChallengesService (avisos del ciclo)', () => {
     const [usuarioId, aviso] = notifications.notificar.mock.calls[0];
     expect(usuarioId).toBe('user-a');
     expect(aviso.cuerpo).toContain('Bea');
-    expect(aviso.url).toBe('/empleada/portal');
+    expect(aviso.url).toBe('/empleada/portal?seccion=retos');
     expect(aviso.dedupeKey).toBe('reto-inicio:reto-1');
   });
 
@@ -129,6 +129,83 @@ describe('ChallengesService (avisos del ciclo)', () => {
     await service.activateDueChallenges();
 
     const [, aviso] = notifications.notificar.mock.calls[0];
-    expect(aviso.url).toBe('/chofer/portal');
+    expect(aviso.url).toBe('/chofer/portal?seccion=retos');
+  });
+
+  describe('misRetos', () => {
+    const propio = (overrides: Record<string, unknown> = {}) =>
+      reto({ status: 'active', ...overrides });
+
+    beforeEach(() => {
+      dataSource.query.mockImplementation((sql: string) => {
+        if (sql.includes('WHERE usuario_id')) {
+          return Promise.resolve([{ id: 'emp-b' }]);
+        }
+        return Promise.resolve([
+          { id: 'emp-a', name: 'Ana', value: '5' },
+          { id: 'emp-b', name: 'Bea', value: '2' },
+        ]);
+      });
+      participants.find.mockImplementation(({ where }) =>
+        Promise.resolve(
+          where.participantId
+            ? [{ challenge: propio() }]
+            : [{ participantId: 'emp-a' }, { participantId: 'emp-b' }],
+        ),
+      );
+    });
+
+    it('devuelve mi posicion y el top con nombres', async () => {
+      const retos = await service.misRetos({ id: 'user-b', rol: 'empleada' });
+
+      expect(retos).toHaveLength(1);
+      expect(retos[0]).toMatchObject({
+        miPosicion: 2,
+        miValor: 2,
+        participantes: 2,
+        gane: false,
+      });
+      expect(retos[0].top.map((t) => t.nombre)).toEqual(['Ana', 'Bea']);
+      expect(retos[0].top[1].esMio).toBe(true);
+    });
+
+    it('omite terminados de hace mas de 30 dias y los programados', async () => {
+      const viejo = propio({
+        status: 'finished',
+        finishedAt: new Date(Date.now() - 40 * 86_400_000),
+      });
+      const programado = propio({ status: 'scheduled' });
+      const reciente = propio({
+        id: 'reto-2',
+        status: 'finished',
+        finishedAt: new Date(Date.now() - 86_400_000),
+        winnerParticipantId: 'emp-b',
+      });
+      participants.find.mockImplementation(({ where }) =>
+        Promise.resolve(
+          where.participantId
+            ? [viejo, programado, reciente].map((challenge) => ({ challenge }))
+            : [{ participantId: 'emp-a' }, { participantId: 'emp-b' }],
+        ),
+      );
+
+      const retos = await service.misRetos({ id: 'user-b', rol: 'empleada' });
+
+      expect(retos.map((r) => r.id)).toEqual(['reto-2']);
+      expect(retos[0].gane).toBe(true);
+    });
+
+    it('sin ficha de empleada devuelve lista vacia', async () => {
+      dataSource.query.mockResolvedValue([]);
+      await expect(
+        service.misRetos({ id: 'user-x', rol: 'empleada' }),
+      ).resolves.toEqual([]);
+    });
+
+    it('niega a quien no es personal', async () => {
+      await expect(
+        service.misRetos({ id: 'user-x', rol: 'cliente' }),
+      ).rejects.toThrow('Solo el personal');
+    });
   });
 });

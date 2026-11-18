@@ -23,6 +23,14 @@ import { CreateChallengeDto } from './dto/challenges.dto';
 export class ChallengesController {
   constructor(private readonly challenges: ChallengesService) {}
 
+  // Antes de ':id': si no, "mine" se tomaria por un uuid. El rol del metodo
+  // anula el de clase (RolesGuard usa getAllAndOverride).
+  @Get('mine')
+  @Roles('empleada', 'chofer')
+  mine(@Req() req: any) {
+    return this.challenges.misRetos(req.user);
+  }
+
   @Get()
   list(@Req() req: any) {
     return this.challenges.listChallenges(req.user);

@@ -16,18 +16,25 @@ import {
   getCalificacionesApelables,
   registrarMiUbicacion,
   reportarConducta,
+  reportarEmpleadaDelViaje,
 } from "@/lib/actions/driver-portal";
 import CerrarSesion from "@/components/ui/CerrarSesion";
 import ActualizarEnVivo from "@/components/ui/ActualizarEnVivo";
 import type { WorkShiftStatus } from "@/lib/actions/work-shift";
+import MisRetos from "@/components/ui/MisRetos";
+import type { RetoDelPersonal } from "@/lib/retos-del-personal";
 
 interface DriverPortalViewProps {
   initialData: DriverPortalData;
   /** Nulo cuando se entra con un enlace antiguo, sin sesion. */
   workShift?: WorkShiftStatus | null;
+  /** Retos de la sesion; vacio con un enlace antiguo `?token=`, que no lleva cookie. */
+  retos?: RetoDelPersonal[];
+  /** Pestaña inicial; el push de retos trae `?seccion=retos`. */
+  seccionInicial?: TabType;
 }
 
-type TabType = "resumen" | "ranking" | "viajes" | "reputacion";
+type TabType = "resumen" | "ranking" | "viajes" | "reputacion" | "retos";
 
 import ViajeAhora from "@/components/chofer/ViajeAhora";
 import OfertaDeViaje from "@/components/chofer/OfertaDeViaje";
@@ -37,6 +44,7 @@ import {
   ArrowRight,
   Banknote,
   BarChart3,
+  BookOpen,
   Bell,
   Car,
   Crown,
@@ -48,8 +56,10 @@ import { ZONA_LABEL } from "@/components/chofer/zonas";
 export default function DriverPortalView({
   initialData,
   workShift,
+  retos = [],
+  seccionInicial = "resumen",
 }: DriverPortalViewProps) {
-  const [activeTab, setActiveTab] = useState<TabType>("resumen");
+  const [activeTab, setActiveTab] = useState<TabType>(seccionInicial);
   const data = initialData;
 
   useEffect(() => {
@@ -165,6 +175,13 @@ export default function DriverPortalView({
               <Bell size={14} />
               Ajustes
             </Link>
+            <Link
+              href="/chofer/reglamento"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400 transition-colors hover:border-[#C5A55A] hover:text-[#C5A55A]"
+            >
+              <BookOpen size={14} />
+              Reglamento
+            </Link>
             <CerrarSesion />
           </div>
         )}
@@ -180,6 +197,7 @@ export default function DriverPortalView({
               label: "Reputación",
               icono: <Star size={14} />,
             },
+            { id: "retos", label: "Retos", icono: <Trophy size={14} /> },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -526,13 +544,50 @@ export default function DriverPortalView({
                           direction="driver_to_employee"
                           sujeto="este viaje"
                           reportar={reportarConducta}
+                          etiqueta="Reportar conducta"
                         />
+                        {/* Solo con sesion: el reporte a administracion exige
+                            cookie y CSRF, no admite el enlace del bot. */}
+                        {workShift !== undefined && workShift !== null && (
+                          <div className="mt-2 space-y-2">
+                            <p className="text-[11px] leading-relaxed text-gray-500">
+                              Conducta lo revisa un jefe. Administración atiende
+                              lo que tenga que ver con la modelo del viaje.
+                            </p>
+                            <ReportarConducta
+                              servicioId={trip.id}
+                              direction="driver_to_employee"
+                              sujeto="a la modelo"
+                              etiqueta="Reportar a administración"
+                              minimoDescripcion={3}
+                              revisor="administración"
+                              reportar={({
+                                interactionId,
+                                category,
+                                description,
+                              }) =>
+                                reportarEmpleadaDelViaje({
+                                  viajeId: interactionId,
+                                  categoria: category,
+                                  descripcion: description,
+                                })
+                              }
+                            />
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* ================= TAB 5: RETOS ================= */}
+        {activeTab === "retos" && (
+          <div className="animate-fadeIn">
+            <MisRetos retos={retos} />
           </div>
         )}
 

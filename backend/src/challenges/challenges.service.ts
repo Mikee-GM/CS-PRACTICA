@@ -151,6 +151,74 @@ export class ChallengesService {
     return Promise.all(rows.map((row) => this.toSummary(row)));
   }
 
+  /**
+   * Retos de la propia persona (empleada o chofer): activos y los terminados en
+   * los ultimos 30 dias. Ve su posicion y el top 3 con nombres, como el ranking
+   * del portal, pero no los nombres de todas las demas.
+   */
+  async misRetos(actor: Actor) {
+    const type: ChallengeParticipantType | null =
+      actor.rol === 'empleada'
+        ? 'employee'
+        : actor.rol === 'chofer'
+          ? 'driver'
+          : null;
+    if (!type) {
+      throw new ForbiddenException('Solo el personal tiene retos propios');
+    }
+    const table = type === 'employee' ? 'empleadas' : 'choferes';
+    const found: Array<{ id: string }> = await this.dataSource.query(
+      `SELECT id FROM ${table} WHERE usuario_id = $1`,
+      [actor.id],
+    );
+    const myId = found[0]?.id;
+    if (!myId) return [];
+
+    const desde = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const mine = await this.participants.find({
+      where: { participantId: myId },
+      relations: { challenge: true },
+    });
+    const visibles = mine
+      .map((row) => row.challenge)
+      .filter(
+        (challenge) =>
+          challenge.participantType === type &&
+          (challenge.status === 'active' ||
+            (challenge.status === 'finished' &&
+              challenge.finishedAt != null &&
+              challenge.finishedAt >= desde)),
+      )
+      .sort((a, b) => b.startsAt.getTime() - a.startsAt.getTime());
+
+    return Promise.all(
+      visibles.map(async (challenge) => {
+        const standings = await this.computeStandings(challenge);
+        const me = standings.find((s) => s.participantId === myId);
+        return {
+          id: challenge.id,
+          title: challenge.title,
+          metric: challenge.metric,
+          status: challenge.status,
+          startsAt: challenge.startsAt,
+          endsAt: challenge.endsAt,
+          participantes: standings.length,
+          miPosicion: me?.position ?? null,
+          miValor: me?.value ?? 0,
+          gane:
+            challenge.status === 'finished' &&
+            challenge.winnerParticipantId === myId,
+          top: standings.slice(0, 3).map((s) => ({
+            posicion: s.position,
+            nombre: s.name,
+            valor: s.value,
+            esMio: s.participantId === myId,
+          })),
+        };
+      }),
+    );
+  }
+
   async getChallenge(id: string, actor: Actor) {
     this.assertAdminOrJefe(actor);
     const challenge = await this.challenges.findOneBy({ id });
@@ -443,7 +511,9 @@ export class ChallengesService {
 
   /** El portal de cada tipo de participante: ahi vive su sesion. */
   private portalUrl(type: ChallengeParticipantType): string {
-    return type === 'employee' ? '/empleada/portal' : '/chofer/portal';
+    return type === 'employee'
+      ? '/empleada/portal?seccion=retos'
+      : '/chofer/portal?seccion=retos';
   }
 
   /**

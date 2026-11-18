@@ -27,6 +27,9 @@ import SubirFotosSemanales, {
   AvisoFotosSemanales,
 } from "@/components/empleada/FotosSemanales";
 import CalificarCliente from "@/components/empleada/CalificarCliente";
+import CalificarChofer from "@/components/empleada/CalificarChofer";
+import MisRetos from "@/components/ui/MisRetos";
+import type { RetoDelPersonal } from "@/lib/retos-del-personal";
 import ServicioAhora from "@/components/empleada/ServicioAhora";
 import SolicitarServicio from "@/components/empleada/SolicitarServicio";
 import Link from "next/link";
@@ -34,6 +37,7 @@ import {
   AlertTriangle,
   Banknote,
   BarChart3,
+  BookOpen,
   Bell,
   Camera,
   Check,
@@ -60,6 +64,8 @@ interface EmployeePortalViewProps {
    * directamente donde se suben, que es el motivo por el que se mando el aviso.
    */
   seccionInicial?: SeccionInicial;
+  /** Retos de la sesion; vacio con un enlace antiguo `?token=`, que no lleva cookie. */
+  retos?: RetoDelPersonal[];
 }
 
 /**
@@ -67,7 +73,7 @@ interface EmployeePortalViewProps {
  * admitiendo como sección inicial: es a donde apunta el aviso push, y al
  * aterrizar con él la conversación se abre sola.
  */
-type TabType = "resumen" | "ranking" | "servicios" | "reputacion" | "fotos";
+type TabType = "resumen" | "ranking" | "servicios" | "reputacion" | "fotos" | "retos";
 type SeccionInicial = TabType | "canal";
 
 export default function EmployeePortalView({
@@ -76,6 +82,7 @@ export default function EmployeePortalView({
   workShift,
   weeklyPhotos = [],
   seccionInicial = "resumen",
+  retos = [],
 }: EmployeePortalViewProps) {
   const [activeTab, setActiveTab] = useState<TabType>(
     seccionInicial === "canal" ? "resumen" : seccionInicial,
@@ -225,6 +232,14 @@ export default function EmployeePortalView({
               <History size={14} /> Historial
             </Link>
           ) : null}
+          {workShift !== undefined && workShift !== null ? (
+            <Link
+              href="/empleada/reglamento"
+              className="flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-white/5 px-3.5 py-2 text-xs font-semibold text-gray-400 transition-colors hover:bg-white/10 hover:text-white"
+            >
+              <BookOpen size={14} /> Reglamento
+            </Link>
+          ) : null}
           {/* Con sesion propia, como el historial: un borrador necesita una
               cuenta a cuyo nombre guardarse. */}
           {workShift !== undefined && workShift !== null ? (
@@ -265,6 +280,12 @@ export default function EmployeePortalView({
               label: "Mis Fotos",
               icono: <Camera size={14} />,
               title: "Fotos",
+            },
+            {
+              id: "retos",
+              label: "Retos",
+              icono: <Trophy size={14} />,
+              title: "Retos",
             },
           ].map((tab) => (
             <button
@@ -313,6 +334,8 @@ export default function EmployeePortalView({
           que hay algo pendiente.
         */}
         <CalificarCliente token={token} />
+        {/* Las rutas de choferes piden cookie: con un enlace de token no sirven. */}
+        {workShift !== undefined && workShift !== null && <CalificarChofer />}
         {/* ================= TAB 1: RESUMEN Y FINANZAS ================= */}
         {activeTab === "resumen" && (
           <div className="space-y-6 animate-fadeIn">
@@ -930,6 +953,13 @@ export default function EmployeePortalView({
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* ================= TAB 6: RETOS ================= */}
+        {activeTab === "retos" && (
+          <div className="animate-fadeIn">
+            <MisRetos retos={retos} />
           </div>
         )}
 

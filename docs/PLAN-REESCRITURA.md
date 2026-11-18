@@ -1504,3 +1504,185 @@ Decisiones a confirmar:
   jefe (409); un admin si, y se queda con el jefe que ya lo organizaba.
 - Que el pin del chat no se aplique solo a la solicitud: lo aplica el jefe.
 - Texto del push de inicio y destino `/empleada/servicio` para el grupal.
+
+## Fase 5, F-carril A: choferes y modo_bot (frontend)
+
+- Eliminados `components/admin/ToggleModoBot.tsx` y `lib/actions/modo-bot.ts`, y
+  el bloque "Modo de operacion" de `app/admin/drivers/[id]` y
+  `app/admin/employees/[id]`. `modoBot` ya no aparece en `catalogo-cs`.
+- `lib/ubicacion-fresca.ts` (con spec): umbral de 15 min, `ubicacionEstaVieja`
+  (manda la bandera del backend; sin ella calcula, y sin marca cuenta como
+  vieja) y `antiguedadDeUbicacion`.
+- `components/drivers/ubicacion-badge.tsx`: insignia en dorado oscuro, usada por
+  `driver-card.tsx` y `ChoferesDashboard.tsx`. Se corrigio el enlace roto de la
+  tarjeta a `/admin/drivers/${id}`. `getChoferesAction` mapea
+  `ubicacionVieja` y `ultimaUbicacionAt`; el detalle del chofer muestra la
+  antiguedad.
+- `LiveMap`: el evento `DRIVER_LOCATION_UPDATE` fija la marca a "ahora" y
+  `ubicacionVieja = false`; el popup muestra la antiguedad, el marcador se
+  atenua si esta vieja y un intervalo de 60 s recalcula.
+- `app/jefe/mapa`: el jefe ve a todos los choferes (decision tomada).
+- Pendiente: la insignia no tiene prueba de componente (solo logica pura).
+
+### Fase 5, F-carril D (portal del chofer, pasos D1-D2)
+
+Hecho:
+
+- `lib/actions/driver-portal.ts`: `reportarEmpleadaDelViaje({ viajeId,
+  categoria, descripcion })` sobre `POST /driver-portal/employee-reports`, solo
+  con sesion (cookie y CSRF por `portalHeaders()`, sin token).
+- `components/ui/ReportarConducta.tsx`: props opcionales y retrocompatibles
+  `etiqueta`, `minimoDescripcion` (15 por defecto) y `revisor` (texto
+  "un jefe" por defecto) para reutilizar el formulario sin duplicarlo.
+- `components/chofer/DriverPortalView.tsx`, pestana "viajes": dos botones por
+  viaje, "Reportar conducta" (lo revisa un jefe, `conduct_reports`) y, solo con
+  sesion, "Reportar a administracion" (`employee_reports`), con una linea que
+  los distingue. El segundo usa minimo 3 caracteres, el del backend. Enlace a
+  `/chofer/reglamento` en la barra, solo con sesion.
+
+Pendiente: D3 (retos); la pagina `/chofer/reglamento` debe existir en otro paso.
+
+### Fase 5, F-carril F
+
+Frontend de la evaluacion publica de candidatas (cierra el pendiente de
+frontend de B-candidatas).
+
+- `catalogo-cs/lib/candidata.ts`: `TOKEN_CANDIDATA`, `enlaceDeEvaluacion` y los
+  tipos de la respuesta publica (locales, porque `lib/types.ts` es de otro
+  carril). Spec en `lib/candidata.spec.ts`.
+- `lib/actions/candidata-publica.ts`: `leerEvaluacion` y `responderEvaluacion`
+  con `authenticated: false`; 404 devuelve `null`, 409 `{ conflicto: true }` y la
+  UI vuelve a leer la pregunta pendiente.
+- `app/candidata/[token]/page.tsx` y `components/candidata/EvaluacionCandidata.tsx`:
+  pagina sin sesion (token invalido -> `notFound()`, `robots: { index: false }`,
+  `referrer: no-referrer`), opciones como botones o textarea de 2 a 4000. No se
+  toco `middleware.ts`: `/candidata/*` no esta en el matcher, asi que es publica.
+- Admin: `CandidatasClient` genera el enlace web con
+  `window.location.origin`; `CandidateDetailClient` pierde el texto de
+  vinculacion con Telegram; `getCandidateScreeningTelegramUrl` se elimino de
+  `lib/telegram-links.ts`.
+
+Pendiente: `CandidateDetailClient` aun pasa `telegramChatId` al registrar (queda
+vacio); sin prueba de componente de `EvaluacionCandidata`.
+
+
+### Fase 5, F-carril C (portal de la empleada, pasos C1-C3)
+
+- C1: `AvisoFotosSemanales` (`components/empleada/FotosSemanales.tsx`) trata la
+  semana de gracia: texto "Esta semana es de gracia..." sin mencionar el
+  importe de la multa; si los avisos se agotaron, ambar con "Esta semana no se
+  aplico multa".
+- C2: `getChoferesPorCalificar` y `calificarChofer` en
+  `lib/actions/employee-portal.ts` (sin token, solo cookie). Nuevo
+  `components/ui/CalificarPendientes.tsx` generico; `CalificarCliente` pasa a
+  usarlo y `components/empleada/CalificarChofer.tsx` se monta en
+  `EmployeePortalView` solo con sesion propia (`workShift` no nulo).
+  `CalificarEmpleada.tsx` no se toco.
+- C3: enlace "Reglamento" a `/empleada/reglamento` en la barra del portal, solo
+  con sesion.
+- Pendiente: C4 (retos). Sin pruebas de componente (no hay testing-library
+  instalado); la pagina `/empleada/reglamento` debe existir en otro carril.
+
+### Fase 5, F-carril R (retos del personal)
+
+Backend: `GET /challenges/mine` (`ChallengesController`, declarado antes de
+`:id`, con `@Roles('empleada','chofer')` a nivel de metodo) y
+`ChallengesService.misRetos`. Resuelve `empleadas.id` o `choferes.id` por
+`usuario_id` y devuelve los retos `active` y los `finished` de los ultimos 30
+dias donde la persona participa: `{id, title, metric, status, startsAt, endsAt,
+participantes, miPosicion, miValor, gane, top}`. Decision: la participante ve su
+posicion y el top 3 con nombre (`top: [{posicion, nombre, valor, esMio}]`), no
+los nombres de todas. El `url` de los push de retos es ahora
+`/empleada/portal?seccion=retos` y `/chofer/portal?seccion=retos`.
+
+Frontend: `lib/retos-del-personal.ts` (tipos y etiquetas),
+`lib/actions/retos-del-personal.ts` (`obtenerMisRetos`, devuelve `[]` ante
+fallo) y `components/ui/MisRetos.tsx` (generico, recibe `retos`, estado vacio
+"No tienes retos activos").
+
+Pendiente: integrar `MisRetos` en los portales de empleada y chofer con la
+seccion `?seccion=retos` (otro paso). No se probo contra Postgres real.
+
+### Fase 5, F-carril B
+
+Valoracion del servicio en el chat del cliente (frontend de B-calificaciones-cliente).
+
+- `lib/valoracion-del-servicio.ts` (+ spec): tipos `ServicioPorValorar` y
+  `CalificacionDelCliente`, `MOTIVOS`, `categoriasDisponibles` (todas menos las
+  ya reportadas, porque el indice unico del backend rechaza repetir) y
+  `pideMotivo` (3 estrellas o menos).
+- `lib/actions/valoracion-del-servicio.ts`: `calificarServicioAction`,
+  `reportarServicioAction` y `volverAContratarAction`, con la misma traduccion
+  de errores que `errorDeChat` (copiada: es privada en `conversaciones.ts`).
+- `components/cliente/ValorarServicio.tsx`: una tarjeta por servicio con
+  estrellas por modelo (en grupal, una fila por participante con `empleadaId`),
+  motivo en chips con 3 estrellas o menos, comentario opcional, reportar un
+  problema con select filtrado y "Volver a contratar a {nombre}".
+- `VistaChat.tsx`: la tarjeta va junto a `SubirComprobante`, tambien con el chat
+  cerrado; se relee lo pendiente en `message_created` y
+  `conversation_status_changed` con un contador `recarga`.
+
+Pendiente:
+
+- En un grupal, "Volver a contratar" nombra a la modelo de este chat, pero el
+  backend reabre con la principal del servicio; pueden diferir.
+- Sin pruebas de componente (no hay testing-library); no se probo en navegador
+  ni contra el backend real.
+- Lista de choferes por calificar (portal de la modelo) y formulario de reporte
+  del chofer siguen sin frontend.
+
+### Fase 5, F-carril G (organizador grupal en el chat web)
+
+- `lib/actions/jefe-panel.ts`: `getGroupChatRequests`,
+  `createGroupRequestFromConversation` y `useGroupChatLocation` (esta ultima se
+  importa con alias `tomarUbicacionDelChat` para no chocar con la regla de hooks).
+- `JefeOperationsSectionPage.tsx` pide los pedidos con `optionalSource` y los
+  pasa por `TeamOperations` (prop opcional `initialGroupChatRequests`) hasta
+  `GroupServiceOrganizer`.
+- `GroupServiceOrganizer.tsx`: bloque "Pedidos del chat" con "Armar grupo"
+  (crea la solicitud, la quita del bloque, recarga y la selecciona). Si la
+  solicitud tiene `conversationId`: encabezado "Acciones hacia el chat", sin
+  "Enviar catalogo" y con "Usar ubicacion del chat" (el 409 se muestra tal cual).
+- Backend: `GroupServicesService.findAll` carga `client.usuario` y devuelve
+  `clientNombre` (sin exponer la entidad usuario); el frontend lo usa como
+  respaldo de `nombreTelegram`. Spec en `group-services.chat-web.spec.ts`.
+
+Pendiente: `clientNombre` no esta en `GroupServiceRequest` (types.ts no se toco),
+se lee con una interseccion local; sin prueba de componente ni de navegador.
+
+### Fase 5, F-retos en portales (C4 y D3)
+
+- Pestana "Retos" en `EmployeePortalView.tsx` y `DriverPortalView.tsx`: pinta
+  `components/ui/MisRetos.tsx` con la prop `retos`.
+- `app/empleada/portal/page.tsx` y `app/chofer/portal/page.tsx` piden
+  `obtenerMisRetos()` en paralelo con `getMyWorkShift()`, envuelto en
+  `optionalSource`, y solo con sesion: `/challenges/mine` exige cookie y no sirve
+  con `?token=` (sin sesion la lista llega vacia y se ve el estado vacio).
+- La seccion `retos` se acepta en `?seccion=` de ambos portales; la del chofer
+  ahora lee `?seccion=` (antes siempre abria en resumen), que es a donde apunta
+  el push de retos.
+
+Pendiente: sin prueba de componente ni de navegador; `tsc` y eslint limpios en
+los archivos tocados.
+
+### Fase 5, F-carril E (frontend del reglamento)
+
+- `lib/reglamento.ts` (tipos copiados del backend, `estadoVisible`: aprobado,
+  reprobado = `pending` con intentos, en curso, sin empezar) con spec;
+  `lib/actions/reglamento.ts` (`getMiReglamento`, `empezarCuestionario`,
+  `responderPregunta`).
+- `components/reglamento/`: `VistaReglamento` (servidor; contenido como texto con
+  `whitespace-pre-line`, nunca HTML), `Cuestionario` (cliente; una pregunta por
+  pantalla, resultado con puntaje y mejor puntaje, "Intentar de nuevo", aviso de
+  que no bloquea el trabajo) y `PaginaDeReglamento` (marco comun con la lectura
+  envuelta en `optionalSource`).
+- Rutas `/empleada/reglamento`, `/chofer/reglamento` (sesion propia, rol distinto
+  va a `inicioParaRol`) y `/jefe/reglamento` (el admin ve "El administrador no
+  tiene reglamento propio" sin llamar al backend, que le responde 403). Enlace
+  desde `/jefe/ajustes`, no desde la barra. Las dos primeras entran al
+  `matcher` del middleware para renovar el acceso, con caso en `middleware.spec.ts`.
+- Backend: `DESTINO_POR_ROL` de `reglamento-web.service.ts` apunta a las tres
+  rutas nuevas (el recordatorio ya no cae en el inicio).
+- Pendiente: sin prueba de componentes ni navegador real (la suite del frontend
+  no tiene testing-library instalada); `/jefe/reglamento` depende del middleware
+  de `/jefe/:path*`, que ya exige jefe o admin.

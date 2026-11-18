@@ -110,6 +110,40 @@ export function AvisoFotosSemanales({
   }
 
   const restantes = estado.recordatoriosRestantes;
+  // La primera semana no cobra multa: no se menciona el importe en ningun
+  // texto, para no asustar con una cifra que no se va a aplicar.
+  const gracia = Boolean(estado.semanaDeGracia) && !multada;
+  // Se agotaron los avisos y, al ser de gracia, el ciclo cierra sin cargo.
+  const cerradaSinMulta = gracia && restantes <= 0;
+
+  if (gracia) {
+    return (
+      <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] p-4">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-white">
+            {cerradaSinMulta
+              ? "Esta semana no se aplico multa"
+              : "Aun no has subido tus fotos de esta semana"}
+          </p>
+          <p className="mt-0.5 text-xs leading-relaxed text-gray-400">
+            {cerradaSinMulta
+              ? "Era tu semana de gracia. Todavia puedes subir tus fotos para regularizar tu catalogo."
+              : "Esta semana es de gracia: si no subes tus fotos no se cobra multa."}
+          </p>
+          {onIrAFotos ? (
+            <button
+              type="button"
+              onClick={onIrAFotos}
+              className="mt-3 rounded-lg border border-[#C5A55A]/40 bg-[#C5A55A]/10 px-3 py-1.5 text-xs font-semibold text-[#E8D5A3] transition-colors hover:bg-[#C5A55A] hover:text-black"
+            >
+              Subir mis fotos ahora
+            </button>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

@@ -342,6 +342,49 @@ export async function reportarConducta(
   }
 }
 
+/**
+ * Reporta a administracion a la empleada de un viaje suyo ya finalizado.
+ *
+ * Es distinto de `reportarConducta`: aquel lo revisa un jefe y alimenta el
+ * bloqueo de personas; este llega a `employee_reports`, donde lo atiende
+ * administracion. Solo admite sesion propia --el backend exige cookie y CSRF--,
+ * asi que no manda token.
+ */
+export async function reportarEmpleadaDelViaje(input: {
+  viajeId: string;
+  categoria: string;
+  descripcion: string;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch(portalUrl("/driver-portal/employee-reports"), {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        ...(await portalHeaders()),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(input),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      const mensaje = Array.isArray(err.message)
+        ? err.message.join(". ")
+        : err.message;
+      return {
+        success: false,
+        error: mensaje || "No se pudo enviar el reporte",
+      };
+    }
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error al reportar a la empleada:", error);
+    return {
+      success: false,
+      error: error.message || "Error de conexion con el servidor",
+    };
+  }
+}
+
 /** Un viaje ya terminado cuya empleada sigue sin calificar. */
 export type EmpleadaPorCalificar = {
   viajeId: string;
@@ -459,7 +502,10 @@ export async function responderReporte(
       const mensaje = Array.isArray(err.message)
         ? err.message.join(". ")
         : err.message;
-      return { success: false, error: mensaje || "No se pudo enviar tu versión" };
+      return {
+        success: false,
+        error: mensaje || "No se pudo enviar tu versión",
+      };
     }
     return { success: true };
   } catch (error: any) {

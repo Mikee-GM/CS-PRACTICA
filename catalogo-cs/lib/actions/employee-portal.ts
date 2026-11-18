@@ -917,3 +917,69 @@ export async function calificarCliente(
     };
   }
 }
+
+/** Un viaje ya terminado cuyo chofer sigue sin calificar. */
+export type ChoferPorCalificar = {
+  viajeId: string;
+  tipo: string;
+  fecha: string | null;
+  choferNombre: string | null;
+};
+
+/**
+ * Los choferes de sus viajes recientes que aun no ha calificado.
+ *
+ * Estas rutas exigen sesion propia (cookie): no admiten el token del enlace.
+ */
+export async function getChoferesPorCalificar(): Promise<ChoferPorCalificar[]> {
+  try {
+    const response = await fetch(
+      portalUrl("/employee-portal/ratings/pending-drivers"),
+      { method: "GET", cache: "no-store", headers: await portalHeaders() },
+    );
+    if (!response.ok) return [];
+    return (await response.json()) as ChoferPorCalificar[];
+  } catch (error) {
+    console.error("Error al leer los choferes por calificar:", error);
+    return [];
+  }
+}
+
+/** Deja la valoracion de la modelo sobre el chofer de uno de sus viajes. */
+export async function calificarChofer(input: {
+  viajeId: string;
+  stars: number;
+  comment?: string;
+}): Promise<{ success: boolean; error?: string }> {
+  try {
+    const response = await fetch(portalUrl("/employee-portal/ratings"), {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        ...(await portalHeaders()),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        direction: "employee_to_driver",
+        interactionId: input.viajeId,
+        stars: input.stars,
+        ...(input.comment?.trim() ? { comment: input.comment.trim() } : {}),
+      }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      return {
+        success: false,
+        error: err.message || "No se pudo enviar la calificacion",
+      };
+    }
+    revalidatePath("/empleada/portal");
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error al calificar al chofer:", error);
+    return {
+      success: false,
+      error: error.message || "Error de conexion con el servidor",
+    };
+  }
+}
