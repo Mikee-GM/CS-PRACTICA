@@ -1686,3 +1686,103 @@ los archivos tocados.
 - Pendiente: sin prueba de componentes ni navegador real (la suite del frontend
   no tiene testing-library instalada); `/jefe/reglamento` depende del middleware
   de `/jefe/:path*`, que ya exige jefe o admin.
+
+## Fase 5, E3-1d
+
+- Backend: `customer-booking-session.entity.ts` se movio con `git mv` de
+  `telegram-conversations/entities/` a `booking/entities/`, donde vive el dueno
+  de la sesion de reserva. Se reescribieron los 11 imports (booking,
+  conversations, telegram-conversations y `telegram.module.ts`).
+- Sin migracion: `data-source` carga `dist/**/*.entity.js` y ninguna migracion
+  importa la entidad.
+- Pendiente: nada propio de este paso.
+
+### Fase 5, E3-1a (portales del backend a sesion web)
+
+- `EmployeePortalController`, `EmployeePostsController` (`@Roles('empleada')`) y
+  `DriverPortalController` (`@Roles('chofer')`) pasan de `PortalAuthGuard` a
+  `@UseGuards(JwtAuthGuard, RolesGuard)`; `@PortalUser()` se sustituye por
+  `@GetUser('id')`. `JwtAuthGuard` ya aplica CSRF.
+- `GET /realtime/sse/chofer` usa `JwtAuthGuard` y responde 403 si el rol no es
+  `chofer`, como los demas canales; `ApiSseTokenDocs` ya no declara `?token`.
+- Eliminado `auth/decorators/portal-user.decorator.ts`. Comentarios de
+  `posts.module.ts` y `portal-service-feedback.controller.ts` actualizados.
+- Specs: `employee-posts.controller.spec` (guards de clase y rol),
+  `employee-posts.media-http.spec` (override de `JwtAuthGuard` con
+  `request.user`), `realtime.controller.spec` (chofer con user y 403 a rol ajeno).
+- Pendiente (paso 2): borrar `PortalAuthGuard`, su spec y la parte de
+  `auth.module`/`auth.controller`/`auth.service` que solo servia al portal.
+
+### Fase 5, E3-1c: handlers de Telegram sin pases ni Mini App
+
+- `telegram-portal-buttons.ts`: nueva `enlaceDelPanel(webUrl, ruta)` (pura) y
+  `botonesDePortal` ofrece solo `Markup.button.url`; se elimina el boton webApp.
+- `telegram-auth.update.ts`, `telegram-driver.update.ts` y
+  `telegram-booking.update.ts` ya no inyectan `PanelAccessService`: mandan un
+  enlace normal a `WEB_URL` + ruta (sin credencial) con el texto "Entra con tu
+  correo y contrasena". Auth y driver inyectan `ConfigService`; se borra el
+  calculo de minutos y el texto "sirve una sola vez". `/panel` sin destino cae
+  en `/admin` o `/jefe` segun el rol.
+- Specs: `telegram-portal-buttons.spec.ts` reescrito y `telegram-auth.update.spec.ts`
+  sin `panelAccessService`.
+- Pendiente (paso 2): borrar `PanelAccessService` y sus piezas; quitarlo de
+  `telegram.module.ts` si aplicara.
+
+### Fase 5, E3-1b (frontend: portales solo con sesion web)
+
+- `middleware.ts`: fuera `canjearTokenDePortal` y el canje de `?token=`. La rama
+  de `/empleada|chofer/portal` y `/servicio` solo renueva la sesion; se actualizo
+  el comentario del matcher. `middleware.spec.ts` gana un bloque de portales (un
+  `?token=` sin cookie no llama al backend y deja pasar; con el acceso caducado
+  renueva con el refresh).
+- `lib/actions/employee-portal.ts` y `driver-portal.ts`: ninguna funcion recibe
+  `token`; `portalHeaders` ya no manda `Authorization` y `portalUrl` no agrega
+  `?token=`.
+- Paginas `empleada/portal`, `empleada/servicio`, `chofer/portal`,
+  `chofer/servicio`: no leen `searchParams.token`; sin sesion van a `/ingresar`
+  y con otro rol a `inicioParaRol(rol)`. La jornada y los retos se piden siempre,
+  en paralelo con los datos del portal.
+- Componentes de `components/empleada`, `components/chofer` y los cuatro de
+  `components/ui` sin la prop `token`. `EmployeePortalView` y `DriverPortalView`
+  sin el `useEffect` de `Telegram.WebApp`; los enlaces, `CompartirUbicacion`,
+  `CalificarChofer`, `SolicitarServicio` y el reporte a administracion ya no
+  dependen de `workShift`. `workShift` solo condiciona el interruptor de jornada,
+  que necesita el valor inicial (llega `null` si la lectura fallo).
+- Verificado: `tsc --noEmit` sin errores fuera de specs con testing-library, e2e
+  y playwright; `jest middleware` 68 pruebas; eslint sin errores en los archivos
+  tocados; el `rg` de control da 0.
+- Pendiente: quedan menciones de Telegram en comentarios y textos de varios
+  componentes (p. ej. `AccionesDelViaje`, `ServicioAhora`, `AgregarExtra`,
+  `CompartirUbicacion`) que son de la limpieza de vinculacion; `app/acceso` y
+  `app/ingresar` son del paso 3. Sin prueba de navegador.
+
+### Fase 5, E3-1e (avisos y vinculacion de Telegram del personal)
+
+- Backend: `discipline.service` sin `avisarPorChat` ni `TelegramService` (el push
+  de `avisar()` ya cubria calificacion baja y reporte; el aviso de reporte pasa a
+  `requireInteraction` por no ser silenciable). `driver-shifts.service`: asignar
+  ya no manda chat; retirar manda push `turno-retirado-<turno>` a `/chofer/portal`
+  con `dedupeKey` por asignacion y sin datos del turno en el texto.
+  `team-channel.service`: fuera los dos envios por Telegram (jefe y modelo).
+  `work-shift-status.service`: el aviso al jefe (principal y secundario, sin
+  duplicar) es push a `/jefe/equipo`, sin nombre de la modelo ni motivo en el
+  texto, con `dedupeKey` por cambio; se pierde el boton "Preguntar la razon" del
+  aviso. `users.service`/`users.controller`: fuera `generateTelegramOtp`,
+  `unlinkTelegram` y sus dos rutas. `TelegramModule` salio de los modulos
+  discipline, driver-shifts, team-channel y users (este ultimo importa
+  `NotificationsModule`); sin `forwardRef` sobrante.
+- Frontend: borrados `estado-de-telegram.tsx` y `telegram-otp-button.tsx` y
+  `generateTelegramOtpAction`; fuera su uso en `JefesDashboard`,
+  `ChoferesDashboard` (con su columna), `ModelosDashboard` (no estaba en el
+  encargo pero tambien lo importaba) y `expediente-modelo`; fuera el aviso
+  `sinTelegram` de `asuntos-pendientes.ts` y la marca " · Sin Telegram" de
+  `TeamOperations.tsx`.
+- Specs ajustados: team-channel, work-shift-status, driver-shifts.candidates,
+  version-del-reportado.
+- Metrica: el `rg` da 8 archivos, todos del grupo A (app.module,
+  services.module/service, service-schedule.scheduler, drivers.module,
+  driver-trips.service, group-services.module/service).
+- Pendiente: `asuntos-pendientes.ts` conserva los parametros `empleadas` y
+  `choferes` sin uso (quitarlos toca a sus llamadores); los campos
+  `telegramChatId` de los tipos del frontend y las columnas se quedan hasta la
+  Fase 6.
