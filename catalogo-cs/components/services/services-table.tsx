@@ -30,7 +30,7 @@ export default function ServicesTable({ initialServices = [] }: Props) {
   const filteredServices = services.filter((service) => {
     const matchesSearch =
       service.id.toLowerCase().includes(search.toLowerCase()) ||
-      (service.cliente?.nombreTelegram || "").toLowerCase().includes(search.toLowerCase()) ||
+      (service.cliente?.nombre || "").toLowerCase().includes(search.toLowerCase()) ||
       (service.empleada?.nombreArtistico || "").toLowerCase().includes(search.toLowerCase());
 
     const matchesStatus =
@@ -145,7 +145,7 @@ export default function ServicesTable({ initialServices = [] }: Props) {
 
                     <td className="p-4">
                       <p className="font-semibold text-zinc-200">
-                        {service.cliente?.nombreTelegram || "Cliente sin nombre"}
+                        {service.cliente?.nombre || "Cliente sin nombre"}
                       </p>
                       {service.locationNameSnapshot && (
                         <p className="text-xs text-zinc-500 truncate max-w-xs">

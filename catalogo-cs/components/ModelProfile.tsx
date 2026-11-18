@@ -206,29 +206,11 @@ export default function ModelProfile({ modelo, onClose }: ModelProfileProps) {
 
             {/* Barra flotante inferior de contacto fija en móvil para que siempre esté visible */}
             <div className="sticky bottom-0 inset-x-0 z-40 mt-6 -mx-6 -mb-6 space-y-3 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] bg-gradient-to-t from-black via-black/95 to-black/80 backdrop-blur-lg border-t border-zinc-800/80 sm:hidden">
-              {/* El chat web va primero: es la via que sustituye a Telegram. */}
+              {/* El chat web es la unica via de contacto con la modelo. */}
               {canContact && (
                 <BotonChatear employeeId={modelo._id} nombre={modelo.nombre} />
               )}
-              {modelo.contactLink && canContact ? (
-                <a
-                  href={modelo.contactLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2.5 w-full py-4 bg-gradient-to-r from-[#C5A55A] via-[#E8D5A3] to-[#C5A55A] text-black font-extrabold text-xs tracking-[0.25em] uppercase transition-all duration-300 rounded-lg shadow-[0_0_20px_rgba(197,165,90,0.4)]"
-                >
-                  <svg
-                    className="w-4 h-4 flex-shrink-0"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                  >
-                    <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-                  </svg>
-                  {modelo.contactLabel || "Contacto"}
-                </a>
-              ) : (
+              {!canContact && (
                 <button
                   type="button"
                   disabled
@@ -267,26 +249,6 @@ export default function ModelProfile({ modelo, onClose }: ModelProfileProps) {
               </a>
             )}
 
-            {/* Link de contacto */}
-            {modelo.contactLink && canContact && (
-              <a
-                href={modelo.contactLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-3 w-full px-5 py-4 bg-[#C5A55A] hover:bg-[#D4AF37] text-black font-black text-xs tracking-[0.2em] uppercase transition-all duration-300 rounded-lg shadow-[0_0_15px_rgba(197,165,90,0.15)] hover:shadow-[0_0_25px_rgba(197,165,90,0.3)]"
-              >
-                <svg
-                  className="w-4 h-4 flex-shrink-0"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-                </svg>
-                {modelo.contactLabel || "Contacto"}
-              </a>
-            )}
             {!canContact && (
               <button
                 type="button"

@@ -29,10 +29,10 @@ const links = [
 ];
 
 /*
- * Los chats web son la otra bandeja de "Hoy": comparten su entrada en la barra
+ * Los chats web son "Hoy": usan su entrada en la barra
  * y su marco a pantalla completa en vez de ocupar una septima celda.
  */
-const BANDEJAS_DE_HOY = new Set(["/jefe", "/jefe/chats-web"]);
+const BANDEJAS_DE_HOY = new Set(["/jefe"]);
 
 /*
  * La cola de publicaciones tambien cuelga de "Hoy": es trabajo por atender, se

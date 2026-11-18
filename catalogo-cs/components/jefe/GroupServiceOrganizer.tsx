@@ -48,14 +48,14 @@ const clientActionButtonClass =
   "flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#C5A55A] px-4 py-3 text-xs font-bold uppercase tracking-wider text-black shadow-[0_0_24px_rgba(197,165,90,0.12)] transition hover:bg-[#D8BA72] disabled:opacity-40";
 
 /**
- * Un cliente web no tiene nombreTelegram: el backend manda su nombre aparte
- * como clientNombre, y solo es respaldo cuando falta el de Telegram.
+ * El backend manda el nombre del cliente aparte como clientNombre; es el
+ * respaldo cuando la solicitud no trae el cliente cargado.
  */
 function nombreDelCliente(request: GroupServiceRequest) {
   const { clientNombre } = request as GroupServiceRequest & {
     clientNombre?: string | null;
   };
-  return request.client?.nombreTelegram || clientNombre || "Cliente";
+  return request.client?.nombre || clientNombre || "Cliente";
 }
 
 export default function GroupServiceOrganizer({
@@ -460,7 +460,7 @@ function GroupRequestEditor({
               </span>
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#C5A55A]">
-                  {request.conversationId ? "Acciones hacia el chat" : "Acciones hacia Telegram"}
+                  Acciones hacia el chat
                 </p>
                 <h3 className="mt-1 font-heading text-2xl">
                   Comunicación con el cliente

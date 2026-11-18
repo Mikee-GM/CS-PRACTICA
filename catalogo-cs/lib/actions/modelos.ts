@@ -181,7 +181,7 @@ export async function getApartmentsAction(): Promise<
   }
 }
 
-// --- FOTOS EXCLUSIVAS (CLIENTES TELEGRAM) ---
+// --- FOTOS EXCLUSIVAS (CLIENTES) ---
 
 export async function getPrivatePhotosAction(
   empleadaId: string,

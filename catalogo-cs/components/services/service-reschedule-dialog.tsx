@@ -159,7 +159,7 @@ export default function ServiceRescheduleDialog({
             className="mt-0.5 accent-[#C5A55A]"
           />
           <span>
-            Avisar al cliente por Telegram
+            Avisar al cliente
             <span className="mt-1 block text-xs text-zinc-600">
               Quítalo solo si estás corrigiendo una captura y el cliente nunca
               llegó a ver la hora equivocada.

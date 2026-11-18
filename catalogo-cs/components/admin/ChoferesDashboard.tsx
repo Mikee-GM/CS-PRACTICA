@@ -35,7 +35,6 @@ interface Chofer {
   vehiculoPlaca?: string;
   trustScore?: number | null;
   disponible: boolean;
-  telegramChatId?: string | null;
   ubicacionVieja?: boolean;
   ultimaUbicacionAt?: string | null;
 }

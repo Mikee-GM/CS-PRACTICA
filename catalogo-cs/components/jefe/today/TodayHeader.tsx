@@ -1,6 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Bell,
   ChevronDown,
@@ -10,8 +12,10 @@ import {
   UsersRound,
   WalletCards,
 } from "lucide-react";
+import CreateServiceDialog from "@/components/services/create-service-dialog";
 import WorkShiftToggle from "@/components/ui/WorkShiftToggle";
 import type { WorkShiftStatus } from "@/lib/actions/work-shift";
+import type { Employee } from "@/lib/types";
 
 const secondaryLinks = [
   { href: "/jefe/equipo", label: "Equipo", icon: UsersRound },
@@ -21,12 +25,17 @@ const secondaryLinks = [
 
 export default function TodayHeader({
   workShift,
-  onCreateService,
+  employees,
 }: {
   workShift: WorkShiftStatus | null;
-  onCreateService: () => void;
+  /** Equipo del jefe: el dialogo de alta lo ofrece como modelos asignables. */
+  employees: Employee[];
 }) {
+  const router = useRouter();
+  const [creatingService, setCreatingService] = useState(false);
+
   return (
+    <>
     <header className="mb-2 flex min-h-11 items-center gap-2 sm:mb-3">
       <div className="w-[112px] shrink-0 sm:w-[170px]">
         <WorkShiftToggle initialStatus={workShift} compacto />
@@ -65,13 +74,21 @@ export default function TodayHeader({
         </Link>
         <button
           type="button"
-          onClick={onCreateService}
+          aria-label="Crear servicio"
+          onClick={() => setCreatingService(true)}
           className="flex h-11 items-center gap-2 rounded-xl border border-[#C5A55A]/60 px-3 text-[10px] font-bold uppercase tracking-[0.08em] text-[#C5A55A] hover:bg-[#C5A55A] hover:text-black"
         >
           <Plus size={15} />
-          <span className="hidden sm:inline">Servicio manual</span>
+          <span className="hidden sm:inline">Crear servicio</span>
         </button>
       </div>
     </header>
+    <CreateServiceDialog
+      open={creatingService}
+      onClose={() => setCreatingService(false)}
+      initialEmployees={employees}
+      onCreated={() => router.refresh()}
+    />
+    </>
   );
 }

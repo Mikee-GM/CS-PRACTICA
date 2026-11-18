@@ -10,11 +10,8 @@ import type { EmployeePortalActiveService } from "@/lib/types";
 /**
  * Avance del viaje desde el portal.
  *
- * Estas dos acciones solo existian en el chat del bot, donde la modelo tenia
- * que localizar el mensaje correcto entre todo lo demas justo cuando mas prisa
- * hay. Los botones de Telegram siguen funcionando: esto es una segunda via, no
- * un reemplazo, y el estado que decide cual mostrar sale del viaje, asi que las
- * dos se mantienen sincronizadas solas.
+ * Dos acciones a la mano, sin buscar nada justo cuando mas prisa hay. El
+ * estado que decide cual mostrar sale del viaje.
  */
 export default function AccionesDelViaje({
   transporte,
@@ -32,9 +29,9 @@ export default function AccionesDelViaje({
    *
    * El viaje asignado que aun no arranca puede estar en tres estados, no en
    * uno: el jefe lo mueve por su lado --marca el Uber en camino y luego que
-   * llego-- y aqui solo se aceptaba `aceptado`. Justo despues del mensaje que
+   * llego-- y aqui solo se aceptaba `aceptado`. Justo despues del aviso que
    * le dice "cuando subas, presiona Ya estoy en el Uber", el boton del portal
-   * desaparecia y solo le quedaba el de Telegram. El backend admite los tres
+   * desaparecia. El backend admite los tres
    * desde siempre; era esta pantalla la que se quedaba corta.
    *
    * En cualquier otro estado no hay nada que marcar: o todavia se esta

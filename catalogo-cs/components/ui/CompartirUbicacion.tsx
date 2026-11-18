@@ -8,8 +8,7 @@ import { toast } from "sonner";
 /**
  * Manda la posicion al panel mientras el portal esta abierto.
  *
- * Hasta ahora la unica via era compartir ubicacion en vivo desde Telegram, y
- * dependia de acordarse: quien no lo hacia quedaba en el mapa del jefe con la
+ * Sin esto la ubicacion dependia de que alguien la escribiera a mano: quien no lo hacia quedaba en el mapa del jefe con la
  * ultima posicion escrita a mano, y el reparto por cercania elegia chofer con
  * datos viejos.
  *
@@ -152,7 +151,7 @@ export default function CompartirUbicacion({
               ? "Bloqueaste la ubicación en este navegador y no se puede volver a pedir desde aquí. Permítela en los ajustes del sitio y recarga la página."
               : encendido
                 ? "El panel te ve en el mapa mientras tengas esta pantalla abierta. Al cerrarla deja de compartirse."
-                : "Compártela y no tendrás que mandarla por Telegram. Solo mientras tengas esta pantalla abierta."}
+                : "Compártela y no tendrás que mandarla aparte. Solo mientras tengas esta pantalla abierta."}
           </p>
 
           {estado !== "denegado" && (

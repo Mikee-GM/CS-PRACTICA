@@ -11,11 +11,6 @@ import {
 import { assignInternalTransport } from "@/lib/actions/jefe-panel";
 import type { Service, Trip } from "@/lib/types";
 import { TransportPanel } from "@/components/jefe/TeamOperations";
-import ServiceInspector from "./ServiceInspector";
-import {
-  shouldRefreshTodayWorkspace,
-  type JefeConversation,
-} from "./today-model";
 
 jest.mock("@/lib/actions/jefe-panel", () => ({
   assignInternalTransport: jest.fn().mockResolvedValue({ success: true }),
@@ -98,8 +93,7 @@ function service(overrides: Partial<Service> = {}): Service {
     viajes: [],
     cliente: {
       id: "client-1",
-      telegramChatId: "100",
-      nombreTelegram: "Cliente QA",
+      nombre: "Cliente QA",
     },
     empleada: {
       id: "employee-1",
@@ -121,32 +115,6 @@ function service(overrides: Partial<Service> = {}): Service {
   };
 }
 
-function conversation(currentService: Service): JefeConversation {
-  if (!currentService.clienteId) {
-    throw new Error("La conversación de prueba requiere un cliente vinculado");
-  }
-  return {
-    id: currentService.id,
-    clientId: currentService.clienteId,
-    clientName: "Cliente QA",
-    telegramId: "100",
-    employeeId: currentService.empleadaId,
-    employeeName: "Empleada QA",
-    service: currentService,
-    bookingSessionId: null,
-    bookingData: null,
-    bookingDraft: null,
-    relatedServices: [currentService],
-    messages: [],
-    lastMessage: "",
-    lastAt: currentService.updatedAt,
-    mode: "AI_ACTIVE",
-    needsReply: false,
-    unreadCount: 0,
-    chatState: "ACTIVE",
-  };
-}
-
 function renderPanel(currentService: Service) {
   return render(
     <TransportPanel service={currentService} onRefresh={jest.fn()} />,
@@ -158,17 +126,9 @@ describe("asignación de transporte desde Hoy", () => {
   afterEach(cleanup);
 
   it("abre Chofer interno y Uber / DiDi desde el CTA principal sin viaje", () => {
-    const currentService = service();
-    render(
-      <ServiceInspector
-        conversation={conversation(currentService)}
-        employees={[currentService.empleada!]}
-        onRefresh={jest.fn()}
-      />,
-    );
-
+    renderPanel(service());
     fireEvent.click(
-      screen.getAllByRole("button", { name: "ASIGNAR TRANSPORTE" })[0],
+      screen.getByRole("button", { name: "Asignar transporte" }),
     );
 
     expect(
@@ -298,14 +258,5 @@ describe("asignación de transporte desde Hoy", () => {
     fireEvent.click(screen.getByRole("button", { name: "Uber / DiDi" }));
 
     expect(screen.getByText("Viaje de regreso")).toBeDefined();
-  });
-
-  it.each([
-    "internal_transport_selected",
-    "trip_accepted",
-    "external_transport_assigned",
-    "trip_status_updated",
-  ])("refresca TodayWorkspace al recibir %s", (eventType) => {
-    expect(shouldRefreshTodayWorkspace(eventType)).toBe(true);
   });
 });

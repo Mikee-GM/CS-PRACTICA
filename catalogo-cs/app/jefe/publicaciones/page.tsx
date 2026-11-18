@@ -9,8 +9,8 @@ import type { ColaDePosts } from "@/lib/posts-del-equipo";
 import { inicioParaRol } from "@/lib/roles";
 
 /**
- * Cola de publicaciones por revisar del jefe. Cuelga de "Hoy" junto a las dos
- * bandejas de conversaciones y es la direccion a la que lleva el aviso
+ * Cola de publicaciones por revisar del jefe. Cuelga de "Hoy" junto a la
+ * bandeja de chats y es la direccion a la que lleva el aviso
  * `post_pending`.
  */
 export default async function PublicacionesJefePage() {

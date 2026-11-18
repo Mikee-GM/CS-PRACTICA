@@ -178,8 +178,7 @@ export default function ServicioAhora({
           La captura del Uber.
 
           Con transporte externo es lo unico que le dice en que coche se sube:
-          sin ella no sabe ni la placa. Llegaba solo por Telegram, asi que si
-          ese chat estaba silenciado o el mensaje quedaba enterrado, no tenia
+          sin ella no sabe ni la placa. Antes podia quedar enterrada en un aviso, y no tenia
           donde mirarla. Se abre a tamaño completo porque los datos van escritos
           pequeño dentro de la imagen.
         */}
@@ -206,9 +205,7 @@ export default function ServicioAhora({
         )}
 
         {/*
-          Los botones del chat de Telegram siguen valiendo: esto es una segunda
-          via, no un reemplazo, y el estado que decide cual mostrar sale del
-          propio viaje, asi que las dos se mantienen sincronizadas solas.
+          El estado que decide cual boton mostrar sale del propio viaje.
         */}
         {!enlaceAPantallaPropia && servicio.transporte && !alistandose && (
           <AccionesDelViaje

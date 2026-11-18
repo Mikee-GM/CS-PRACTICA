@@ -12,9 +12,8 @@ import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
  *
  * Una calificacion de una o dos estrellas no es solo una opinion: alimenta el
  * score de confianza y puede acabar en una sancion con multa. Apelarla era el
- * unico recurso de la persona afectada, y hasta ahora solo existia detras de un
- * boton del chat de Telegram. Quien entra al portal con correo y contrasena no
- * tenia ninguna via.
+ * unico recurso de la persona afectada, y hay que poder hacerlo desde el portal, que
+ * es por donde entra quien tiene correo y contrasena.
  *
  * La tarjeta no aparece si no hay nada que apelar, que es lo normal: no tiene
  * sentido recordarle todos los dias que existen las calificaciones bajas.

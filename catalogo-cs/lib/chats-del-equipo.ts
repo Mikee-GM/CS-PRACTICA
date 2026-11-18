@@ -301,10 +301,9 @@ export type QueRecargar = {
  * Que hay que volver a pedir ante un evento del canal de jefes.
  *
  * Los eventos solo traen ids; el contenido se vuelve a pedir por la API, que es
- * la que aplica el alcance de cada jefe. El canal es el mismo que el de
- * Telegram y alli tambien hay un `conversation_mode_changed`, pero sin
- * `conversationId` (lleva `bookingSessionId` o `clientId`): sin ese campo el
- * evento no es del chat web y se ignora.
+ * la que aplica el alcance de cada jefe. Un `conversation_mode_changed` sin
+ * `conversationId` (lleva `bookingSessionId` o `clientId`) no es del chat web
+ * y se ignora.
  *
  * Cualquier evento del chat web recarga la bandeja (orden, insignias, quien
  * tiene el control), salvo `typing`, que llega a cada rato y no cambia nada de

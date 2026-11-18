@@ -39,7 +39,7 @@ export default function ActivityFeed({ services, error }: Props) {
             >
               <div className="flex items-center justify-between gap-3">
                 <p className="font-medium">
-                  {service.cliente?.nombreTelegram ?? "Cliente sin nombre"}
+                  {service.cliente?.nombre ?? "Cliente sin nombre"}
                 </p>
                 <span className="rounded-full bg-zinc-800 px-3 py-1 text-xs text-zinc-300">
                   {statusLabels[service.estado]}

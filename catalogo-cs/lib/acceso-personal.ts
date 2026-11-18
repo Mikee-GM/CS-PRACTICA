@@ -3,7 +3,7 @@ import { PATRON_CONTRASENA } from "@/lib/perfil-cliente";
 import { inicioParaRol } from "@/lib/roles";
 
 /*
- * Acceso del personal sin Telegram (Fase 5, F-acceso).
+ * Acceso del personal con correo y contraseña (Fase 5, F-acceso).
  *
  * Aqui vive lo que deciden a la vez el middleware, el login y las pantallas de
  * cuenta: a donde va cada sesion, cuando hay que cambiar la contraseña antes

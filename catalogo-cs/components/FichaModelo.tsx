@@ -70,7 +70,7 @@ export default function FichaModelo({
         {effectiveStatus === "ocupada" &&
           modelo.canScheduleNext !== false && (
             <p className="mt-1.5 text-xs font-light text-zinc-400">
-              Puedes solicitar el siguiente turno desde Telegram.
+              Puedes solicitar el siguiente turno desde el chat.
             </p>
           )}
       </div>

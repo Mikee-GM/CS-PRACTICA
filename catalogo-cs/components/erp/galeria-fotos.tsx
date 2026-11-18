@@ -35,7 +35,7 @@ const ETIQUETA: Record<PhotoGallery, string> = {
 
 const DESCRIPCION: Record<PhotoGallery, string> = {
   publica: "Se muestran en el catalogo de la web",
-  exclusiva: "Se envian por Telegram solo a clientes con membresia",
+  exclusiva: "Se comparten por el chat solo a clientes con membresia",
 };
 
 /**

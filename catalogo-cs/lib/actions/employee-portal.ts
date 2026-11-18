@@ -154,9 +154,8 @@ export async function uploadMyWeeklyPhotos(
 /**
  * Marca el avance del viaje de la empleada.
  *
- * Son las dos acciones del ciclo del servicio que hasta ahora solo existian en
- * Telegram y que mas prisa tienen: el cliente esta esperando y encontrar el
- * mensaje correcto en el chat cuesta.
+ * Son las dos acciones del ciclo del servicio que que mas prisa tienen: el cliente esta
+ * esperando y encontrar el boton correcto cuesta.
  */
 export async function updateMyTripStatus(
   tripId: string,
@@ -192,7 +191,7 @@ export async function updateMyTripStatus(
   }
 }
 
-/** Responde la oferta desde el portal; Telegram queda solo como aviso. */
+/** Responde la oferta desde el portal; el aviso es solo informativo. */
 export async function responderServicioAsignado(
   servicioId: string,
   decision: "accept" | "reject",
@@ -554,8 +553,7 @@ export async function reportarConducta(
 /**
  * Anota donde esta la modelo mientras tiene el portal abierto.
  *
- * Hasta ahora la unica via era compartir ubicacion en vivo desde Telegram, y
- * dependia de acordarse. La espera entre escrituras la aplica el backend, asi
+ * Sin esto la ubicacion dependia de que alguien la escribiera a mano. La espera entre escrituras la aplica el backend, asi
  * que llamar de mas no castiga a la base.
  */
 export async function registrarMiUbicacion(

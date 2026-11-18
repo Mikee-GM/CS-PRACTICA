@@ -19,7 +19,6 @@ export type LoginResponse = {
 
 export type ApiUser = AuthUser & {
   activo?: boolean;
-  telegramChatId?: string | null;
   createdAt?: string;
   lastLoginAt?: string | null;
   /** Sigue dentro de su jornada de hoy. Distinto de estar disponible ahora. */
@@ -104,8 +103,7 @@ export type Driver = {
 
 export type Client = {
   id: string;
-  telegramChatId: string;
-  nombreTelegram: string | null;
+  nombre: string | null;
   telefono?: string | null;
   createdAt?: string;
   primerContactoAt?: string;
@@ -138,7 +136,7 @@ export type Service = {
   serviceType?: "individual" | "grupal";
   empleadaId: string;
   clienteId: string | null;
-  /** Nombre capturado por el jefe cuando el cliente no tiene Telegram. */
+  /** Nombre capturado por el jefe cuando el cliente no tiene cuenta. */
   clienteNombreLibre?: string | null;
   jefeId: string;
   metodoPago: "efectivo" | "tarjeta" | "transferencia" | "mixto";
@@ -243,7 +241,6 @@ export type Trip = {
   externalSharedLink?: string | null;
   zona?: TripZone;
   tarifa: string | number;
-  telegramUberFileId?: string | null;
   uberScreenshotUrl?: string | null;
   uberScreenshotUploadedAt?: string | null;
   driverPayout?: number;
@@ -296,7 +293,6 @@ export type PaymentReceiptValidation = {
   id: string;
   servicioId?: string | null;
   imageUrl?: string | null;
-  telegramFileId?: string | null;
   estado?: string | null;
   monto?: number | null;
   montoEsperado?: number | null;
@@ -308,7 +304,7 @@ export type PaymentReceiptValidation = {
   fechaTransferencia?: string | null;
   pagoConfirmadoAt?: string | null;
   observaciones?: string | null;
-  clienteTelegram?: string | null;
+  clienteNombre?: string | null;
   createdAt: string;
 };
 
@@ -380,7 +376,6 @@ export type GroupServiceRequest = {
   locationReference: string | null;
   catalogVersion: number;
   holdExpiresAt: string | null;
-  telegramThreadId: string | null;
   createdAt: string;
   updatedAt: string;
   client?: Client;
@@ -425,7 +420,6 @@ export type PreServiceConversation = {
   client: {
     id: string;
     name: string | null;
-    telegramId: string | null;
   };
   intendedEmployee: {
     id: string;
@@ -712,7 +706,6 @@ export type CandidateScreening = {
   candidateName: string;
   candidatePhone: string | null;
   token: string;
-  telegramChatId: string | null;
   status: CandidateScreeningStatus;
   questionIds: string[];
   createdByUserId: string;
@@ -1070,7 +1063,6 @@ export type CreateManualServiceInput = {
   fechaProgramada?: string;
   tipoAgenda?: "inmediato" | "programado";
   presetLocationId?: string;
-  clienteTelegramId?: string;
 };
 
 /**
@@ -1153,14 +1145,14 @@ export interface SolicitudServicioManual {
   resueltoAt: string | null;
   createdAt: string;
   empleada?: { id: string; nombreArtistico: string } | null;
-  cliente?: { id: string; nombreTelegram: string | null } | null;
+  cliente?: { id: string; nombre: string | null } | null;
 }
 
 /** Un cliente tal y como lo lista el panel. */
 export interface ClienteResumen {
   id: string;
-  nombreTelegram: string | null;
-  telegramChatId: string;
+  nombre: string | null;
+  telefono?: string | null;
   primerContactoAt: string;
   createdAt: string;
 }
@@ -1176,8 +1168,8 @@ export interface ClientesPage {
 export interface ClientDossier {
   cliente: {
     id: string;
-    nombreTelegram: string | null;
-    telegramChatId: string;
+    nombre: string | null;
+    telefono?: string | null;
     primerContactoAt: string;
     createdAt: string;
     diasDesdePrimerContacto: number;

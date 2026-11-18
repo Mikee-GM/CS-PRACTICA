@@ -7,9 +7,8 @@ import { toast } from "sonner";
  * Un punto del viaje, con los botones para llegar hasta el.
  *
  * El portal del chofer decia la zona --"montecarlo"-- y nada mas: para ver
- * donde queda algo habia que volver a Telegram y buscar el mensaje de la
- * oferta, que es donde vivia el unico enlace al mapa. Conduciendo, eso es
- * justo lo que no se puede hacer.
+ * donde queda algo habia que buscar el enlace al mapa en otra parte.
+ * Conduciendo, eso es justo lo que no se puede hacer.
  *
  * "Como llegar" va primero y en dorado porque es lo que el chofer necesita el
  * 95% de las veces; ver el punto en el mapa y copiarlo son para cuando algo no

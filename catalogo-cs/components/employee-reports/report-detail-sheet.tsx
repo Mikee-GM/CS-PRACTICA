@@ -104,7 +104,7 @@ export default function ReportDetailSheet({
   const closed = report?.status === "resuelto" || report?.status === "descartado";
   const reporterName =
     report?.origin === "cliente"
-      ? report.client?.nombreTelegram || "Cliente"
+      ? report.client?.nombre || "Cliente"
       : report?.driver?.nombre || "Chofer";
 
   return (

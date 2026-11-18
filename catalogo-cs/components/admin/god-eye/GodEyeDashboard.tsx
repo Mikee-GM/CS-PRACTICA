@@ -26,17 +26,14 @@ import {
   HelpCircle,
   Layers,
   MapPin,
-  MessageSquare,
   PauseCircle,
   Percent,
   Phone,
-  PlayCircle,
   Radio,
   Receipt,
   RefreshCw,
   Scale,
   Search,
-  Send,
   Shield,
   ShieldAlert,
   Sparkles,
@@ -65,9 +62,6 @@ import {
   getGodEyeActorsAction,
   getGodEyeActorDossierAction,
   getIncidentRootCauseAction,
-  pauseServiceAiAction,
-  resumeServiceAiAction,
-  sendAdminChatMessageAction,
   updateActorQuickSettingsAction,
   type GodEyeOverview,
   type GodEyeActorSummary,
@@ -162,7 +156,7 @@ export function getServiceAlerts(srv: any): ServiceAlert[] {
       t.proveedorTransporte === "uber" && t.estado !== "cancelado",
   );
   const uberWithoutScreenshot = uberTrips.filter(
-    (t: any) => !t.uberScreenshotUrl && !t.telegramUberFileId,
+    (t: any) => !t.uberScreenshotUrl,
   );
   const uberWithoutFare = uberTrips.filter(
     (t: any) => !t.tarifa || Number(t.tarifa) <= 0,
@@ -401,12 +395,6 @@ export default function GodEyeDashboard({
   );
   const [loadingIncident, setLoadingIncident] = useState(false);
 
-  // Chat Interceptor
-  const [adminMessage, setAdminMessage] = useState("");
-  const [asIdentity, setAsIdentity] = useState<"empleada" | "jefe" | "ia">(
-    "jefe",
-  );
-
   // Modal de sanción
   const [showSanctionModal, setShowSanctionModal] = useState(false);
   const [sanctionType, setSanctionType] = useState<
@@ -506,40 +494,6 @@ export default function GodEyeDashboard({
       loadDossier("employee", initialActors.employees[0].id);
     }
   }, []);
-
-  // Control IA de chat
-  const handleToggleAi = async (pause: boolean) => {
-    if (!selectedServiceId) return;
-    try {
-      if (pause) {
-        await pauseServiceAiAction(selectedServiceId);
-        notify("IA pausada indefinidamente para este servicio");
-      } else {
-        await resumeServiceAiAction(selectedServiceId);
-        notify("IA reanudada con éxito");
-      }
-      refreshAll();
-    } catch (err: any) {
-      notify(err.message || "Error al modificar estado de IA", "error");
-    }
-  };
-
-  // Enviar mensaje manual de admin
-  const handleSendAdminMessage = async () => {
-    if (!selectedServiceId || !adminMessage.trim()) return;
-    try {
-      await sendAdminChatMessageAction(
-        selectedServiceId,
-        adminMessage.trim(),
-        asIdentity,
-      );
-      setAdminMessage("");
-      notify(`Mensaje enviado como ${asIdentity}`);
-      if (selectedServiceId) loadIncident(selectedServiceId);
-    } catch (err: any) {
-      notify(err.message || "Error al enviar mensaje", "error");
-    }
-  };
 
   // Aplicar sanción rápida
   const handleApplySanction = async () => {
@@ -2308,10 +2262,10 @@ export default function GodEyeDashboard({
     ),
     servicios: (
       <div className="flex flex-col gap-6 font-body text-white">
-      {/* FILA 2: SERVICIOS & DIAGNÓSTICO (IZQUIERDA) & INTERCEPTOR DE CHAT (DERECHA) */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-        {/* COLUMNA IZQUIERDA: 2. SERVICIOS & TRIANGULACIÓN + DIAGNÓSTICO CAUSAL (6 Cols) */}
-        <div className="flex flex-col gap-6 lg:col-span-6 xl:col-span-6">
+      {/* FILA 2: SERVICIOS & DIAGNÓSTICO */}
+      <div className="grid grid-cols-1 gap-6">
+        {/* 2. SERVICIOS & TRIANGULACIÓN + DIAGNÓSTICO CAUSAL */}
+        <div className="flex flex-col gap-6">
           {/* Selector de servicios activos / con incidentes */}
           <div className="rounded-3xl border border-zinc-800 bg-[#080808] p-5 shadow-xl">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-800 pb-3">
@@ -2557,116 +2511,6 @@ export default function GodEyeDashboard({
             )}
           </div>
         </div>
-
-        {/* COLUMNA DERECHA: 3. INTERCEPTOR DE CHAT EN VIVO & OVERRIDES (6 Cols) */}
-        <div className="flex flex-col lg:col-span-6 xl:col-span-6">
-          <div className="flex flex-1 flex-col rounded-3xl border border-zinc-800 bg-[#080808] p-5 shadow-2xl h-full">
-            <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-              <span className="text-sm font-extrabold uppercase tracking-wider text-zinc-200">
-                3. Interceptor de Chat
-              </span>
-              <MessageSquare className="h-5 w-5 text-[#C5A55A]" />
-            </div>
-
-            {/* Switch de Pausa / Reanudación de IA */}
-            <div className="mt-3.5 flex items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-950 p-4 shadow-sm">
-              <div>
-                <span className="text-sm sm:text-base font-bold text-white">Estado de IA</span>
-                <p className="text-xs text-zinc-400 mt-0.5 font-medium">
-                  {incidentData?.service?.ia_activa ?? true
-                    ? "Respondiendo automáticamente"
-                    : "Pausada indefinidamente"}
-                </p>
-              </div>
-              <button
-                onClick={() =>
-                  handleToggleAi(incidentData?.service?.ia_activa ?? true)
-                }
-                className={`flex items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition-all shadow-md ${incidentData?.service?.ia_activa ?? true
-                  ? "bg-red-950 text-red-300 hover:bg-red-900 border border-red-800/40"
-                  : "bg-emerald-950 text-emerald-300 hover:bg-emerald-900 border border-emerald-800/40"
-                  }`}
-              >
-                {incidentData?.service?.ia_activa ?? true ? (
-                  <>
-                    <PauseCircle className="h-4 w-4" /> Pausar IA
-                  </>
-                ) : (
-                  <>
-                    <PlayCircle className="h-4 w-4" /> Reanudar IA
-                  </>
-                )}
-              </button>
-            </div>
-
-            {/* Mensajes del chat en vivo */}
-            <div className="my-3.5 flex max-h-80 flex-1 flex-col gap-2.5 overflow-y-auto rounded-2xl border border-zinc-900 bg-black p-4 text-xs sm:text-sm">
-              {incidentData?.conversations &&
-                incidentData.conversations.length > 0 ? (
-                incidentData.conversations.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`flex flex-col rounded-2xl p-3 ${msg.emisor === "cliente"
-                      ? "self-start bg-zinc-900 text-zinc-100 border border-zinc-800"
-                      : "self-end bg-[#C5A55A]/20 text-[#E8D5A3] border border-[#C5A55A]/30"
-                      } max-w-[88%] shadow-sm`}
-                  >
-                    <span className="text-[11px] font-extrabold uppercase tracking-wider text-zinc-400">
-                      {msg.emisor}
-                    </span>
-                    <p className="mt-1 text-zinc-100 text-xs sm:text-sm leading-relaxed font-medium">{msg.mensaje}</p>
-                  </div>
-                ))
-              ) : (
-                <p className="text-center text-zinc-500 my-auto text-sm">
-                  Selecciona un servicio para leer la conversación en tiempo real.
-                </p>
-              )}
-            </div>
-
-            {/* Envío Manual de Admin */}
-            <div className="flex flex-col gap-3 border-t border-zinc-800 pt-3.5">
-              <div className="flex gap-4 text-xs sm:text-sm">
-                <label className="flex items-center gap-2 text-zinc-200 font-semibold cursor-pointer">
-                  <input
-                    type="radio"
-                    name="identity"
-                    checked={asIdentity === "jefe"}
-                    onChange={() => setAsIdentity("jefe")}
-                    className="accent-[#C5A55A]"
-                  />
-                  Agencia
-                </label>
-                <label className="flex items-center gap-2 text-zinc-200 font-semibold cursor-pointer">
-                  <input
-                    type="radio"
-                    name="identity"
-                    checked={asIdentity === "empleada"}
-                    onChange={() => setAsIdentity("empleada")}
-                    className="accent-[#C5A55A]"
-                  />
-                  Como Empleada
-                </label>
-              </div>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder={`Responder como ${asIdentity}...`}
-                  value={adminMessage}
-                  onChange={(e) => setAdminMessage(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleSendAdminMessage()}
-                  className="flex-1 rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm text-white placeholder:text-zinc-500 focus:border-[#C5A55A] focus:outline-none transition-colors"
-                />
-                <button
-                  onClick={handleSendAdminMessage}
-                  className="flex items-center justify-center rounded-xl bg-[#C5A55A] px-4 py-3 text-black font-bold transition-transform hover:scale-105 shadow-md"
-                >
-                  <Send className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
       </div>
@@ -2774,7 +2618,7 @@ export default function GodEyeDashboard({
               Aplicar Sanción Disciplinaria
             </h3>
             <p className="mt-1 text-xs sm:text-sm text-zinc-400">
-              Se enviará una notificación automática por Telegram con botón para apelar.
+              Se enviará una notificación automática con botón para apelar.
             </p>
 
             <div className="mt-4 flex flex-col gap-3.5 text-xs sm:text-sm">

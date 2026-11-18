@@ -41,7 +41,7 @@ export async function getPhotoSubmissions(estado?: SubmissionStatus) {
 
 /**
  * Resuelve una foto de la cola. Al rechazar admite un motivo, que se guarda
- * con la revision y le llega a la modelo por Telegram y en su portal.
+ * con la revision y le llega a la modelo en su portal.
  *
  * Aprobar mueve mas cosas que esta pantalla: la foto entra en el catalogo
  * publico o en las exclusivas de la modelo, y su contador de "por validar"

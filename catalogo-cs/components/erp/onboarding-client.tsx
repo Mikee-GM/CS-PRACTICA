@@ -166,7 +166,7 @@ export default function OnboardingClient({
     [conReglamento],
   );
 
-  /** Entregas que fallaron: la persona no recibio el reglamento por Telegram. */
+  /** Entregas que fallaron: la persona no recibio el reglamento. */
   const conFalloDeEnvio = useMemo(
     () => pendientes.filter((persona) => persona.onboarding?.lastDeliveryError),
     [pendientes],

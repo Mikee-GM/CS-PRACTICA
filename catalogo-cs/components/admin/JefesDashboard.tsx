@@ -25,7 +25,6 @@ interface Jefe {
   apellido?: string | null;
   rol: RolDeOficina;
   trustScore?: number | null;
-  telegramChatId?: string | null;
 }
 
 const inputClass =

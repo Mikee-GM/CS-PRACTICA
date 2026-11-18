@@ -10,9 +10,7 @@ import {
 } from "react";
 import type {
   ButtonHTMLAttributes,
-  Dispatch,
   ReactNode,
-  SetStateAction,
 } from "react";
 import {
   Award,
@@ -38,7 +36,6 @@ import {
   Plus,
   Repeat2,
   Search,
-  Send,
   Smartphone,
   Star,
   UserRoundCheck,
@@ -68,19 +65,16 @@ import {
   confirmUberFare,
   decidePendingService,
   getGroupServiceRequests,
-  getServiceMessages,
   getJefeCashObligations,
   getJefeEmployees,
   closeJefeCashObligation,
   registerJefeCashPayment,
   refreshJefeServices,
-  sendServiceMessage,
   setEmployeeAvailability,
   updatePendingServiceAction,
 } from "@/lib/actions/jefe-panel";
 import type {
   CashObligationSummary,
-  ConversationMessage,
   Employee,
   Service,
   Trip,
@@ -145,8 +139,6 @@ export default function TeamOperations({
     "equipo" | "grupos" | "activos" | "historial" | "efectivo"
   >(fixedTab ?? tabInicial ?? "activos");
   const [cashSummary, setCashSummary] = useState(initialCashSummary);
-  const [chatService, setChatService] = useState<Service | null>(null);
-  const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [acceptingService, setAcceptingService] = useState<Service | null>(
     null,
   );
@@ -165,7 +157,7 @@ export default function TeamOperations({
   /*
    * Mensajes sin leer de cada modelo.
    *
-   * El canal avisaba por Telegram y por push, pero dentro del panel no se veia
+   * El canal avisaba por push, pero dentro del panel no se veia
    * nada: había que abrir la conversación de cada una para descubrir quién
    * había escrito. Con esto la marca está donde ya se mira.
    */
@@ -188,11 +180,6 @@ export default function TeamOperations({
   );
   const [pending, startTransition] = useTransition();
 
-  const chatServiceRef = useRef<Service | null>(null);
-  useEffect(() => {
-    chatServiceRef.current = chatService;
-  }, [chatService]);
-
   const visibleEmployees = useMemo(
     () =>
       employees.filter((employee) =>
@@ -208,11 +195,7 @@ export default function TeamOperations({
    * transporte, y eso es a propósito: es lo único que recuerda que hay una
    * tarifa de Uber sin confirmar. Lo que estaba mal era cómo se comprobaba.
    *
-   * La captura se daba por ausente cuando había llegado por Telegram --que la
-   * guarda en `telegramUberFileId` y no en `uberScreenshotUrl`--, así que la
-   * ficha decía "Captura recibida" y la lista seguía contándola como pendiente
-   * para siempre. Y los viajes cancelados entraban en la cuenta aunque ya no
-   * haya nada que confirmar en ellos.
+   * Y los viajes cancelados no cuentan: ya no hay nada que confirmar en ellos.
    */
   const active = services.filter(
     (service) =>
@@ -362,13 +345,6 @@ export default function TeamOperations({
         void reloadGroupRequests();
         void reloadCashSummary();
         void reloadCanalSinLeer();
-        if (chatServiceRef.current) {
-          void getServiceMessages(chatServiceRef.current.id)
-            .then(setMessages)
-            .catch(() => {
-              /* El siguiente evento o apertura manual volverá a reconciliar. */
-            });
-        }
       };
 
       source.onmessage = (event) => {
@@ -398,9 +374,8 @@ export default function TeamOperations({
             /*
               Lo que marca la modelo y lo que marca el chofer, dicho igual.
 
-              Los tres pasos del chofer no llegaban al panel: salian solo por el
-              chat del grupo, asi que el jefe se enteraba del traslado si estaba
-              mirando Telegram. Son los momentos en los que alguien esta
+              Los tres pasos del chofer no llegaban al panel: no llegaban al
+              panel y el jefe se enteraba del traslado solo si lo preguntaba. Son los momentos en los que alguien esta
               esperando abajo. Las acciones que pulsa el propio jefe siguen sin
               anunciarse: ya sabe lo que acaba de hacer.
             */
@@ -423,14 +398,6 @@ export default function TeamOperations({
           }
 
           if (payload.type === "chat_message") {
-            const message = payload.data as ConversationMessage;
-            if (chatServiceRef.current?.id === message.servicioId) {
-              setMessages((current) =>
-                current.some((item) => item.id === message.id)
-                  ? current
-                  : [...current, message],
-              );
-            }
             void reloadServices();
           } else {
             programarRecarga();
@@ -528,17 +495,6 @@ export default function TeamOperations({
       setCancellingService(null);
       toast.success("Servicio cancelado");
     });
-  }
-
-  async function openChat(service: Service) {
-    setChatService(service);
-    try {
-      setMessages(await getServiceMessages(service.id));
-    } catch (error) {
-      toast.error(
-        error instanceof Error ? error.message : "No se pudo cargar el chat",
-      );
-    }
   }
 
   return (
@@ -707,7 +663,6 @@ export default function TeamOperations({
           onRequestReschedule={setReprogramandoService}
           onRequestLocation={setUbicacionService}
           onCancel={setCancellingService}
-          onChat={openChat}
           onRefresh={reloadServices}
         />
       ) : (
@@ -754,7 +709,6 @@ export default function TeamOperations({
                 onRequestReschedule={setReprogramandoService}
                 onRequestLocation={setUbicacionService}
                 onCancel={setCancellingService}
-                onChat={openChat}
                 onRefresh={reloadServices}
               />
             </section>
@@ -778,7 +732,6 @@ export default function TeamOperations({
                 onRequestReschedule={setReprogramandoService}
                 onRequestLocation={setUbicacionService}
                 onCancel={setCancellingService}
-                onChat={openChat}
                 onRefresh={reloadServices}
               />
             </section>
@@ -809,14 +762,6 @@ export default function TeamOperations({
         </div>
       )}
 
-      {chatService && (
-        <ChatPanel
-          service={chatService}
-          messages={messages}
-          setMessages={setMessages}
-          onClose={() => setChatService(null)}
-        />
-      )}
       {acceptingService && canBossAuthorizeService(acceptingService) && (
         <AcceptServiceDialog
           service={acceptingService}
@@ -1120,7 +1065,6 @@ function ServiceList({
   onRequestReschedule,
   onRequestLocation,
   onCancel,
-  onChat,
   onRefresh,
 }: {
   services: Service[];
@@ -1139,7 +1083,6 @@ function ServiceList({
   onRequestReschedule: (service: Service) => void;
   onRequestLocation: (service: Service) => void;
   onCancel: (service: Service) => void;
-  onChat: (service: Service) => void;
   onRefresh: () => Promise<void>;
 }) {
   if (!services.length)
@@ -1150,7 +1093,7 @@ function ServiceList({
     );
   // Un servicio cerrado se consulta, no se opera: el historial es una lista
   // para repasar y solo despliega el detalle el que se toca.
-  if (!active) return <HistoryList services={services} onChat={onChat} />;
+  if (!active) return <HistoryList services={services} />;
   return (
     <div className="space-y-3">
       {services.map((service) => (
@@ -1167,7 +1110,6 @@ function ServiceList({
           onRequestReschedule={onRequestReschedule}
           onRequestLocation={onRequestLocation}
           onCancel={onCancel}
-          onChat={onChat}
           onRefresh={onRefresh}
         />
       ))}
@@ -1340,7 +1282,6 @@ function ServiceCard({
   onRequestReschedule,
   onRequestLocation,
   onCancel,
-  onChat,
   onRefresh,
 }: {
   service: Service;
@@ -1352,7 +1293,6 @@ function ServiceCard({
   onRequestReschedule: (service: Service) => void;
   onRequestLocation: (service: Service) => void;
   onCancel: (service: Service) => void;
-  onChat: (service: Service) => void;
   onRefresh: () => Promise<void>;
 }) {
   const programado = service.tipoAgenda === "programado";
@@ -1366,7 +1306,7 @@ function ServiceCard({
   const sinEmpezar = pendiente || service.estado === "agendado";
 
   const clientName =
-    service.cliente?.nombreTelegram ||
+    service.cliente?.nombre ||
     service.clienteNombreLibre ||
     "Cliente sin nombre";
   const employeeName =
@@ -1510,11 +1450,6 @@ function ServiceCard({
           />
         )}
         <SecondaryAction
-          onClick={() => onChat(service)}
-          icon={<MessageCircle size={16} />}
-          label="Chat"
-        />
-        <SecondaryAction
           onClick={() => onCancel(service)}
           disabled={disabled}
           danger
@@ -1626,10 +1561,8 @@ function etiquetaDia(iso: string) {
  */
 function HistoryList({
   services,
-  onChat,
 }: {
   services: Service[];
-  onChat: (service: Service) => void;
 }) {
   const [abierto, setAbierto] = useState<string | null>(null);
 
@@ -1706,7 +1639,7 @@ function HistoryList({
                     <EmployeeRatingSummary employee={service.empleada} />
                   )}
                   <p className="mt-2 text-xs text-zinc-500">
-                    Cliente: {service.cliente?.nombreTelegram || "Cliente"}
+                    Cliente: {service.cliente?.nombre || "Cliente"}
                   </p>
                   {service.notasJefe && (
                     <div className="mt-3 border-l-2 border-[#C5A55A]/70 bg-black/50 px-4 py-3">
@@ -1720,13 +1653,6 @@ function HistoryList({
                   )}
                   <ServiceRating service={service} />
                   <ReceiptEvidenceList service={service} />
-                  <div className="mt-3">
-                    <SecondaryAction
-                      onClick={() => onChat(service)}
-                      icon={<MessageCircle size={16} />}
-                      label="Abrir chat"
-                    />
-                  </div>
                 </div>
               )}
             </article>
@@ -2728,7 +2654,7 @@ function LegacyTripCard({
     (!trip.choferId || trip.estado === "notificado") &&
     ["notificado", "aceptado", "llegado"].includes(trip.estado);
   const hasScreenshot = Boolean(
-    trip.uberScreenshotUrl || trip.telegramUberFileId,
+    trip.uberScreenshotUrl,
   );
   const uberDeeplink = getUberDeeplink(trip, service);
   /*
@@ -2840,7 +2766,7 @@ function UberFareEditor({
   const hasFare = Number.isFinite(storedFare) && storedFare > 0;
   const canEditFare =
     trip.estado !== "cancelado" &&
-    Boolean(trip.uberScreenshotUrl || trip.telegramUberFileId);
+    Boolean(trip.uberScreenshotUrl);
   const [editing, setEditing] = useState(!hasFare && canEditFare);
   const [fare, setFare] = useState(hasFare ? String(storedFare) : "");
   const [saving, setSaving] = useState(false);
@@ -2929,133 +2855,6 @@ function UberFareEditor({
         )}
       </div>
     </div>
-  );
-}
-
-function ChatPanel({
-  service,
-  messages,
-  setMessages,
-  onClose,
-}: {
-  service: Service;
-  messages: ConversationMessage[];
-  setMessages: Dispatch<SetStateAction<ConversationMessage[]>>;
-  onClose: () => void;
-}) {
-  const [text, setText] = useState("");
-  async function send() {
-    const value = text.trim();
-    if (!value) return;
-    const result = await sendServiceMessage(service.id, value);
-    if (!result.success || !result.data) return toast.error(result.error);
-    setMessages((current) =>
-      current.some((item) => item.id === result.data!.id)
-        ? current
-        : [...current, result.data!],
-    );
-    setText("");
-  }
-  const hasPriorContext = messages.some((message) => message.bookingSessionId);
-  const senderPresentation: Record<
-    ConversationMessage["emisor"],
-    { label: string; className: string }
-  > = {
-    cliente: { label: "Cliente", className: "bg-zinc-900 text-zinc-200" },
-    ia: {
-      label: "Asistente IA",
-      className:
-        "ml-auto border border-[#C5A55A]/35 bg-[#C5A55A]/10 text-[#E8D5A3]",
-    },
-    sistema: {
-      label: "Sistema",
-      className: "mx-auto border border-zinc-800 bg-black text-zinc-400",
-    },
-    jefe: { label: "Jefe", className: "ml-auto bg-[#C5A55A] text-black" },
-  };
-  /*
-   * La caja se levanta por encima de la barra de abajo.
-   *
-   * Con `bottom-3` quedaba a doce pixeles del borde, y ahi vive la barra de
-   * navegacion del panel --fija, del mismo z-index-- mas el indicador de inicio
-   * del iPhone. La fila de escribir caia justo detras: el chat parecia no tener
-   * campo de texto, cuando lo que pasaba es que no se veia. La barra mide el
-   * alto de sus botones mas su propio hueco de area segura, y a partir de `md`
-   * no existe, asi que ahi se vuelve al margen de siempre.
-   *
-   * `dvh` y no `vh`: en el movil `vh` mide la ventana sin la barra del
-   * navegador, asi que el alto maximo se pasaba de lo que de verdad se ve.
-   */
-  return (
-    <aside className="fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-50 flex max-h-[75dvh] flex-col rounded-2xl border border-[#C5A55A]/60 bg-[#050505] shadow-2xl md:bottom-3 md:left-auto md:right-6 md:w-[420px]">
-      <header className="flex items-center justify-between border-b border-zinc-800 p-4">
-        <div>
-          <p className="font-heading text-xl">Conversación</p>
-          <p className="text-xs text-zinc-500">
-            {service.cliente?.nombreTelegram || "Cliente"}
-          </p>
-        </div>
-        <button onClick={onClose} aria-label="Cerrar">
-          <X size={19} />
-        </button>
-      </header>
-      {hasPriorContext && (
-        <div className="border-b border-zinc-800 bg-[#C5A55A]/5 px-4 py-3 text-xs leading-relaxed text-[#E8D5A3]">
-          Esta conversación comenzó antes de que el servicio fuera creado. El
-          historial previo se muestra para conservar el contexto.
-        </div>
-      )}
-      <div className="flex-1 space-y-3 overflow-y-auto p-4">
-        {messages.length === 0 && (
-          <p className="py-10 text-center text-sm text-zinc-600">
-            Todavía no hay mensajes.
-          </p>
-        )}
-        {messages.map((message) => {
-          const presentation = senderPresentation[message.emisor];
-          return (
-            <div
-              key={message.id}
-              className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${presentation.className}`}
-            >
-              <p className="mb-1 text-[9px] font-semibold uppercase tracking-[0.14em] opacity-60">
-                {presentation.label}
-              </p>
-              <p className="whitespace-pre-wrap">{message.mensaje}</p>
-              <time className="mt-1 block text-[10px] opacity-60">
-                {new Date(message.enviadoAt).toLocaleTimeString(APP_LOCALE, {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                  timeZone: APP_TIME_ZONE,
-                })}
-              </time>
-            </div>
-          );
-        })}
-      </div>
-      <div className="flex gap-2 border-t border-zinc-800 p-3">
-        <textarea
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              void send();
-            }
-          }}
-          maxLength={4000}
-          placeholder="Escribe un mensaje"
-          className="min-h-11 flex-1 resize-none rounded-xl border border-zinc-800 bg-black px-3 py-2 text-sm outline-none focus:border-[#C5A55A]"
-        />
-        <button
-          onClick={send}
-          className="rounded-xl bg-[#C5A55A] px-4 text-black"
-          aria-label="Enviar"
-        >
-          <Send size={18} />
-        </button>
-      </div>
-    </aside>
   );
 }
 

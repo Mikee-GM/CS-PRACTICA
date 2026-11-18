@@ -240,7 +240,7 @@ function DateFilter({ label, value, onChange }: { label: string; value: string; 
 }
 
 function ReportRow({ report, onClick }: { report: EmployeeReport; onClick: () => void }) {
-  const reporter = report.origin === "cliente" ? report.client?.nombreTelegram || "Cliente" : report.driver?.nombre || "Chofer";
+  const reporter = report.origin === "cliente" ? report.client?.nombre || "Cliente" : report.driver?.nombre || "Chofer";
   return <tr onClick={onClick} className="cursor-pointer border-b border-zinc-900 text-sm transition hover:bg-zinc-900/60"><td className="px-5 py-4 text-xs text-zinc-500">{formatReportDate(report.createdAt)}</td><td className="px-5 py-4 font-medium text-zinc-200">{report.employee?.nombreArtistico || "—"}</td><td className="px-5 py-4"><p className="text-zinc-300">{reporter}</p><p className="text-[10px] uppercase tracking-wider text-zinc-600">{originLabels[report.origin]}</p></td><td className="px-5 py-4 text-zinc-400">{categoryLabels[report.category]}</td><td className="px-5 py-4"><Pill className={priorityClass(report.priority)}>{priorityLabels[report.priority]}</Pill></td><td className="px-5 py-4"><Pill className={statusClass(report.status)}>{statusLabels[report.status]}</Pill></td><td className="px-5 py-4 text-xs text-zinc-500">{report.assignedAdmin?.email || "Sin asignar"}</td></tr>;
 }
 

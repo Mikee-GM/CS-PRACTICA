@@ -117,7 +117,7 @@ export default function FichaCliente({ ficha }: { ficha: ClientDossier }) {
   const [error, setError] = useState<string | null>(null);
   const [enCurso, startTransition] = useTransition();
 
-  const nombre = ficha.cliente.nombreTelegram || "Cliente sin nombre";
+  const nombre = ficha.cliente.nombre || "Cliente sin nombre";
 
   const aplicarBloqueo = () => {
     setError(null);
@@ -150,7 +150,7 @@ export default function FichaCliente({ ficha }: { ficha: ClientDossier }) {
             {nombre}
           </h1>
           <p className="mt-1 text-xs uppercase tracking-[0.14em] text-zinc-500">
-            ID {ficha.cliente.telegramChatId} · Cliente desde hace{" "}
+            Cliente desde hace{" "}
             {ficha.cliente.diasDesdePrimerContacto} días
           </p>
         </div>

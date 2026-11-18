@@ -29,7 +29,7 @@ export type ComprobanteTransferencia = {
   monto?: number | null;
   createdAt: string;
   servicioId?: string | null;
-  clienteTelegram?: string | null;
+  clienteNombre?: string | null;
   observaciones?: string | null;
 };
 
@@ -189,8 +189,8 @@ export default function ComprobantesTransferencia({
                   </span>
                   <span className="text-[11px] text-zinc-400">
                     {fechaHora(ampliado.createdAt)}
-                    {ampliado.clienteTelegram
-                      ? ` - ${ampliado.clienteTelegram}`
+                    {ampliado.clienteNombre
+                      ? ` - ${ampliado.clienteNombre}`
                       : ""}
                   </span>
                 </div>

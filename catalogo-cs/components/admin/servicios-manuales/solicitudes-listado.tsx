@@ -166,7 +166,7 @@ export default function SolicitudesListado({
                   Cliente
                 </dt>
                 <dd className="mt-0.5 text-zinc-200">
-                  {solicitud.cliente?.nombreTelegram ??
+                  {solicitud.cliente?.nombre ??
                     solicitud.clienteNombreLibre ??
                     "Sin registrar"}
                 </dd>

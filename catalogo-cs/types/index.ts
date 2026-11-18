@@ -35,7 +35,6 @@ export interface Modelo {
   pendingWeeklyPhotosCount?: number;
   weeklyContentStatus?: "al_dia" | "atrasado" | "pendiente_revision";
   linkX: string;
-  contactLink: string;
   contactLabel: string;
   disponible: boolean;
   catalogoActivo?: boolean;
@@ -48,8 +47,6 @@ export interface Modelo {
   jefeSecundarioId?: string | null;
   apartmentId?: string | null;
   usuarioId?: string | null;
-  /** Con chat vinculado recibe por Telegram; sin el, no le llega nada. */
-  telegramChatId?: string | null;
   trustScore?: number | null;
   clientRatingAverage?: number | null;
   clientRatingCount?: number;
@@ -72,7 +69,6 @@ export interface ModeloPayload {
   fotoPrincipal: string;
   fotos: string[];
   linkX: string;
-  contactLink: string;
   contactLabel: string;
   disponible?: boolean;
   catalogoActivo?: boolean;

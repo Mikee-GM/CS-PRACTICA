@@ -1,5 +1,4 @@
 import type { Modelo } from "@/types";
-import { getEmployeeHireTelegramUrl } from "@/lib/telegram-links";
 
 /**
  * Mapea una Empleada del backend al Modelo que consume el frontend.
@@ -27,7 +26,6 @@ export function mapToModelo(emp: any): Modelo {
     pendingWeeklyPhotosCount: emp.pendingWeeklyPhotosCount || 0,
     weeklyContentStatus: emp.weeklyContentStatus || "al_dia",
     linkX: emp.linkX || "",
-    contactLink: getEmployeeHireTelegramUrl(emp.id),
     contactLabel: emp.contactLabel || "Contacto",
     disponible: emp.disponible,
     catalogoActivo: emp.catalogoActivo !== false,
@@ -40,7 +38,6 @@ export function mapToModelo(emp: any): Modelo {
     jefeSecundarioId: emp.jefeSecundarioId || null,
     apartmentId: emp.apartmentId || null,
     usuarioId: emp.usuarioId || null,
-    telegramChatId: emp.usuario?.telegramChatId ?? null,
     trustScore: typeof emp.trustScore === "number" ? emp.trustScore : null,
     clientRatingAverage:
       emp.clientRatingAverage == null ? null : Number(emp.clientRatingAverage),

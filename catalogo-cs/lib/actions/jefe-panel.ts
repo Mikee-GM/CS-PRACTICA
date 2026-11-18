@@ -2,14 +2,12 @@
 
 import { apiFetch } from "@/lib/api-server";
 import { getCurrentUser, isRedirectError } from "@/lib/auth";
-import { getServices } from "@/lib/data/services";
 import type {
   CashObligationSummary,
   ConversationMessage,
   Employee,
   GroupServiceRequest,
   PedidoGrupalDelChat,
-  PreServiceConversation,
   Service,
 } from "@/lib/types";
 import { redirect } from "next/navigation";
@@ -36,210 +34,6 @@ export async function getJefeEmployees(): Promise<Employee[]> {
 export async function getJefeServices(): Promise<Service[]> {
   await requireJefe();
   return apiFetch<Service[]>("/services");
-}
-
-export type JefeTodaySnapshot = {
-  employees: Employee[];
-  services: Service[];
-  messagesByService: Record<string, ConversationMessage[]>;
-  preServiceConversations: PreServiceConversation[];
-};
-
-async function getCompleteServiceMessages(
-  serviceId: string,
-): Promise<ConversationMessage[]> {
-  const messages: ConversationMessage[] = [];
-  let cursor: string | null = null;
-  const visitedCursors = new Set<string>();
-
-  do {
-    const params = new URLSearchParams({ limit: "100" });
-    if (cursor) params.set("cursor", cursor);
-    const page = await apiFetch<{
-      messages: ConversationMessage[];
-      nextCursor: string | null;
-    }>(`/telegram-conversations/service/${serviceId}?${params.toString()}`);
-    messages.unshift(...page.messages);
-    cursor = page.nextCursor;
-    if (cursor) {
-      if (visitedCursors.has(cursor)) {
-        throw new Error(
-          "La paginación del historial devolvió un cursor repetido",
-        );
-      }
-      visitedCursors.add(cursor);
-    }
-  } while (cursor);
-
-  return Array.from(
-    new Map(messages.map((message) => [message.id, message])).values(),
-  ).sort(
-    (left, right) =>
-      new Date(left.enviadoAt).getTime() - new Date(right.enviadoAt).getTime(),
-  );
-}
-
-/**
- * Snapshot seguro de Hoy. La lista de servicios ya viene limitada por el
- * backend al ambito del jefe, y cada historial vuelve a pasar por la
- * autorizacion del endpoint de servicio.
- */
-export async function getJefeTodaySnapshot(): Promise<JefeTodaySnapshot> {
-  const jefe = await requireJefe();
-  const [allEmployees, services, preServiceConversations] = await Promise.all([
-    apiFetch<Employee[]>("/employees"),
-    getServices(),
-    apiFetch<PreServiceConversation[]>(
-      "/telegram-conversations/pre-service?limit=100",
-    ),
-  ]);
-  const employees = allEmployees.filter(
-    (employee) =>
-      employee.jefeId === jefe.id || employee.jefeSecundarioId === jefe.id,
-  );
-  const recentCutoff = Date.now() - 2 * 60 * 60 * 1000;
-  const withConversation = services.filter((service) => {
-    if (!service.clienteId) return false;
-    if (["pendiente", "agendado", "en_curso"].includes(service.estado)) {
-      return true;
-    }
-    if (service.estado !== "finalizado") return false;
-    const finishedAt = new Date(
-      service.horaFinServicio ?? service.updatedAt,
-    ).getTime();
-    return Number.isFinite(finishedAt) && finishedAt >= recentCutoff;
-  });
-  const entries = await Promise.all(
-    withConversation.map(
-      async (service) =>
-        [service.id, await getCompleteServiceMessages(service.id)] as const,
-    ),
-  );
-
-  return {
-    employees,
-    services,
-    messagesByService: Object.fromEntries(entries),
-    preServiceConversations,
-  };
-}
-
-async function assertOwnedServiceAndClient(
-  serviceId: string,
-  clientId: string,
-) {
-  const services = await getJefeServices();
-  const service = services.find((item) => item.id === serviceId);
-  if (!service || service.clienteId !== clientId) {
-    throw new Error("La conversacion no pertenece a tu equipo");
-  }
-  return service;
-}
-
-export async function setJefeConversationMode(input: {
-  serviceId: string | null;
-  bookingSessionId: string | null;
-  clientId: string;
-  iaActiva: boolean;
-}) {
-  try {
-    const { serviceId, bookingSessionId, clientId, iaActiva } = input;
-    const endpoint = serviceId
-      ? `/telegram-conversations/service/${serviceId}/${iaActiva ? "resume-ai" : "pause-ai"}`
-      : bookingSessionId
-        ? `/telegram-conversations/session/${bookingSessionId}/toggle-ai`
-        : null;
-    if (!endpoint) throw new Error("Conversacion sin referencia operable");
-    if (serviceId) await assertOwnedServiceAndClient(serviceId, clientId);
-    await apiFetch(endpoint, {
-      method: "POST",
-      body: serviceId ? undefined : JSON.stringify({ iaActiva }),
-    });
-    return { success: true as const };
-  } catch (error) {
-    if (isRedirectError(error)) throw error;
-    return {
-      success: false as const,
-      error:
-        error instanceof Error
-          ? error.message
-          : "No se pudo cambiar el control de la conversacion",
-    };
-  }
-}
-
-export async function sendJefeConversationMessage(input: {
-  serviceId: string | null;
-  bookingSessionId: string | null;
-  clientId: string;
-  mode: "AI_ACTIVE" | "HUMAN_ACTIVE";
-  message: string;
-}) {
-  try {
-    const { serviceId, bookingSessionId, clientId, mode, message } = input;
-    if (mode !== "HUMAN_ACTIVE") {
-      throw new Error("Toma la conversacion antes de responder");
-    }
-    if (serviceId) await assertOwnedServiceAndClient(serviceId, clientId);
-    const endpoint = serviceId
-      ? `/telegram-conversations/service/${serviceId}/messages`
-      : bookingSessionId
-        ? `/telegram-conversations/session/${bookingSessionId}/messages`
-        : null;
-    if (!endpoint) throw new Error("Conversacion sin referencia operable");
-    const data = await apiFetch<ConversationMessage>(endpoint, {
-      method: "POST",
-      body: JSON.stringify({ message: message.trim() }),
-    });
-    return { success: true as const, data };
-  } catch (error) {
-    if (isRedirectError(error)) throw error;
-    return {
-      success: false as const,
-      error:
-        error instanceof Error ? error.message : "No se pudo enviar el mensaje",
-    };
-  }
-}
-
-export async function updateJefeBookingDraft(input: {
-  bookingSessionId: string;
-  patch: Record<string, unknown>;
-}) {
-  try {
-    await requireJefe();
-    const data = await apiFetch(
-      `/telegram-conversations/session/${input.bookingSessionId}/draft`,
-      {
-        method: "PATCH",
-        body: JSON.stringify(input.patch),
-      },
-    );
-    return { success: true as const, data };
-  } catch (error) {
-    if (isRedirectError(error)) throw error;
-    return {
-      success: false as const,
-      error: error instanceof Error ? error.message : "No se pudo guardar el borrador",
-    };
-  }
-}
-
-export async function acceptJefeBookingDraft(bookingSessionId: string) {
-  try {
-    await requireJefe();
-    const data = await apiFetch(
-      `/telegram-conversations/session/${bookingSessionId}/accept`,
-      { method: "POST" },
-    );
-    return { success: true as const, data };
-  } catch (error) {
-    if (isRedirectError(error)) throw error;
-    return {
-      success: false as const,
-      error: error instanceof Error ? error.message : "No se pudo aceptar la reserva",
-    };
-  }
 }
 
 export async function getJefeCashObligations(): Promise<CashObligationSummary> {
@@ -618,37 +412,6 @@ export async function uploadUberScreenshot(formData: FormData) {
       success: false,
       error:
         error instanceof Error ? error.message : "No se pudo enviar la captura",
-    };
-  }
-}
-
-export async function getServiceMessages(
-  serviceId: string,
-): Promise<ConversationMessage[]> {
-  await assertOwnedService(serviceId);
-  const result = await apiFetch<{ messages: ConversationMessage[] }>(
-    `/telegram-conversations/service/${serviceId}`,
-  );
-  return result.messages;
-}
-
-export async function sendServiceMessage(serviceId: string, message: string) {
-  try {
-    await assertOwnedService(serviceId);
-    const data = await apiFetch<ConversationMessage>(
-      `/telegram-conversations/service/${serviceId}/messages`,
-      {
-        method: "POST",
-        body: JSON.stringify({ message }),
-      },
-    );
-    return { success: true, data };
-  } catch (error) {
-    if (isRedirectError(error)) throw error;
-    return {
-      success: false,
-      error:
-        error instanceof Error ? error.message : "No se pudo enviar el mensaje",
     };
   }
 }

@@ -9,7 +9,7 @@ import type { SolicitudServicioManual } from "@/lib/types";
 /**
  * Solicitudes de registro de un servicio ocurrido fuera del sistema.
  *
- * El camino normal es el chat: la empleada la levanta desde Telegram y su jefe
+ * El camino normal es el chat: la empleada la levanta desde el chat web y su jefe
  * la autoriza ahi mismo. Esta pantalla es para revisarlas con calma y para que
  * quede una via cuando el chat falla, asi que no duplica ninguna regla: el
  * backend ya filtra por rol --un jefe solo ve las de sus empleadas-- y es el

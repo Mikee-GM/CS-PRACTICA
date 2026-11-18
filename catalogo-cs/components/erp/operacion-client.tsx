@@ -288,7 +288,7 @@ export default function OperacionClient({
       return [
         codigoServicio(service.id),
         service.empleada?.nombreArtistico ?? "",
-        service.cliente?.nombreTelegram ?? "",
+        service.cliente?.nombre ?? "",
         nombreJefe.get(service.jefeId) ?? "",
       ].some((campo) => campo.toLowerCase().includes(termino));
     });
@@ -600,9 +600,9 @@ export default function OperacionClient({
                       </Td>
 
                       <Td>
-                        {service.cliente?.nombreTelegram ? (
+                        {service.cliente?.nombre ? (
                           <span className="text-zinc-300">
-                            {service.cliente.nombreTelegram}
+                            {service.cliente.nombre}
                           </span>
                         ) : (
                           <span className="text-zinc-500">

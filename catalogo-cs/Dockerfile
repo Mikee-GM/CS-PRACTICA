@@ -14,8 +14,6 @@ RUN pnpm install --frozen-lockfile
 
 FROM deps AS builder
 COPY catalogo-cs ./catalogo-cs
-ARG NEXT_PUBLIC_TELEGRAM_BOT_USERNAME
-ENV NEXT_PUBLIC_TELEGRAM_BOT_USERNAME=$NEXT_PUBLIC_TELEGRAM_BOT_USERNAME
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm --filter catalogo-cs build
 

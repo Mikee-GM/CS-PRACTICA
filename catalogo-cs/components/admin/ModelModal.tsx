@@ -117,7 +117,6 @@ export default function ModelModal({
           fotoPrincipal: modelo.fotoPrincipal,
           fotos: [...modelo.fotos],
           linkX: modelo.linkX,
-          contactLink: modelo.contactLink,
           contactLabel: modelo.contactLabel,
           disponible: modelo.disponible,
           catalogoActivo: (modelo as any).catalogoActivo !== false && modelo.availabilityStatus !== "inactiva",
@@ -138,7 +137,6 @@ export default function ModelModal({
           fotoPrincipal: "",
           fotos: [],
           linkX: "",
-          contactLink: "",
           contactLabel: "Contacto",
           disponible: true,
           catalogoActivo: true,
@@ -225,7 +223,7 @@ export default function ModelModal({
       await reviewWeeklySubmissionAction(submissionId, action, motivo);
       const actionLabels = {
         aprobar_publica: "Foto aprobada y agregada al catálogo público.",
-        aprobar_privada: "Foto aprobada como exclusiva para Telegram.",
+        aprobar_privada: "Foto aprobada como exclusiva para el chat.",
         rechazar: motivo
           ? "Foto rechazada y motivo enviado a la modelo."
           : "Foto rechazada.",
@@ -564,7 +562,7 @@ export default function ModelModal({
               {modelo ? `Editar Modelo: ${modelo.nombre}` : "Nueva Modelo"}
             </h2>
             <p className="text-xs text-zinc-500 font-light mt-1">
-              Configura perfil, valida fotos semanales de Telegram y gestiona contenido exclusivo.
+              Configura perfil, valida fotos semanales y gestiona contenido exclusivo.
             </p>
           </div>
           <button
@@ -619,7 +617,7 @@ export default function ModelModal({
                   : "border-transparent text-zinc-500 hover:text-zinc-300"
               }`}
             >
-              Fotos Exclusivas (Telegram)
+              Fotos Exclusivas
             </button>
           </div>
         )}
@@ -628,9 +626,9 @@ export default function ModelModal({
           <div className="p-6 space-y-6">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="font-heading text-lg text-white">Fotos Semanales Recibidas por Telegram</h3>
+                <h3 className="font-heading text-lg text-white">Fotos Semanales Recibidas</h3>
                 <p className="text-xs text-zinc-400">
-                  Revisa las fotos enviadas por la modelo. Puedes aprobarlas para que se agreguen a su catálogo público, como fotos privadas para clientes en Telegram, o rechazarlas.
+                  Revisa las fotos enviadas por la modelo. Puedes aprobarlas para que se agreguen a su catálogo público, como fotos privadas para clientes en el chat, o rechazarlas.
                 </p>
               </div>
               <button
@@ -710,13 +708,13 @@ export default function ModelModal({
 
             {/*
               Se pide el motivo al rechazar, sin exigirlo: la modelo lo ve en su
-              portal y le llega por Telegram, pero un rechazo sin explicar sigue
+              portal, pero un rechazo sin explicar sigue
               siendo mejor que una cola parada.
             */}
             <PromptDialog
               isOpen={porRechazar !== null}
               title="Rechazar la foto"
-              description="Explica que hay que corregir. El motivo le aparece a la modelo en su portal y le llega por Telegram con un acceso para subir otra. Puedes dejarlo vacio si prefieres no dar detalle."
+              description="Explica que hay que corregir. El motivo le aparece a la modelo en su portal. Puedes dejarlo vacio si prefieres no dar detalle."
               placeholder="Por ejemplo: la foto esta movida y se ve a otra persona al fondo."
               labelConfirm="Rechazar y avisar"
               variant="red"
@@ -750,7 +748,7 @@ export default function ModelModal({
               <div>
                 <h3 className="font-heading text-lg text-white">Fotos Exclusivas y Privadas para Clientes</h3>
                 <p className="text-xs text-zinc-400">
-                  Estas fotos NO son visibles en la página web pública. La IA o el jefe las envían por Telegram cuando los clientes las solicitan por chat.
+                  Estas fotos NO son visibles en la página web pública. La IA o el jefe las envían por el chat cuando los clientes las solicitan.
                 </p>
               </div>
               <div className="relative overflow-hidden">

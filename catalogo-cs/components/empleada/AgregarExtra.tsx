@@ -24,8 +24,7 @@ type Seleccion =
 /**
  * Agregar un extra al servicio en curso.
  *
- * En el chat esto son tres mensajes encadenados, porque en Telegram no cabe un
- * formulario y hay que ir preguntando de uno en uno. Aqui se elige el extra y
+ * Un formulario evita ir preguntando de uno en uno. Aqui se elige el extra y
  * el metodo de pago en la misma pantalla y se manda de una vez.
  *
  * **Solo se ven precios, nunca el nombre del extra.** Esta pantalla se abre con

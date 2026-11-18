@@ -135,8 +135,7 @@ export default function CreateServiceDialog({
     const term = clientSearch.toLowerCase();
     return clients.filter(
       (c) =>
-        (c.nombreTelegram || "").toLowerCase().includes(term) ||
-        (c.telegramChatId || "").includes(term) ||
+        (c.nombre || "").toLowerCase().includes(term) ||
         (c.telefono || "").includes(term),
     );
   }, [clients, clientSearch]);
@@ -198,8 +197,6 @@ export default function CreateServiceDialog({
 
     setSubmitting(true);
     try {
-      const client = clientMode === "registered" ? clients.find((c) => c.id === selectedClientId) : undefined;
-
       const payload = {
         clienteId: clientMode === "registered" ? selectedClientId || undefined : undefined,
         clienteNombreLibre: clientMode === "custom" ? clientFreeName.trim() : undefined,
@@ -221,7 +218,6 @@ export default function CreateServiceDialog({
               ).toISOString()
             : undefined,
         presetLocationId: locationType === "preset" ? presetLocationId : undefined,
-        clienteTelegramId: clientMode === "registered" ? client?.telegramChatId || undefined : undefined,
       };
 
       const res = await createManualServiceAction(payload);
@@ -322,7 +318,7 @@ export default function CreateServiceDialog({
                   <div className="space-y-2">
                     <input
                       type="text"
-                      placeholder="Filtrar por nombre o ID de Telegram..."
+                      placeholder="Filtrar por nombre o telefono..."
                       value={clientSearch}
                       onChange={(e) => setClientSearch(e.target.value)}
                       className="w-full px-3.5 py-2 bg-zinc-900/90 border border-zinc-800 rounded-xl text-xs text-white placeholder:text-zinc-500 focus:border-[#C5A55A] outline-none"
@@ -336,7 +332,7 @@ export default function CreateServiceDialog({
                       <option value="">-- Selecciona un cliente --</option>
                       {filteredClients.map((c) => (
                         <option key={c.id} value={c.id}>
-                          {c.nombreTelegram || "Cliente sin nombre"} (Telegram: {c.telegramChatId})
+                          {c.nombre || "Cliente sin nombre"}
                         </option>
                       ))}
                     </select>
@@ -354,7 +350,7 @@ export default function CreateServiceDialog({
                       required={clientMode === "custom"}
                     />
                     <p className="text-[11px] text-zinc-500">
-                      Se guardará con este nombre sin vincular a una cuenta de Telegram.
+                      Se guardará con este nombre sin vincular a una cuenta.
                     </p>
                   </div>
                 )}

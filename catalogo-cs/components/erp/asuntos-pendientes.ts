@@ -1,6 +1,6 @@
 import type { GodEyeOverview } from "@/lib/actions/god-eye";
 import type { RatingAppeal } from "@/lib/actions/discipline";
-import type { Driver, Employee } from "@/lib/types";
+
 import { codigoServicio } from "@/components/erp/primitives";
 
 /**
@@ -117,14 +117,9 @@ function viajesDe(servicio: { viajes?: unknown }): ViajeDelResumen[] {
 export function asuntosPendientes({
   overview,
   appeals,
-  empleadas,
-  choferes,
 }: {
   overview: GodEyeOverview;
   appeals: RatingAppeal[];
-  /** Solo se usan para detectar quien no tiene Telegram vinculado. */
-  empleadas: Employee[];
-  choferes: Driver[];
 }): AsuntoPendiente[] {
   const { metrics, activeServices, pendingReports } = overview;
   const asuntos: AsuntoPendiente[] = [];

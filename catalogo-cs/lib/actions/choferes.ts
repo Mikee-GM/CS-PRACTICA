@@ -18,8 +18,6 @@ export async function getChoferesAction(): Promise<
     vehiculoPlaca?: string;
     trustScore?: number | null;
     disponible: boolean;
-    /** Con chat vinculado, recibe por Telegram; sin el, no le llega nada. */
-    telegramChatId?: string | null;
     ubicacionVieja?: boolean;
     ultimaUbicacionAt?: string | null;
   }[]
@@ -45,7 +43,6 @@ export async function getChoferesAction(): Promise<
       vehiculoPlaca: d.vehiculoPlaca || "",
       trustScore: trustScores[d.usuarioId] ?? null,
       disponible: Boolean(d.disponible),
-      telegramChatId: d.usuario?.telegramChatId ?? null,
       ubicacionVieja: d.ubicacionVieja,
       ultimaUbicacionAt: d.ultimaUbicacionAt ?? null,
     }));

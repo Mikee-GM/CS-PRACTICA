@@ -87,8 +87,7 @@ export default async function DashboardPage() {
     // Sin disposicion guardada se usa el orden por defecto, no un tablero vacio.
     optionalSource(getDashboardLayout(), null, contexto),
     // Mismos datos que ya usa /admin/map: el mapa del centro de mando es el
-    // mismo componente, solo que integrado como bloque reordenable. La bandeja
-    // los reaprovecha para saber quien no tiene Telegram vinculado.
+    // mismo componente, solo que integrado como bloque reordenable.
     optionalSource(getEmployees(), [], contexto),
     optionalSource(getDrivers(), [], contexto),
   ]);
@@ -108,8 +107,6 @@ export default async function DashboardPage() {
   const asuntos = asuntosPendientes({
     overview,
     appeals: appeals ?? [],
-    empleadas: mapEmployees ?? [],
-    choferes: mapDrivers ?? [],
   });
 
   /*

@@ -212,40 +212,6 @@ export async function getIncidentRootCauseAction(
   );
 }
 
-export async function pauseServiceAiAction(serviceId: string) {
-  const result = await apiFetch<{ ok: boolean; iaActiva: boolean }>(
-    `/telegram-conversations/service/${serviceId}/pause-ai`,
-    { method: "POST" },
-  );
-  revalidatePath("/admin/dashboard");
-  return result;
-}
-
-export async function resumeServiceAiAction(serviceId: string) {
-  const result = await apiFetch<{ ok: boolean; iaActiva: boolean }>(
-    `/telegram-conversations/service/${serviceId}/resume-ai`,
-    { method: "POST" },
-  );
-  revalidatePath("/admin/dashboard");
-  return result;
-}
-
-export async function sendAdminChatMessageAction(
-  serviceId: string,
-  message: string,
-  asIdentity: "empleada" | "jefe" | "ia" = "jefe",
-) {
-  const result = await apiFetch(
-    `/telegram-conversations/service/${serviceId}/admin-message`,
-    {
-      method: "POST",
-      body: JSON.stringify({ message, asIdentity }),
-    },
-  );
-  revalidatePath("/admin/dashboard");
-  return result;
-}
-
 export async function updateActorQuickSettingsAction(
   type: "employee" | "driver" | "boss",
   id: string,

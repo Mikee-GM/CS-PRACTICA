@@ -87,8 +87,7 @@ function confirmacion(trip: Trip): Confirmacion {
   if (trip.fareConfirmedAt) return { label: "Confirmada", tone: "green" };
   if (
     trip.proveedorTransporte === "uber" &&
-    !trip.uberScreenshotUrl &&
-    !trip.telegramUberFileId
+    !trip.uberScreenshotUrl
   ) {
     return { label: "Sin comprobante", tone: "red" };
   }

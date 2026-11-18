@@ -201,7 +201,7 @@ describe("enlaceAlMapa", () => {
 });
 
 describe("queRecargar", () => {
-  it("ignora eventos que no son del chat web, como el modo de Telegram sin conversationId", () => {
+  it("ignora eventos que no son del chat web, como un cambio de modo sin conversationId", () => {
     expect(queRecargar({ type: "chat_message", data: { conversationId: "c1" } }, "c1")).toBeNull();
     expect(
       queRecargar({ type: "conversation_mode_changed", data: { bookingSessionId: "b1" } }, "c1"),

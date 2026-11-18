@@ -114,7 +114,7 @@ export default function ServicioDetalle({
       estado: comprobante.estado,
       monto: comprobante.monto,
       createdAt: comprobante.createdAt,
-      clienteTelegram: comprobante.clienteTelegram,
+      clienteNombre: comprobante.clienteNombre,
       observaciones: comprobante.observaciones,
     }));
 
@@ -485,7 +485,7 @@ export default function ServicioDetalle({
               <div className="h-px bg-zinc-800" />
 
               <PersonCell
-                name={service.cliente?.nombreTelegram ?? "Cliente"}
+                name={service.cliente?.nombre ?? "Cliente"}
                 meta={`Cliente ${service.clienteId?.slice(-6).toUpperCase() ?? "MANUAL"}`}
               />
 

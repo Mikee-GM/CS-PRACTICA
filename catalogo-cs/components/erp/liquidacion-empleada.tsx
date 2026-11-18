@@ -69,7 +69,7 @@ export default function LiquidacionEmpleada({
     monto: evidencia.amount,
     createdAt: evidencia.createdAt,
     servicioId: evidencia.serviceId,
-    clienteTelegram: evidencia.clientName,
+    clienteNombre: evidencia.clientName,
     observaciones: evidencia.observations,
   }));
 

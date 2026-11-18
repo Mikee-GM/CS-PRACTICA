@@ -13,9 +13,7 @@ import {
   FileCheck2,
   MapPin,
   MapPinned,
-  MessageCircle,
   Pencil,
-  Send,
   Star,
   User,
   X,
@@ -23,7 +21,7 @@ import {
 import { toast } from "sonner";
 import ServiceStatusBadge from "./service-status-badge";
 import { formatAvailabilityTime } from "@/lib/availability";
-import type { ConversationMessage, Service, Trip } from "@/lib/types";
+import type { Service, Trip } from "@/lib/types";
 import {
   cancelServiceAction,
   changeTripTransportAction,
@@ -32,9 +30,7 @@ import {
   decideServiceAction,
   deleteServiceAction,
   getServiceByIdAction,
-  getServiceMessagesAction,
   registerExternalTransportDetailsAction,
-  sendServiceMessageAction,
   updateCancellationAction,
   updateServiceAction,
 } from "@/lib/data/services";
@@ -64,7 +60,7 @@ export default function ServiceDetailDialog({
 }: ServiceDetailDialogProps) {
   const [service, setService] = useState<Service | null>(initialService);
   const [activeTab, setActiveTab] = useState<
-    "detalles" | "chat" | "transporte"
+    "detalles" | "transporte"
   >("detalles");
   const [editing, setEditing] = useState(false);
   const [reprogramando, setReprogramando] = useState(false);
@@ -86,11 +82,6 @@ export default function ServiceDetailDialog({
   // Accept state
   const [bossNotes, setBossNotes] = useState("");
 
-  // Chat state
-  const [messages, setMessages] = useState<ConversationMessage[]>([]);
-  const [chatLoading, setChatLoading] = useState(false);
-  const [messageText, setMessageText] = useState("");
-
   useEffect(() => {
     setService(initialService);
   }, [initialService]);
@@ -106,16 +97,6 @@ export default function ServiceDetailDialog({
       setBossNotes("");
     }
   }, [service]);
-
-  useEffect(() => {
-    if (service && activeTab === "chat") {
-      setChatLoading(true);
-      getServiceMessagesAction(service.id)
-        .then(setMessages)
-        .catch(() => toast.error("No se pudieron cargar los mensajes del chat"))
-        .finally(() => setChatLoading(false));
-    }
-  }, [service, activeTab]);
 
   if (!service) return null;
 
@@ -266,41 +247,6 @@ export default function ServiceDetailDialog({
     }
   };
 
-  const handleSendMessage = async () => {
-    const text = messageText.trim();
-    if (!text) return;
-    try {
-      const res = await sendServiceMessageAction(service.id, text);
-      if (!res.success || !res.data) {
-        throw new Error(res.error || "No se pudo enviar");
-      }
-      setMessages((prev) => [...prev, res.data!]);
-      setMessageText("");
-    } catch (err: any) {
-      toast.error(err.message || "Error al enviar mensaje");
-    }
-  };
-
-  const senderPresentation: Record<
-    ConversationMessage["emisor"],
-    { label: string; className: string }
-  > = {
-    cliente: { label: "Cliente", className: "bg-zinc-900 text-zinc-200" },
-    ia: {
-      label: "Asistente IA",
-      className:
-        "ml-auto border border-[#C5A55A]/35 bg-[#C5A55A]/10 text-[#E8D5A3]",
-    },
-    sistema: {
-      label: "Sistema",
-      className: "mx-auto border border-zinc-800 bg-black text-zinc-400",
-    },
-    jefe: {
-      label: "Administración / Jefe",
-      className: "ml-auto bg-[#C5A55A] text-black",
-    },
-  };
-
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto"
@@ -393,18 +339,6 @@ export default function ServiceDetailDialog({
             }`}
           >
             Detalles & Acciones
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("chat")}
-            className={`pb-3 px-4 text-xs font-bold uppercase tracking-wider transition-colors border-b-2 flex items-center gap-1.5 ${
-              activeTab === "chat"
-                ? "border-[#C5A55A] text-[#E8D5A3]"
-                : "border-transparent text-zinc-500 hover:text-zinc-300"
-            }`}
-          >
-            <MessageCircle size={14} />
-            Chat Telegram
           </button>
           <button
             type="button"
@@ -697,8 +631,8 @@ export default function ServiceDetailDialog({
                   </p>
                   <div className="space-y-1.5 text-sm">
                     <p className="text-zinc-300">
-                      <span className="text-zinc-500">Nombre / Telegram:</span>{" "}
-                      {service.cliente?.nombreTelegram || "Cliente sin nombre"}
+                      <span className="text-zinc-500">Nombre:</span>{" "}
+                      {service.cliente?.nombre || "Cliente sin nombre"}
                     </p>
                     {service.cliente?.telefono && (
                       <p className="text-zinc-300">
@@ -920,72 +854,6 @@ export default function ServiceDetailDialog({
                 </div>
               )}
             </>
-          )}
-
-          {activeTab === "chat" && (
-            <div className="flex flex-col h-[450px] rounded-2xl border border-zinc-800 bg-black/50 overflow-hidden">
-              <div className="flex-1 space-y-3 overflow-y-auto p-4">
-                {chatLoading ? (
-                  <p className="py-12 text-center text-xs text-zinc-500">
-                    Cargando mensajes...
-                  </p>
-                ) : messages.length === 0 ? (
-                  <p className="py-12 text-center text-xs text-zinc-600">
-                    No hay mensajes en esta conversación.
-                  </p>
-                ) : (
-                  messages.map((msg) => {
-                    const pres =
-                      senderPresentation[msg.emisor] ||
-                      senderPresentation.sistema;
-                    return (
-                      <div
-                        key={msg.id}
-                        className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-xs ${pres.className}`}
-                      >
-                        <p className="mb-1 text-[9px] font-bold uppercase tracking-wider opacity-60">
-                          {pres.label}
-                        </p>
-                        <p className="whitespace-pre-wrap leading-relaxed">
-                          {msg.mensaje}
-                        </p>
-                        <p className="mt-1 text-right text-[8px] opacity-40">
-                          {new Date(msg.enviadoAt).toLocaleTimeString([], {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </p>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-              {/* Chat Input */}
-              <div className="flex gap-2 border-t border-zinc-800 bg-black/40 p-3">
-                <textarea
-                  value={messageText}
-                  onChange={(e) => setMessageText(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      void handleSendMessage();
-                    }
-                  }}
-                  rows={1}
-                  maxLength={4000}
-                  placeholder="Escribe una respuesta para enviar a Telegram..."
-                  className="min-h-11 flex-1 resize-none rounded-xl border border-zinc-800 bg-black px-3.5 py-2.5 text-xs text-white outline-none focus:border-[#C5A55A]"
-                />
-                <button
-                  type="button"
-                  onClick={handleSendMessage}
-                  className="rounded-xl bg-[#C5A55A] px-4 text-black font-bold hover:bg-[#D4AF37] transition-all"
-                  aria-label="Enviar"
-                >
-                  <Send size={16} />
-                </button>
-              </div>
-            </div>
           )}
 
           {activeTab === "transporte" && (

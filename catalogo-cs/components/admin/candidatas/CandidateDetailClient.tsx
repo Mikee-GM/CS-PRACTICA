@@ -63,7 +63,6 @@ export default function CandidateDetailClient({
       const result = await createEmployeeAction({
         email: form.email.trim(),
         password: form.password,
-        telegramChatId: screening.telegramChatId || undefined,
         nombreReal: form.nombreReal.trim(),
         nombreArtistico: form.nombreArtistico.trim(),
         slugCatalogo: form.slugCatalogo.trim(),

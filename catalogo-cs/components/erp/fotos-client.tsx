@@ -177,7 +177,7 @@ export default function FotosClient({
       <PromptDialog
         isOpen={porRechazar !== null}
         title={`Rechazar la foto de "${porRechazar ? nombreDe(porRechazar) : ""}"`}
-        description="Explica que hay que corregir. El motivo le aparece en su portal y le llega por Telegram con un acceso para subir otra. Puedes dejarlo vacio si prefieres no dar detalle."
+        description="Explica que hay que corregir. El motivo le aparece en su portal. Puedes dejarlo vacio si prefieres no dar detalle."
         placeholder="Por ejemplo: la foto esta movida y se ve a otra persona al fondo."
         labelConfirm="Rechazar y avisar"
         variant="red"

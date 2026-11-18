@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { ApiError, apiFetch } from "@/lib/api-server";
 import { isRedirectError } from "@/lib/auth";
-import type { Client, ConversationMessage, Service } from "@/lib/types";
+import type { Client, Service } from "@/lib/types";
 import type { CancellationReason } from "@/lib/cancellation-reasons";
 import { asList } from "@/lib/paginated";
 
@@ -240,37 +240,6 @@ export async function cancelServiceAction(
         error instanceof Error
           ? error.message
           : "No se pudo cancelar el servicio",
-    };
-  }
-}
-
-export async function getServiceMessagesAction(
-  serviceId: string,
-): Promise<ConversationMessage[]> {
-  const result = await apiFetch<{ messages: ConversationMessage[] }>(
-    `/telegram-conversations/service/${serviceId}`,
-  );
-  return result.messages || [];
-}
-
-export async function sendServiceMessageAction(
-  serviceId: string,
-  message: string,
-) {
-  try {
-    const data = await apiFetch<ConversationMessage>(
-      `/telegram-conversations/service/${serviceId}/messages`,
-      {
-        method: "POST",
-        body: JSON.stringify({ message }),
-      },
-    );
-    return { success: true, data };
-  } catch (error) {
-    return {
-      success: false,
-      error:
-        error instanceof Error ? error.message : "No se pudo enviar el mensaje",
     };
   }
 }

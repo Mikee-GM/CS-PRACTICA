@@ -10,8 +10,8 @@ import { desdeHoraDelNegocio, paraInputDeFechaHora } from "@/lib/locale";
 /**
  * Solicitud de servicio de la empleada, desde un botón fijo en la esquina.
  *
- * Cuando cuadra un cliente por su cuenta, la única vía era el chat de Telegram,
- * y desde el portal no había forma de pedirlo. El botón está fijo porque este
+ * Cuando cuadra un cliente por su cuenta, desde el portal hace falta una forma
+ * directa de pedirlo. El botón está fijo porque este
  * momento no ocurre dentro de ninguna pestaña concreta: pasa mientras habla con
  * el cliente, en cualquier pantalla, y muchas veces con prisa.
  *

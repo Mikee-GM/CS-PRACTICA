@@ -602,8 +602,7 @@ export default function EmployeePortalView({
                   </span>
                 </div>
                 {/*
-                  El aviso reemplaza al texto fijo que estaba aqui: decia que
-                  las fotos se mandaban por Telegram, que ya no es cierto, y no
+                  El aviso reemplaza al texto fijo que estaba aqui, que no
                   distinguia entre estar al dia y llevar dos recordatorios
                   encima.
                 */}
@@ -978,7 +977,7 @@ export default function EmployeePortalView({
               )}
             </div>
 
-            {/* Galería Exclusiva (Telegram) */}
+            {/* Galería Exclusiva */}
             <div className="bg-[#141721] p-5 rounded-xl border border-white/5 space-y-4">
               <div className="flex items-center justify-between">
                 <div>

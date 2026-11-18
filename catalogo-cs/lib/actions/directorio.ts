@@ -58,7 +58,7 @@ export async function getDirectorio(): Promise<Directorio> {
   }
 
   for (const client of asList<Client>(clients)) {
-    if (client.nombreTelegram) vacio.client[client.id] = client.nombreTelegram;
+    if (client.nombre) vacio.client[client.id] = client.nombre;
   }
 
   return vacio;

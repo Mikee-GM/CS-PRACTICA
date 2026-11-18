@@ -8,7 +8,6 @@ import { z } from "zod";
 const EmployeeSchema = z.object({
   email: z.string().email("Correo electrónico no válido"),
   password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
-  telegramChatId: z.string().optional().nullable(),
   nombreReal: z.string().min(2, "El nombre real es obligatorio"),
   nombreArtistico: z.string().min(2, "El nombre artístico es obligatorio"),
   slugCatalogo: z.string().min(2, "El slug es obligatorio"),
@@ -24,7 +23,6 @@ const EmployeeSchema = z.object({
 const DriverSchema = z.object({
   email: z.string().email("Correo electrónico no válido"),
   password: z.string().min(6, "La contraseña debe tener al menos 6 caracteres"),
-  telegramChatId: z.string().optional().nullable(),
   nombre: z.string().min(2, "El nombre es obligatorio"),
   telefono: z.string().min(6, "El teléfono es obligatorio"),
   disponible: z.boolean().optional(),
@@ -44,7 +42,6 @@ export async function createEmployeeAction(data: unknown): Promise<{ success: bo
     const formattedData = {
       email: validData.email,
       password: validData.password,
-      telegramChatId: validData.telegramChatId || undefined,
       nombreReal: validData.nombreReal,
       nombreArtistico: validData.nombreArtistico,
       slugCatalogo: validData.slugCatalogo,
@@ -83,7 +80,6 @@ export async function createDriverAction(data: unknown): Promise<{ success: bool
     const formattedData = {
       email: validData.email,
       password: validData.password,
-      telegramChatId: validData.telegramChatId || undefined,
       nombre: validData.nombre,
       telefono: validData.telefono,
       disponible: validData.disponible === true,
