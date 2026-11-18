@@ -21,8 +21,7 @@ export const metadata: Metadata = {
  * pregunta a `/auth/me` por el rol; en los portales no pregunta --solo renueva
  * la sesion-- y añadirle esa consulta costaria una peticion mas en cada
  * navegacion. Aqui sale gratis: `getCurrentUser` esta deduplicado por peticion
- * y las paginas del portal ya lo llaman. Quien entra con un enlace con token
- * no tiene sesion propia todavia y pasa como hasta ahora.
+ * y las paginas del portal ya lo llaman.
  */
 export default async function DriverLayout({ children }: { children: React.ReactNode }) {
   const usuario = await getCurrentUser();

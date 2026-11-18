@@ -40,10 +40,8 @@ type Seleccion =
  */
 export default function AgregarExtra({
   servicioId,
-  token,
 }: {
   servicioId: string;
-  token?: string;
 }) {
   const router = useRouter();
   const [abierto, setAbierto] = useState(false);
@@ -69,7 +67,7 @@ export default function AgregarExtra({
     setError(null);
     setExito(null);
     startTransition(async () => {
-      const resultado = await getAvailableExtras(servicioId, token);
+      const resultado = await getAvailableExtras(servicioId);
       if (!resultado.success) {
         setError(resultado.error ?? "No se pudieron cargar tus extras.");
         return;
@@ -99,7 +97,6 @@ export default function AgregarExtra({
             : { precioCobrado: montoLibre }),
           metodoPago: "tarjeta",
         },
-        token,
       );
       if (!resultado.success) {
         setError(resultado.error ?? "No se pudo agregar el extra.");

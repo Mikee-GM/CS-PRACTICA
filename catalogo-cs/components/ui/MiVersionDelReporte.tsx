@@ -39,15 +39,12 @@ const MOTIVO_LABEL: Record<string, string> = {
 export default function MiVersionDelReporte({
   cargar,
   responder,
-  token,
 }: {
-  cargar: (token?: string) => Promise<ReporteSobreMi[]>;
+  cargar: () => Promise<ReporteSobreMi[]>;
   responder: (
     reportId: string,
     statement: string,
-    token?: string,
   ) => Promise<{ success: boolean; error?: string }>;
-  token?: string;
 }) {
   const router = useRouter();
   const [reportes, setReportes] = useState<ReporteSobreMi[] | null>(null);
@@ -57,13 +54,13 @@ export default function MiVersionDelReporte({
 
   const releer = useCallback(async () => {
     try {
-      setReportes(await cargar(token));
+      setReportes(await cargar());
     } catch (error) {
       // Sin lista no se dibuja nada. El resto del portal sigue funcionando.
       console.error("No se pudieron leer los reportes propios:", error);
       setReportes([]);
     }
-  }, [cargar, token]);
+  }, [cargar]);
 
   useEffect(() => {
     void releer();
@@ -88,7 +85,7 @@ export default function MiVersionDelReporte({
     }
 
     startTransition(async () => {
-      const resultado = await responder(reporte.id, version, token);
+      const resultado = await responder(reporte.id, version);
       if (!resultado.success) {
         toast.error(resultado.error ?? "No se pudo enviar tu versión");
         return;

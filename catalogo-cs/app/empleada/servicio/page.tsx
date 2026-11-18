@@ -8,15 +8,12 @@ import ServicioAhora from "@/components/empleada/ServicioAhora";
 import ActualizarEnVivo from "@/components/ui/ActualizarEnVivo";
 import { getEmployeePortalData } from "@/lib/actions/employee-portal";
 import { getCurrentUser } from "@/lib/auth";
+import { inicioParaRol } from "@/lib/roles";
 
 export const metadata: Metadata = {
   title: "Mi servicio -- Colombia Sexys",
   robots: "noindex, nofollow",
 };
-
-interface PageProps {
-  searchParams: Promise<{ token?: string }>;
-}
 
 /**
  * El servicio en curso, solo.
@@ -27,12 +24,12 @@ interface PageProps {
  * finalizar, extender, cobrar un extra o pedir prorroga. Aqui no hay nada mas,
  * y a esta pantalla apuntan los avisos que se mandan durante el servicio.
  */
-export default async function EmpleadaServicioPage({ searchParams }: PageProps) {
-  const { token } = await searchParams;
+export default async function EmpleadaServicioPage() {
   const sesion = await getCurrentUser();
-  if (!sesion && !token) redirect("/ingresar");
+  if (!sesion) redirect("/ingresar");
+  if (sesion.rol !== "empleada") redirect(inicioParaRol(sesion.rol));
 
-  const resultado = await getEmployeePortalData(token);
+  const resultado = await getEmployeePortalData();
   if (!resultado.success || !resultado.data) redirect("/empleada/portal");
 
   return (
@@ -56,7 +53,7 @@ export default async function EmpleadaServicioPage({ searchParams }: PageProps) 
       <main className="mx-auto w-full max-w-2xl space-y-4 p-4 sm:p-6">
         {/* Lo que autoriza o cambia el jefe tiene que llegar sin recargar. */}
         <ActualizarEnVivo canal="empleada" />
-        <ServicioAhora servicio={resultado.data.activeService} token={token} />
+        <ServicioAhora servicio={resultado.data.activeService} />
       </main>
       <Toaster theme="dark" position="bottom-right" richColors />
     </div>

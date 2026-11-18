@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import Image from "next/image";
 import type { EmployeePortalData } from "@/lib/types";
 import { formatCurrency as formatCurrencyMXN } from "@/lib/calculations";
@@ -54,17 +54,16 @@ import {
 
 interface EmployeePortalViewProps {
   initialData: EmployeePortalData;
-  token?: string;
-  /** Nulo cuando se entra con un enlace antiguo, sin sesion. */
-  workShift?: WorkShiftStatus | null;
+  /** Nulo si no se pudo leer el estado de la jornada. */
+  workShift: WorkShiftStatus | null;
   /** Fotos de la semana ya resueltas en el servidor, para no parpadear. */
   weeklyPhotos?: WeeklyPhotoSubmissionItem[];
   /**
-   * Pestaña inicial. El boton de Telegram trae `?seccion=fotos` para aterrizar
+   * Pestaña inicial. El aviso trae `?seccion=fotos` para aterrizar
    * directamente donde se suben, que es el motivo por el que se mando el aviso.
    */
   seccionInicial?: SeccionInicial;
-  /** Retos de la sesion; vacio con un enlace antiguo `?token=`, que no lleva cookie. */
+  /** Retos de la sesion. */
   retos?: RetoDelPersonal[];
 }
 
@@ -78,7 +77,6 @@ type SeccionInicial = TabType | "canal";
 
 export default function EmployeePortalView({
   initialData,
-  token,
   workShift,
   weeklyPhotos = [],
   seccionInicial = "resumen",
@@ -88,18 +86,6 @@ export default function EmployeePortalView({
     seccionInicial === "canal" ? "resumen" : seccionInicial,
   );
   const data = initialData;
-
-  useEffect(() => {
-    // Configurar Telegram WebApp si se ejecuta dentro del cliente de Telegram
-    if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
-      const tg = (window as any).Telegram.WebApp;
-      tg.ready();
-      tg.expand();
-      if (tg.setHeaderColor) {
-        tg.setHeaderColor("#0B0D13");
-      }
-    }
-  }, []);
 
   const formatCurrency = formatCurrencyMXN;
 
@@ -201,10 +187,7 @@ export default function EmployeePortalView({
                 </span>
               </div>
             </div>
-            {/* Solo con sesion propia: quien entra con el enlace del bot no
-                tiene sesion que cerrar. */}
-            {workShift !== undefined && workShift !== null && (
-              <>
+            <>
                 {/* En el telefono queda solo la campana, con su etiqueta
                     accesible: la palabra no cabia y empujaba el boton de
                     salir fuera de la pantalla. */}
@@ -218,38 +201,29 @@ export default function EmployeePortalView({
                 </Link>
                 <CerrarSesion />
               </>
-            )}
           </div>
         </div>
 
         {/* NAVIGATION TABS */}
         <div className="max-w-4xl mx-auto mt-3 flex items-center gap-1 overflow-x-auto no-scrollbar pb-1 border-t border-white/5 pt-2">
-          {workShift !== undefined && workShift !== null ? (
-            <Link
+          <Link
               href="/empleada/historial"
               className="flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-white/5 px-3.5 py-2 text-xs font-semibold text-gray-400 transition-colors hover:bg-white/10 hover:text-white"
             >
               <History size={14} /> Historial
             </Link>
-          ) : null}
-          {workShift !== undefined && workShift !== null ? (
-            <Link
+          <Link
               href="/empleada/reglamento"
               className="flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-white/5 px-3.5 py-2 text-xs font-semibold text-gray-400 transition-colors hover:bg-white/10 hover:text-white"
             >
               <BookOpen size={14} /> Reglamento
             </Link>
-          ) : null}
-          {/* Con sesion propia, como el historial: un borrador necesita una
-              cuenta a cuyo nombre guardarse. */}
-          {workShift !== undefined && workShift !== null ? (
-            <Link
+          <Link
               href="/empleada/posts"
               className="flex items-center gap-1.5 whitespace-nowrap rounded-lg bg-white/5 px-3.5 py-2 text-xs font-semibold text-gray-400 transition-colors hover:bg-white/10 hover:text-white"
             >
               <ImageIcon size={14} /> Publicaciones
             </Link>
-          ) : null}
           {[
             {
               id: "resumen",
@@ -319,31 +293,26 @@ export default function EmployeePortalView({
         */}
         <ServicioAhora
           servicio={data.activeService}
-          token={token}
           enlaceAPantallaPropia
         />
-        {/* Mientras esta pantalla siga abierta, el panel la ve en el mapa: es
-            lo que evita tener que mandar la ubicacion por Telegram. */}
-        {workShift !== undefined && workShift !== null && (
-          <CompartirUbicacion registrar={registrarMiUbicacion} token={token} />
-        )}
+        {/* Mientras esta pantalla siga abierta, el panel la ve en el mapa. */}
+        <CompartirUbicacion registrar={registrarMiUbicacion} />
         {/*
           Va aqui arriba, fuera de las pestañas, por el mismo motivo que el
           servicio: es algo que hay que hacer, no algo que se consulta, y
           escondido en una pestaña no se hacia nunca. Se dibuja solo los dias
           que hay algo pendiente.
         */}
-        <CalificarCliente token={token} />
-        {/* Las rutas de choferes piden cookie: con un enlace de token no sirven. */}
-        {workShift !== undefined && workShift !== null && <CalificarChofer />}
+        <CalificarCliente />
+        <CalificarChofer />
         {/* ================= TAB 1: RESUMEN Y FINANZAS ================= */}
         {activeTab === "resumen" && (
           <div className="space-y-6 animate-fadeIn">
             {/*
-              Cerrar la jornada le avisa a su jefe. Solo aparece con sesion
-              propia: un enlace antiguo con token no identifica a la persona.
+              Cerrar la jornada le avisa a su jefe. Si no se pudo leer su estado
+              no se dibuja: el interruptor necesita el valor inicial.
             */}
-            {workShift !== undefined && workShift !== null && (
+            {workShift && (
               <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
                 <WorkShiftToggle initialStatus={workShift} />
               </div>
@@ -841,7 +810,6 @@ export default function EmployeePortalView({
                           direction="employee_to_client"
                           sujeto="al cliente"
                           reportar={reportarConducta}
-                          token={token}
                         />
                       </div>
                     </div>
@@ -859,7 +827,6 @@ export default function EmployeePortalView({
             <ApelarCalificacion
               cargar={getCalificacionesApelables}
               apelar={apelarCalificacion}
-              token={token}
             />
 
             {/*
@@ -869,7 +836,6 @@ export default function EmployeePortalView({
             <MiVersionDelReporte
               cargar={getReportesSobreMi}
               responder={responderReporte}
-              token={token}
             />
 
             {/* Header de reputación */}
@@ -970,7 +936,6 @@ export default function EmployeePortalView({
             <SubirFotosSemanales
               estadoInicial={data.profile.weeklyContent}
               enviosIniciales={weeklyPhotos}
-              token={token}
             />
 
             {/* Galería Pública */}
@@ -1060,10 +1025,9 @@ export default function EmployeePortalView({
       {/*
         Fuera de <main> y de las pestañas: cuadrar un cliente por su cuenta no
         pasa dentro de ninguna seccion concreta, asi que el boton acompaña a
-        toda la pantalla. Solo con sesion propia, porque el enlace de un solo
-        uso del bot no permite crear nada.
+        toda la pantalla.
       */}
-      {workShift !== undefined && workShift !== null && <SolicitarServicio />}
+      <SolicitarServicio />
 
       {/*
         El canal con coordinación, a la vista.
@@ -1073,7 +1037,6 @@ export default function EmployeePortalView({
         leer: de otro modo, saber si le habían escrito exigía entrar a mirar.
       */}
       <BotonCanal
-        token={token}
         sinLeer={data.canalSinLeer ?? 0}
         abrirAlEntrar={seccionInicial === "canal"}
       />

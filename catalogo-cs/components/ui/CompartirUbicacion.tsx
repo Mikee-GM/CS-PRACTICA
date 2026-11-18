@@ -34,19 +34,16 @@ type Estado = "sin-soporte" | "apagado" | "encendido" | "denegado";
 /**
  * La accion que guarda la posicion la pone quien monta el componente.
  *
- * Cada portal tiene la suya, con las cabeceras y el token propios de su rol, y
+ * Cada portal tiene la suya, con las cabeceras propias de su rol, y
  * asi este componente sirve para los dos sin saber cual es cual.
  */
 export default function CompartirUbicacion({
   registrar,
-  token,
 }: {
   registrar: (
     lat: number,
     lng: number,
-    token?: string,
   ) => Promise<{ success: boolean }>;
-  token?: string;
 }) {
   const [estado, setEstado] = useState<Estado>("apagado");
   const vigilancia = useRef<number | null>(null);
@@ -69,9 +66,9 @@ export default function CompartirUbicacion({
 
       // Un envio perdido no se avisa: el siguiente lo corrige, y una tostada
       // por cada bache de cobertura seria peor que el problema.
-      await registrar(lat, lng, token);
+      await registrar(lat, lng);
     },
-    [registrar, token],
+    [registrar],
   );
 
   const arrancar = useCallback(() => {

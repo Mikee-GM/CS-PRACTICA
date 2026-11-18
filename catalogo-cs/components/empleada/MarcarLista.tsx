@@ -23,10 +23,8 @@ import type { EmployeePortalActiveService } from "@/lib/types";
  */
 export default function MarcarLista({
   servicio,
-  token,
 }: {
   servicio: EmployeePortalActiveService;
-  token?: string;
 }) {
   const router = useRouter();
   const [confirmando, setConfirmando] = useState(false);
@@ -34,7 +32,7 @@ export default function MarcarLista({
 
   function avisar() {
     startTransition(async () => {
-      const resultado = await marcarListaParaSalir(servicio.id, token);
+      const resultado = await marcarListaParaSalir(servicio.id);
       if (!resultado.success) {
         toast.error(resultado.error ?? "No se pudo avisar");
         return;

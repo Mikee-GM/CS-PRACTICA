@@ -24,11 +24,9 @@ import { pedirProrroga } from "@/lib/actions/employee-portal";
 export default function PedirProrroga({
   servicioId,
   prorrogasUsadas,
-  token,
 }: {
   servicioId: string;
   prorrogasUsadas: number;
-  token?: string;
 }) {
   const router = useRouter();
   const [confirmando, setConfirmando] = useState(false);
@@ -39,7 +37,7 @@ export default function PedirProrroga({
 
   function solicitar() {
     startTransition(async () => {
-      const resultado = await pedirProrroga(servicioId, token);
+      const resultado = await pedirProrroga(servicioId);
       if (!resultado.success) {
         toast.error(resultado.error);
         return;

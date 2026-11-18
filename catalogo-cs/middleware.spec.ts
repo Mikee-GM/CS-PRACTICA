@@ -477,3 +477,43 @@ describe("middleware: login unico y cambio de contraseña obligatorio", () => {
     expect(config.matcher).toEqual(expect.arrayContaining(["/cambiar-contrasena"]));
   });
 });
+
+describe("middleware: portales de empleada y chofer", () => {
+  const portales = [
+    "/empleada/portal",
+    "/chofer/portal",
+    "/empleada/servicio",
+    "/chofer/servicio",
+  ];
+
+  it.each(portales)(
+    "%s no canjea ningun token de la URL: sin cookie solo deja pasar",
+    async (ruta) => {
+      global.fetch = jest.fn() as unknown as typeof fetch;
+
+      const respuesta = await middleware(peticion(`${ruta}?token=x`));
+
+      expect(respuesta.headers.get("location")).toBeNull();
+      expect(global.fetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(portales)(
+    "con el acceso caducado %s renueva con el refresh",
+    async (ruta) => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        headers: new Headers({
+          "set-cookie": "access_token=nuevo; Path=/; HttpOnly",
+        }),
+      }) as unknown as typeof fetch;
+
+      const respuesta = await middleware(
+        peticion(ruta, { refresh_token: "s:refresco.firma" }),
+      );
+
+      expect(respuesta.headers.get("location")).toBeNull();
+      expect(respuesta.headers.get("set-cookie")).toMatch(/access_token=nuevo/);
+    },
+  );
+});

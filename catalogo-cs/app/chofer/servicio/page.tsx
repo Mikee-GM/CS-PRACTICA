@@ -10,15 +10,12 @@ import ActualizarEnVivo from "@/components/ui/ActualizarEnVivo";
 import { ZONA_LABEL } from "@/components/chofer/zonas";
 import { getDriverPortalData } from "@/lib/actions/driver-portal";
 import { getCurrentUser } from "@/lib/auth";
+import { inicioParaRol } from "@/lib/roles";
 
 export const metadata: Metadata = {
   title: "Mi viaje -- Colombia Sexys",
   robots: "noindex, nofollow",
 };
-
-interface PageProps {
-  searchParams: Promise<{ token?: string }>;
-}
 
 /**
  * El viaje en curso, solo.
@@ -27,12 +24,12 @@ interface PageProps {
  * hace falta es el viaje y sus botones. Las ofertas pendientes si entran aqui
  * porque caducan, y perderselas por estar en otra pantalla cuesta un servicio.
  */
-export default async function ChoferServicioPage({ searchParams }: PageProps) {
-  const { token } = await searchParams;
+export default async function ChoferServicioPage() {
   const sesion = await getCurrentUser();
-  if (!sesion && !token) redirect("/ingresar");
+  if (!sesion) redirect("/ingresar");
+  if (sesion.rol !== "chofer") redirect(inicioParaRol(sesion.rol));
 
-  const resultado = await getDriverPortalData(token);
+  const resultado = await getDriverPortalData();
   if (!resultado.success || !resultado.data) redirect("/chofer/portal");
 
   return (

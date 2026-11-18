@@ -6,32 +6,21 @@ import { getApiBaseUrl } from "@/lib/api-server";
 import { getBackendCookieHeader, getCsrfToken } from "@/lib/auth";
 import type { DriverPortalData, ReporteSobreMi } from "@/lib/types";
 
-/**
- * La URL del portal, con el token de la Mini App si lo hay.
- *
- * El portal se puede abrir de dos formas: con sesion propia --cookie-- o desde
- * un enlace de Telegram con token. Estas dos funciones mandan las dos cosas,
- * asi que quien llama no tiene que saber por cual entro.
- */
-function portalUrl(path: string, token?: string) {
-  const url = new URL(`${getApiBaseUrl()}${path}`);
-  if (token) url.searchParams.set("token", token);
-  return url.toString();
+/** La URL del portal; la sesion viaja en cookie, nunca en la URL. */
+function portalUrl(path: string) {
+  return new URL(`${getApiBaseUrl()}${path}`).toString();
 }
 
-async function portalHeaders(token?: string) {
+async function portalHeaders() {
   const cookie = await getBackendCookieHeader();
   const csrf = await getCsrfToken();
   const headers: Record<string, string> = {};
   if (cookie) headers["Cookie"] = cookie;
   if (csrf) headers["x-csrf-token"] = csrf;
-  if (token) headers["Authorization"] = `Bearer ${token}`;
   return headers;
 }
 
-export async function getDriverPortalData(
-  token?: string,
-): Promise<{ success: boolean; data?: DriverPortalData; error?: string }> {
+export async function getDriverPortalData(): Promise<{ success: boolean; data?: DriverPortalData; error?: string }> {
   try {
     const cookie = await getBackendCookieHeader();
     const headers: Record<string, string> = {
@@ -40,14 +29,8 @@ export async function getDriverPortalData(
     if (cookie) {
       headers["Cookie"] = cookie;
     }
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
-    }
 
     const url = new URL(`${getApiBaseUrl()}/driver-portal/me`);
-    if (token) {
-      url.searchParams.set("token", token);
-    }
 
     const response = await fetch(url.toString(), {
       method: "GET",
@@ -84,9 +67,8 @@ export async function getDriverPortalData(
  */
 export async function marcarLlegadaDelViaje(
   tripId: string,
-  token?: string,
 ): Promise<{ success: boolean; error?: string }> {
-  return avanzarViaje(tripId, "arrived", token);
+  return avanzarViaje(tripId, "arrived");
 }
 
 /**
@@ -96,9 +78,8 @@ export async function marcarLlegadaDelViaje(
  */
 export async function marcarRecogidaDelViaje(
   tripId: string,
-  token?: string,
 ): Promise<{ success: boolean; error?: string }> {
-  return avanzarViaje(tripId, "picked-up", token);
+  return avanzarViaje(tripId, "picked-up");
 }
 
 /**
@@ -110,32 +91,28 @@ export async function marcarRecogidaDelViaje(
  */
 export async function aceptarOfertaDeViaje(
   tripId: string,
-  token?: string,
 ): Promise<{ success: boolean; error?: string; aceptado?: boolean }> {
-  const resultado = await avanzarViaje(tripId, "accept", token);
+  const resultado = await avanzarViaje(tripId, "accept");
   return resultado;
 }
 
 /** Deja pasar una oferta, que se reofrece al siguiente chofer. */
 export async function rechazarOfertaDeViaje(
   tripId: string,
-  token?: string,
 ): Promise<{ success: boolean; error?: string; rechazado?: boolean }> {
-  return avanzarViaje(tripId, "reject", token);
+  return avanzarViaje(tripId, "reject");
 }
 
 /** Cierra el viaje. Es la que dispara el recibo final del servicio. */
 export async function finalizarElViaje(
   tripId: string,
-  token?: string,
 ): Promise<{ success: boolean; error?: string }> {
-  return avanzarViaje(tripId, "finished", token);
+  return avanzarViaje(tripId, "finished");
 }
 
 async function avanzarViaje(
   tripId: string,
   paso: "arrived" | "picked-up" | "finished" | "accept" | "reject",
-  token?: string,
 ): Promise<{
   success: boolean;
   error?: string;
@@ -150,12 +127,10 @@ async function avanzarViaje(
     };
     if (cookie) headers["Cookie"] = cookie;
     if (csrf) headers["x-csrf-token"] = csrf;
-    if (token) headers["Authorization"] = `Bearer ${token}`;
 
     const url = new URL(
       `${getApiBaseUrl()}/driver-portal/trips/${tripId}/${paso}`,
     );
-    if (token) url.searchParams.set("token", token);
 
     const response = await fetch(url.toString(), {
       method: "POST",
@@ -197,7 +172,6 @@ async function avanzarViaje(
 export async function registrarMiUbicacion(
   lat: number,
   lng: number,
-  token?: string,
 ): Promise<{ success: boolean }> {
   try {
     const cookie = await getBackendCookieHeader();
@@ -207,10 +181,8 @@ export async function registrarMiUbicacion(
     };
     if (cookie) headers["Cookie"] = cookie;
     if (csrf) headers["x-csrf-token"] = csrf;
-    if (token) headers["Authorization"] = `Bearer ${token}`;
 
     const url = new URL(`${getApiBaseUrl()}/driver-portal/location`);
-    if (token) url.searchParams.set("token", token);
 
     const response = await fetch(url.toString(), {
       method: "POST",
@@ -241,16 +213,14 @@ export type CalificacionApelable = {
  * El backend resuelve de quien son a partir de la sesion, nunca de un
  * parametro: no hay forma de pedir las de otro.
  */
-export async function getCalificacionesApelables(
-  token?: string,
-): Promise<CalificacionApelable[]> {
+export async function getCalificacionesApelables(): Promise<CalificacionApelable[]> {
   try {
     const response = await fetch(
-      portalUrl("/driver-portal/ratings/appealable", token),
+      portalUrl("/driver-portal/ratings/appealable"),
       {
         method: "GET",
         cache: "no-store",
-        headers: await portalHeaders(token),
+        headers: await portalHeaders(),
       },
     );
     if (!response.ok) return [];
@@ -270,16 +240,15 @@ export async function getCalificacionesApelables(
 export async function apelarCalificacion(
   ratingId: string,
   reason: string,
-  token?: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const response = await fetch(
-      portalUrl(`/driver-portal/ratings/${ratingId}/appeal`, token),
+      portalUrl(`/driver-portal/ratings/${ratingId}/appeal`),
       {
         method: "POST",
         cache: "no-store",
         headers: {
-          ...(await portalHeaders(token)),
+          ...(await portalHeaders()),
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ reason }),
@@ -313,14 +282,13 @@ export async function reportarConducta(
     category: string;
     description: string;
   },
-  token?: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const response = await fetch(portalUrl("/driver-portal/reports", token), {
+    const response = await fetch(portalUrl("/driver-portal/reports"), {
       method: "POST",
       cache: "no-store",
       headers: {
-        ...(await portalHeaders(token)),
+        ...(await portalHeaders()),
         "Content-Type": "application/json",
       },
       body: JSON.stringify(input),
@@ -348,7 +316,7 @@ export async function reportarConducta(
  * Es distinto de `reportarConducta`: aquel lo revisa un jefe y alimenta el
  * bloqueo de personas; este llega a `employee_reports`, donde lo atiende
  * administracion. Solo admite sesion propia --el backend exige cookie y CSRF--,
- * asi que no manda token.
+ * asi que no hay otra via.
  */
 export async function reportarEmpleadaDelViaje(input: {
   viajeId: string;
@@ -401,13 +369,11 @@ export type EmpleadaPorCalificar = {
  * ningun lado: quien cerraba el viaje desde el portal --o no veia el mensaje del
  * bot a tiempo-- se quedaba sin poder calificar nunca.
  */
-export async function getEmpleadasPorCalificar(
-  token?: string,
-): Promise<EmpleadaPorCalificar[]> {
+export async function getEmpleadasPorCalificar(): Promise<EmpleadaPorCalificar[]> {
   try {
     const response = await fetch(
-      portalUrl("/driver-portal/ratings/pending-employees", token),
-      { method: "GET", cache: "no-store", headers: await portalHeaders(token) },
+      portalUrl("/driver-portal/ratings/pending-employees"),
+      { method: "GET", cache: "no-store", headers: await portalHeaders() },
     );
     if (!response.ok) return [];
     return (await response.json()) as EmpleadaPorCalificar[];
@@ -420,14 +386,13 @@ export async function getEmpleadasPorCalificar(
 /** Deja la valoracion del chofer sobre la empleada de uno de sus viajes. */
 export async function calificarEmpleada(
   input: { viajeId: string; stars: number; comment?: string },
-  token?: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const response = await fetch(portalUrl("/driver-portal/ratings", token), {
+    const response = await fetch(portalUrl("/driver-portal/ratings"), {
       method: "POST",
       cache: "no-store",
       headers: {
-        ...(await portalHeaders(token)),
+        ...(await portalHeaders()),
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -462,13 +427,11 @@ export async function calificarEmpleada(
  * habia una sancion encima y la decision se habia tomado con un solo relato
  * delante.
  */
-export async function getReportesSobreMi(
-  token?: string,
-): Promise<ReporteSobreMi[]> {
+export async function getReportesSobreMi(): Promise<ReporteSobreMi[]> {
   try {
     const response = await fetch(
-      portalUrl("/driver-portal/reports/mine", token),
-      { method: "GET", cache: "no-store", headers: await portalHeaders(token) },
+      portalUrl("/driver-portal/reports/mine"),
+      { method: "GET", cache: "no-store", headers: await portalHeaders() },
     );
     if (!response.ok) return [];
     return (await response.json()) as ReporteSobreMi[];
@@ -482,16 +445,15 @@ export async function getReportesSobreMi(
 export async function responderReporte(
   reportId: string,
   statement: string,
-  token?: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const response = await fetch(
-      portalUrl(`/driver-portal/reports/${reportId}/statement`, token),
+      portalUrl(`/driver-portal/reports/${reportId}/statement`),
       {
         method: "POST",
         cache: "no-store",
         headers: {
-          ...(await portalHeaders(token)),
+          ...(await portalHeaders()),
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ statement }),

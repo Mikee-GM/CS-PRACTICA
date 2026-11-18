@@ -36,7 +36,6 @@ export default function ReportarConducta({
   direction,
   sujeto,
   reportar,
-  token,
   etiqueta,
   minimoDescripcion = MINIMO_DESCRIPCION,
   revisor = "un jefe",
@@ -53,9 +52,7 @@ export default function ReportarConducta({
       category: string;
       description: string;
     },
-    token?: string,
   ) => Promise<{ success: boolean; error?: string }>;
-  token?: string;
   /**
    * Texto del boton cerrado. Por defecto "Reportar {sujeto}"; permite montar dos
    * reportes distintos sobre el mismo viaje sin duplicar el formulario.
@@ -92,7 +89,6 @@ export default function ReportarConducta({
           category: categoria,
           description: texto,
         },
-        token,
       );
       if (!resultado.success) {
         toast.error(resultado.error);

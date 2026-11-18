@@ -37,11 +37,9 @@ import type { EmployeePortalActiveService } from "@/lib/types";
  */
 export default function ServicioAhora({
   servicio,
-  token,
   enlaceAPantallaPropia = false,
 }: {
   servicio: EmployeePortalActiveService | null;
-  token?: string;
   /**
    * En el portal se muestra solo el resumen y un acceso a `/empleada/servicio`.
    *
@@ -147,11 +145,10 @@ export default function ServicioAhora({
           <AceptarServicio
             servicioId={servicio.id}
             expiraAt={servicio.aceptacionExpiraAt}
-            token={token}
           />
         )}
 
-        {alistandose && <MarcarLista servicio={servicio} token={token} />}
+        {alistandose && <MarcarLista servicio={servicio} />}
 
         {esperandoTransporte && (
           <p className="rounded-lg border border-[#C5A55A]/25 bg-[#C5A55A]/5 px-3 py-2 text-center text-[11px] text-[#E8D5A3]">
@@ -174,7 +171,7 @@ export default function ServicioAhora({
         )}
 
         {!enlaceAPantallaPropia && acciones.has("iniciar_servicio") && (
-          <IniciarServicio servicioId={servicio.id} token={token} />
+          <IniciarServicio servicioId={servicio.id} />
         )}
 
         {/*
@@ -217,7 +214,6 @@ export default function ServicioAhora({
           <AccionesDelViaje
             transporte={servicio.transporte}
             accionesDisponibles={servicio.accionesDisponibles}
-            token={token}
           />
         )}
 
@@ -228,20 +224,19 @@ export default function ServicioAhora({
           abajo.
         */}
         {!enlaceAPantallaPropia && acciones.has("registrar_extra") && (
-          <AgregarExtra servicioId={servicio.id} token={token} />
+          <AgregarExtra servicioId={servicio.id} />
         )}
         {!enlaceAPantallaPropia && acciones.has("extender_servicio") && (
           <ExtenderServicio
             servicioId={servicio.id}
             tarifaHora={servicio.tarifaHora}
-            token={token}
           />
         )}
         {!enlaceAPantallaPropia && acciones.has("finalizar_servicio") && (
-          <FinalizarServicio servicioId={servicio.id} token={token} />
+          <FinalizarServicio servicioId={servicio.id} />
         )}
         {!enlaceAPantallaPropia && acciones.has("activar_panico") && (
-          <BotonPanico servicioId={servicio.id} token={token} />
+          <BotonPanico servicioId={servicio.id} />
         )}
       </div>
     </section>

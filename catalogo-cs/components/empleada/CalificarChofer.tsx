@@ -16,7 +16,7 @@ import {
  * Es la contraparte de la calificacion del cliente: la modelo es quien va en
  * el coche, asi que su palabra es la unica fuente sobre el trato y la
  * puntualidad que recibio. Solo se monta con sesion propia, porque las rutas
- * nuevas piden cookie y no sirven con un enlace de token.
+ * nuevas piden cookie.
  */
 export default function CalificarChofer() {
   const calificar = useCallback(

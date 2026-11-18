@@ -20,10 +20,8 @@ type Resumen = NonNullable<
  */
 export default function FinalizarServicio({
   servicioId,
-  token,
 }: {
   servicioId: string;
-  token?: string;
 }) {
   const router = useRouter();
   const [confirmando, setConfirmando] = useState(false);
@@ -34,7 +32,7 @@ export default function FinalizarServicio({
   const finalizar = () => {
     setError(null);
     startTransition(async () => {
-      const resultado = await finishMyService(servicioId, token);
+      const resultado = await finishMyService(servicioId);
       if (!resultado.success || !resultado.resumen) {
         setError(resultado.error ?? "No se pudo finalizar el servicio.");
         setConfirmando(false);

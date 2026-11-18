@@ -21,11 +21,9 @@ import { extenderMiServicio } from "@/lib/actions/employee-portal";
 export default function ExtenderServicio({
   servicioId,
   tarifaHora,
-  token,
 }: {
   servicioId: string;
   tarifaHora: number;
-  token?: string;
 }) {
   const router = useRouter();
   const [abierto, setAbierto] = useState(false);
@@ -55,7 +53,6 @@ export default function ExtenderServicio({
         servicioId,
         horas,
         montoAcordado,
-        token,
       );
       if (!resultado.success) {
         toast.error(resultado.error);

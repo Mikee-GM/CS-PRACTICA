@@ -35,15 +35,12 @@ const MINIMO_MOTIVO = 15;
 export default function ApelarCalificacion({
   cargar,
   apelar,
-  token,
 }: {
-  cargar: (token?: string) => Promise<CalificacionApelable[]>;
+  cargar: () => Promise<CalificacionApelable[]>;
   apelar: (
     ratingId: string,
     reason: string,
-    token?: string,
   ) => Promise<{ success: boolean; error?: string }>;
-  token?: string;
 }) {
   const router = useRouter();
   const [calificaciones, setCalificaciones] = useState<
@@ -55,12 +52,12 @@ export default function ApelarCalificacion({
 
   const releer = useCallback(async () => {
     try {
-      setCalificaciones(await cargar(token));
+      setCalificaciones(await cargar());
     } catch (error) {
       // Sin lista no se dibuja nada. El resto del portal sigue funcionando.
       console.error(error);
     }
-  }, [cargar, token]);
+  }, [cargar]);
 
   useEffect(() => {
     void releer();
@@ -73,7 +70,7 @@ export default function ApelarCalificacion({
       return;
     }
     startTransition(async () => {
-      const resultado = await apelar(ratingId, texto, token);
+      const resultado = await apelar(ratingId, texto);
       if (!resultado.success) {
         toast.error(resultado.error);
         return;

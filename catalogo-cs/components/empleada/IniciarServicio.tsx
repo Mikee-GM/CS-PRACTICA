@@ -8,10 +8,8 @@ import { iniciarMiServicio } from "@/lib/actions/employee-portal";
 
 export default function IniciarServicio({
   servicioId,
-  token,
 }: {
   servicioId: string;
-  token?: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -25,7 +23,7 @@ export default function IniciarServicio({
         onClick={() =>
           startTransition(async () => {
             setError(null);
-            const result = await iniciarMiServicio(servicioId, token);
+            const result = await iniciarMiServicio(servicioId);
             if (!result.success) {
               setError(result.error ?? "No se pudo iniciar el servicio");
               return;

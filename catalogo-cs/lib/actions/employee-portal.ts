@@ -12,35 +12,25 @@ import type {
 } from "@/lib/types";
 
 /**
- * Cabeceras del portal.
- *
- * El portal se abre de dos maneras: con la sesion normal, y con un token que
- * llega en el enlace del bot. Las dos tienen que viajar en cada peticion
- * porque no sabemos cual de las dos trae quien esta mirando.
+ * Cabeceras del portal: la sesion en cookie.
  *
  * El `x-csrf-token` acompana a la cookie porque el backend ya no se fia solo de
- * `SameSite` para las mutaciones del portal. Cuando se entra por el enlace del
- * bot no hay cookie y tampoco hace falta la cabecera.
+ * `SameSite` para las mutaciones del portal.
  */
-async function portalHeaders(token?: string) {
+async function portalHeaders() {
   const cookie = await getBackendCookieHeader();
   const csrf = await getCsrfToken();
   const headers: Record<string, string> = {};
   if (cookie) headers["Cookie"] = cookie;
   if (csrf) headers["x-csrf-token"] = csrf;
-  if (token) headers["Authorization"] = `Bearer ${token}`;
   return headers;
 }
 
-function portalUrl(path: string, token?: string) {
-  const url = new URL(`${getApiBaseUrl()}${path}`);
-  if (token) url.searchParams.set("token", token);
-  return url.toString();
+function portalUrl(path: string) {
+  return new URL(`${getApiBaseUrl()}${path}`).toString();
 }
 
-export async function getEmployeePortalData(
-  token?: string,
-): Promise<{ success: boolean; data?: EmployeePortalData; error?: string }> {
+export async function getEmployeePortalData(): Promise<{ success: boolean; data?: EmployeePortalData; error?: string }> {
   try {
     const cookie = await getBackendCookieHeader();
     const headers: Record<string, string> = {
@@ -49,14 +39,8 @@ export async function getEmployeePortalData(
     if (cookie) {
       headers["Cookie"] = cookie;
     }
-    if (token) {
-      headers["Authorization"] = `Bearer ${token}`;
-    }
 
     const url = new URL(`${getApiBaseUrl()}/employee-portal/me`);
-    if (token) {
-      url.searchParams.set("token", token);
-    }
 
     const response = await fetch(url.toString(), {
       method: "GET",
@@ -90,7 +74,7 @@ export async function getEmployeePortalData(
  * refrescar el portal entero para ver una miniatura nueva seria recalcular
  * ranking, ganancias y reputacion sin motivo.
  */
-export async function getMyWeeklyPhotos(token?: string): Promise<{
+export async function getMyWeeklyPhotos(): Promise<{
   success: boolean;
   estado?: EmployeeWeeklyContent;
   envios?: WeeklyPhotoSubmissionItem[];
@@ -98,8 +82,8 @@ export async function getMyWeeklyPhotos(token?: string): Promise<{
 }> {
   try {
     const response = await fetch(
-      portalUrl("/employee-portal/weekly-photos", token),
-      { method: "GET", cache: "no-store", headers: await portalHeaders(token) },
+      portalUrl("/employee-portal/weekly-photos"),
+      { method: "GET", cache: "no-store", headers: await portalHeaders() },
     );
 
     if (!response.ok) {
@@ -126,7 +110,6 @@ export async function getMyWeeklyPhotos(token?: string): Promise<{
  */
 export async function uploadMyWeeklyPhotos(
   formData: FormData,
-  token?: string,
 ): Promise<{
   success: boolean;
   subidas?: number;
@@ -140,11 +123,11 @@ export async function uploadMyWeeklyPhotos(
 
   try {
     const response = await fetch(
-      portalUrl("/employee-portal/weekly-photos", token),
+      portalUrl("/employee-portal/weekly-photos"),
       {
         method: "POST",
         cache: "no-store",
-        headers: await portalHeaders(token),
+        headers: await portalHeaders(),
         body: formData,
       },
     );
@@ -178,16 +161,15 @@ export async function uploadMyWeeklyPhotos(
 export async function updateMyTripStatus(
   tripId: string,
   estado: "en_camino" | "llegue",
-  token?: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const response = await fetch(
-      portalUrl(`/employee-portal/trips/${tripId}/status`, token),
+      portalUrl(`/employee-portal/trips/${tripId}/status`),
       {
         method: "POST",
         cache: "no-store",
         headers: {
-          ...(await portalHeaders(token)),
+          ...(await portalHeaders()),
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ estado }),
@@ -214,15 +196,14 @@ export async function updateMyTripStatus(
 export async function responderServicioAsignado(
   servicioId: string,
   decision: "accept" | "reject",
-  token?: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const response = await fetch(
-      portalUrl(`/employee-portal/services/${servicioId}/${decision}`, token),
+      portalUrl(`/employee-portal/services/${servicioId}/${decision}`),
       {
         method: "POST",
         cache: "no-store",
-        headers: await portalHeaders(token),
+        headers: await portalHeaders(),
       },
     );
     if (!response.ok) {
@@ -242,15 +223,14 @@ export async function responderServicioAsignado(
 
 export async function iniciarMiServicio(
   servicioId: string,
-  token?: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const response = await fetch(
-      portalUrl(`/employee-portal/services/${servicioId}/start`, token),
+      portalUrl(`/employee-portal/services/${servicioId}/start`),
       {
         method: "POST",
         cache: "no-store",
-        headers: await portalHeaders(token),
+        headers: await portalHeaders(),
       },
     );
     if (!response.ok) {
@@ -277,7 +257,6 @@ export async function iniciarMiServicio(
  */
 export async function finishMyService(
   servicioId: string,
-  token?: string,
 ): Promise<{
   success: boolean;
   resumen?: {
@@ -292,11 +271,11 @@ export async function finishMyService(
 }> {
   try {
     const response = await fetch(
-      portalUrl(`/employee-portal/services/${servicioId}/finish`, token),
+      portalUrl(`/employee-portal/services/${servicioId}/finish`),
       {
         method: "POST",
         cache: "no-store",
-        headers: await portalHeaders(token),
+        headers: await portalHeaders(),
       },
     );
 
@@ -321,15 +300,11 @@ export type ExtraDisponible = { id: string; nombre: string; precio: number };
 /** Extras que la modelo puede cobrarle al cliente en el servicio en curso. */
 export async function getAvailableExtras(
   servicioId: string,
-  token?: string,
 ): Promise<{ success: boolean; extras?: ExtraDisponible[]; error?: string }> {
   try {
     const response = await fetch(
-      portalUrl(
-        `/employee-portal/services/${servicioId}/available-extras`,
-        token,
-      ),
-      { method: "GET", cache: "no-store", headers: await portalHeaders(token) },
+      portalUrl(`/employee-portal/services/${servicioId}/available-extras`),
+      { method: "GET", cache: "no-store", headers: await portalHeaders() },
     );
 
     if (!response.ok) {
@@ -365,7 +340,6 @@ export async function addServiceExtra(
     precioCobrado?: number;
     metodoPago: "tarjeta" | "transferencia" | "efectivo";
   },
-  token?: string,
 ): Promise<{
   success: boolean;
   totalExtras?: number;
@@ -374,12 +348,12 @@ export async function addServiceExtra(
 }> {
   try {
     const response = await fetch(
-      portalUrl(`/employee-portal/services/${servicioId}/extras`, token),
+      portalUrl(`/employee-portal/services/${servicioId}/extras`),
       {
         method: "POST",
         cache: "no-store",
         headers: {
-          ...(await portalHeaders(token)),
+          ...(await portalHeaders()),
           "Content-Type": "application/json",
         },
         body: JSON.stringify(cobro),
@@ -425,13 +399,11 @@ export type CalificacionApelable = {
  * El backend resuelve de quien son a partir de la sesion, nunca de un
  * parametro: no hay forma de pedir las de otra.
  */
-export async function getCalificacionesApelables(
-  token?: string,
-): Promise<CalificacionApelable[]> {
+export async function getCalificacionesApelables(): Promise<CalificacionApelable[]> {
   try {
     const response = await fetch(
-      portalUrl("/employee-portal/ratings/appealable", token),
-      { method: "GET", cache: "no-store", headers: await portalHeaders(token) },
+      portalUrl("/employee-portal/ratings/appealable"),
+      { method: "GET", cache: "no-store", headers: await portalHeaders() },
     );
     if (!response.ok) return [];
     return (await response.json()) as CalificacionApelable[];
@@ -448,13 +420,11 @@ export async function getCalificacionesApelables(
  * habia una sancion encima y la decision se habia tomado con un solo relato
  * delante.
  */
-export async function getReportesSobreMi(
-  token?: string,
-): Promise<ReporteSobreMi[]> {
+export async function getReportesSobreMi(): Promise<ReporteSobreMi[]> {
   try {
     const response = await fetch(
-      portalUrl("/employee-portal/reports/mine", token),
-      { method: "GET", cache: "no-store", headers: await portalHeaders(token) },
+      portalUrl("/employee-portal/reports/mine"),
+      { method: "GET", cache: "no-store", headers: await portalHeaders() },
     );
     if (!response.ok) return [];
     return (await response.json()) as ReporteSobreMi[];
@@ -468,16 +438,15 @@ export async function getReportesSobreMi(
 export async function responderReporte(
   reportId: string,
   statement: string,
-  token?: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const response = await fetch(
-      portalUrl(`/employee-portal/reports/${reportId}/statement`, token),
+      portalUrl(`/employee-portal/reports/${reportId}/statement`),
       {
         method: "POST",
         cache: "no-store",
         headers: {
-          ...(await portalHeaders(token)),
+          ...(await portalHeaders()),
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ statement }),
@@ -512,16 +481,15 @@ export async function responderReporte(
 export async function apelarCalificacion(
   ratingId: string,
   reason: string,
-  token?: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const response = await fetch(
-      portalUrl(`/employee-portal/ratings/${ratingId}/appeal`, token),
+      portalUrl(`/employee-portal/ratings/${ratingId}/appeal`),
       {
         method: "POST",
         cache: "no-store",
         headers: {
-          ...(await portalHeaders(token)),
+          ...(await portalHeaders()),
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ reason }),
@@ -555,14 +523,13 @@ export async function reportarConducta(
     category: string;
     description: string;
   },
-  token?: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const response = await fetch(portalUrl("/employee-portal/reports", token), {
+    const response = await fetch(portalUrl("/employee-portal/reports"), {
       method: "POST",
       cache: "no-store",
       headers: {
-        ...(await portalHeaders(token)),
+        ...(await portalHeaders()),
         "Content-Type": "application/json",
       },
       body: JSON.stringify(input),
@@ -594,16 +561,15 @@ export async function reportarConducta(
 export async function registrarMiUbicacion(
   lat: number,
   lng: number,
-  token?: string,
 ): Promise<{ success: boolean }> {
   try {
     const response = await fetch(
-      portalUrl("/employee-portal/location", token),
+      portalUrl("/employee-portal/location"),
       {
         method: "POST",
         cache: "no-store",
         headers: {
-          ...(await portalHeaders(token)),
+          ...(await portalHeaders()),
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ lat, lng }),
@@ -629,15 +595,14 @@ export async function registrarMiUbicacion(
  */
 export async function marcarListaParaSalir(
   servicioId: string,
-  token?: string,
 ): Promise<{ success: boolean; error?: string; yaEstaba?: boolean }> {
   try {
     const response = await fetch(
-      portalUrl(`/employee-portal/services/${servicioId}/lista`, token),
+      portalUrl(`/employee-portal/services/${servicioId}/lista`),
       {
         method: "POST",
         cache: "no-store",
-        headers: await portalHeaders(token),
+        headers: await portalHeaders(),
       },
     );
     if (!response.ok) {
@@ -664,13 +629,11 @@ export async function marcarListaParaSalir(
  * Es anonimo de su lado a proposito: ella no ve nunca quien le escribe, solo
  * que viene de coordinacion. Lo garantiza el backend, que no manda el autor.
  */
-export async function leerCanal(
-  token?: string,
-): Promise<{ success: boolean; mensajes: MensajeDelCanal[]; error?: string }> {
+export async function leerCanal(): Promise<{ success: boolean; mensajes: MensajeDelCanal[]; error?: string }> {
   try {
-    const response = await fetch(portalUrl("/employee-portal/channel", token), {
+    const response = await fetch(portalUrl("/employee-portal/channel"), {
       cache: "no-store",
-      headers: await portalHeaders(token),
+      headers: await portalHeaders(),
     });
     if (!response.ok) {
       return {
@@ -693,17 +656,16 @@ export async function leerCanal(
 /** Escribe en el canal. Le llega a sus jefes por chat, panel y aviso. */
 export async function escribirEnCanal(
   cuerpo: string,
-  token?: string,
 ): Promise<{ success: boolean; error?: string; mensaje?: MensajeDelCanal }> {
   const texto = cuerpo.trim();
   if (!texto) return { success: false, error: "Escribe algo primero" };
 
   try {
-    const response = await fetch(portalUrl("/employee-portal/channel", token), {
+    const response = await fetch(portalUrl("/employee-portal/channel"), {
       method: "POST",
       cache: "no-store",
       headers: {
-        ...(await portalHeaders(token)),
+        ...(await portalHeaders()),
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ cuerpo: texto }),
@@ -739,7 +701,6 @@ export async function escribirEnCanal(
  */
 export async function pedirProrroga(
   servicioId: string,
-  token?: string,
 ): Promise<{
   success: boolean;
   error?: string;
@@ -748,11 +709,11 @@ export async function pedirProrroga(
 }> {
   try {
     const response = await fetch(
-      portalUrl(`/employee-portal/services/${servicioId}/prorroga`, token),
+      portalUrl(`/employee-portal/services/${servicioId}/prorroga`),
       {
         method: "POST",
         cache: "no-store",
-        headers: await portalHeaders(token),
+        headers: await portalHeaders(),
       },
     );
     if (!response.ok) {
@@ -788,16 +749,15 @@ export async function extenderMiServicio(
   servicioId: string,
   horas: number,
   montoAcordado: number,
-  token?: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const response = await fetch(
-      portalUrl(`/employee-portal/services/${servicioId}/extend`, token),
+      portalUrl(`/employee-portal/services/${servicioId}/extend`),
       {
         method: "POST",
         cache: "no-store",
         headers: {
-          ...(await portalHeaders(token)),
+          ...(await portalHeaders()),
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ horas, montoAcordado }),
@@ -822,15 +782,14 @@ export async function extenderMiServicio(
 
 export async function activarPanicoServicio(
   servicioId: string,
-  token?: string,
 ): Promise<{ success: boolean; eventId?: string; error?: string }> {
   try {
     const response = await fetch(
-      portalUrl(`/employee-portal/services/${servicioId}/panic`, token),
+      portalUrl(`/employee-portal/services/${servicioId}/panic`),
       {
         method: "POST",
         cache: "no-store",
-        headers: await portalHeaders(token),
+        headers: await portalHeaders(),
       },
     );
     const body = await response.json().catch(() => ({}));
@@ -864,13 +823,11 @@ export type ClientePorCalificar = {
  * el portal no tenia de donde sacar que servicio calificar, asi que la opcion
  * no aparecia por ningun lado y en la practica no se usaba.
  */
-export async function getClientesPorCalificar(
-  token?: string,
-): Promise<ClientePorCalificar[]> {
+export async function getClientesPorCalificar(): Promise<ClientePorCalificar[]> {
   try {
     const response = await fetch(
-      portalUrl("/employee-portal/ratings/pending-clients", token),
-      { method: "GET", cache: "no-store", headers: await portalHeaders(token) },
+      portalUrl("/employee-portal/ratings/pending-clients"),
+      { method: "GET", cache: "no-store", headers: await portalHeaders() },
     );
     if (!response.ok) return [];
     return (await response.json()) as ClientePorCalificar[];
@@ -883,14 +840,13 @@ export async function getClientesPorCalificar(
 /** Deja la valoracion de la modelo sobre el cliente de uno de sus servicios. */
 export async function calificarCliente(
   input: { servicioId: string; stars: number; comment?: string },
-  token?: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const response = await fetch(portalUrl("/employee-portal/ratings", token), {
+    const response = await fetch(portalUrl("/employee-portal/ratings"), {
       method: "POST",
       cache: "no-store",
       headers: {
-        ...(await portalHeaders(token)),
+        ...(await portalHeaders()),
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -929,7 +885,7 @@ export type ChoferPorCalificar = {
 /**
  * Los choferes de sus viajes recientes que aun no ha calificado.
  *
- * Estas rutas exigen sesion propia (cookie): no admiten el token del enlace.
+ * Estas rutas exigen sesion propia (cookie).
  */
 export async function getChoferesPorCalificar(): Promise<ChoferPorCalificar[]> {
   try {

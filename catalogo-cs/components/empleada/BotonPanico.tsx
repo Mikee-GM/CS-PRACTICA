@@ -8,17 +8,15 @@ import { activarPanicoServicio } from "@/lib/actions/employee-portal";
 
 export default function BotonPanico({
   servicioId,
-  token,
 }: {
   servicioId: string;
-  token?: string;
 }) {
   const [confirmando, setConfirmando] = useState(false);
   const [pendiente, startTransition] = useTransition();
 
   function activar() {
     startTransition(async () => {
-      const result = await activarPanicoServicio(servicioId, token);
+      const result = await activarPanicoServicio(servicioId);
       if (!result.success) {
         toast.error(result.error);
         return;

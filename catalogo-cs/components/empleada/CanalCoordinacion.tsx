@@ -19,7 +19,7 @@ import type { MensajeDelCanal } from "@/lib/types";
  * backend no manda quién escribió, así que aquí no hay forma de averiguarlo
  * aunque se quisiera. Al revés sí: quien la coordina sabe con quién habla.
  */
-export default function CanalCoordinacion({ token }: { token?: string }) {
+export default function CanalCoordinacion() {
   const [mensajes, setMensajes] = useState<MensajeDelCanal[]>([]);
   const [texto, setTexto] = useState("");
   const [cargando, setCargando] = useState(true);
@@ -27,10 +27,10 @@ export default function CanalCoordinacion({ token }: { token?: string }) {
   const finDelHilo = useRef<HTMLDivElement | null>(null);
 
   const cargar = useCallback(async () => {
-    const resultado = await leerCanal(token);
+    const resultado = await leerCanal();
     if (resultado.success) setMensajes(resultado.mensajes);
     setCargando(false);
-  }, [token]);
+  }, []);
 
   useEffect(() => {
     void cargar();
@@ -59,7 +59,7 @@ export default function CanalCoordinacion({ token }: { token?: string }) {
     if (!cuerpo) return;
 
     startTransition(async () => {
-      const resultado = await escribirEnCanal(cuerpo, token);
+      const resultado = await escribirEnCanal(cuerpo);
       if (!resultado.success || !resultado.mensaje) {
         toast.error(resultado.error ?? "No se pudo enviar tu mensaje");
         return;

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import type { DriverPortalData } from "@/lib/types";
 import { formatCurrency as formatCurrencyMXN } from "@/lib/calculations";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
@@ -26,9 +26,9 @@ import type { RetoDelPersonal } from "@/lib/retos-del-personal";
 
 interface DriverPortalViewProps {
   initialData: DriverPortalData;
-  /** Nulo cuando se entra con un enlace antiguo, sin sesion. */
-  workShift?: WorkShiftStatus | null;
-  /** Retos de la sesion; vacio con un enlace antiguo `?token=`, que no lleva cookie. */
+  /** Nulo si no se pudo leer el estado de la jornada. */
+  workShift: WorkShiftStatus | null;
+  /** Retos de la sesion. */
   retos?: RetoDelPersonal[];
   /** Pestaña inicial; el push de retos trae `?seccion=retos`. */
   seccionInicial?: TabType;
@@ -61,17 +61,6 @@ export default function DriverPortalView({
 }: DriverPortalViewProps) {
   const [activeTab, setActiveTab] = useState<TabType>(seccionInicial);
   const data = initialData;
-
-  useEffect(() => {
-    if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
-      const tg = (window as any).Telegram.WebApp;
-      tg.ready();
-      tg.expand();
-      if (tg.setHeaderColor) {
-        tg.setHeaderColor("#0B0D13");
-      }
-    }
-  }, []);
 
   const formatCurrency = formatCurrencyMXN;
 
@@ -163,10 +152,7 @@ export default function DriverPortalView({
           </div>
         </div>
 
-        {/* Solo con sesion propia: quien entra con el enlace del bot no tiene
-            sesion que cerrar. */}
-        {workShift !== undefined && workShift !== null && (
-          <div className="max-w-4xl mx-auto mt-2 flex items-center justify-end gap-2">
+        <div className="max-w-4xl mx-auto mt-2 flex items-center justify-end gap-2">
             <Link
               href="/chofer/ajustes"
               aria-label="Ajustes: avisos y seguridad"
@@ -183,8 +169,7 @@ export default function DriverPortalView({
               Reglamento
             </Link>
             <CerrarSesion />
-          </div>
-        )}
+        </div>
 
         {/* NAVIGATION TABS */}
         <div className="max-w-4xl mx-auto mt-3 flex items-center gap-1 overflow-x-auto no-scrollbar pb-1 border-t border-white/5 pt-2">
@@ -245,16 +230,13 @@ export default function DriverPortalView({
             <ArrowRight size={16} />
           </Link>
         )}
-        {/* Mientras esta pantalla siga abierta, el panel la ve en el mapa: es
-            lo que evita tener que mandar la ubicacion por Telegram. */}
-        {workShift !== undefined && workShift !== null && (
-          <CompartirUbicacion registrar={registrarMiUbicacion} />
-        )}
+        {/* Mientras esta pantalla siga abierta, el panel la ve en el mapa. */}
+        <CompartirUbicacion registrar={registrarMiUbicacion} />
         {/* ================= TAB 1: RESUMEN ================= */}
         {activeTab === "resumen" && (
           <div className="space-y-6 animate-fadeIn">
             {/* Cerrar la jornada queda marcado en el panel de admin. */}
-            {workShift !== undefined && workShift !== null && (
+            {workShift && (
               <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
                 <WorkShiftToggle initialStatus={workShift} />
               </div>
@@ -546,10 +528,7 @@ export default function DriverPortalView({
                           reportar={reportarConducta}
                           etiqueta="Reportar conducta"
                         />
-                        {/* Solo con sesion: el reporte a administracion exige
-                            cookie y CSRF, no admite el enlace del bot. */}
-                        {workShift !== undefined && workShift !== null && (
-                          <div className="mt-2 space-y-2">
+                        <div className="mt-2 space-y-2">
                             <p className="text-[11px] leading-relaxed text-gray-500">
                               Conducta lo revisa un jefe. Administración atiende
                               lo que tenga que ver con la modelo del viaje.
@@ -574,7 +553,6 @@ export default function DriverPortalView({
                               }
                             />
                           </div>
-                        )}
                       </div>
                     </div>
                   ))}

@@ -157,59 +157,15 @@ async function rolDeLaSesion(cookieHeader: string): Promise<SesionDeAcceso> {
   }
 }
 
-/**
- * Cambia el token con el que se abre un portal por una sesion en cookie.
- *
- * Los portales de empleada y chofer se abren desde una Mini App de Telegram,
- * que trae el token en la URL. Una aplicacion instalada arranca desde su icono,
- * sin token, asi que sin esto no se podia abrir dos veces; y los avisos push
- * tampoco funcionan dentro del webview de Telegram, solo en la app instalada.
- *
- * Devuelve las cookies nuevas, o `null` si el canje falla. En ese caso no se
- * toca nada y la pagina sigue resolviendo el token por su cuenta, como hasta
- * ahora: un enlace viejo tiene que seguir abriendo el portal.
- */
-async function canjearTokenDePortal(
-  request: NextRequest,
-  token: string,
-): Promise<ParsedCookie[] | null> {
-  const destino = new URL(`${BACKEND_API_PREFIX}/auth/portal-session`, backendUrl());
-
-  try {
-    const response = await fetch(destino, {
-      method: "POST",
-      cache: "no-store",
-      headers: {
-        "Content-Type": "application/json",
-        // Identifica el dispositivo en la sesion, igual que en el login.
-        "user-agent": request.headers.get("user-agent") ?? "portal",
-      },
-      body: JSON.stringify({ token }),
-    });
-    if (!response.ok) return null;
-
-    const cookies = parseSetCookieHeaders(response);
-    return cookies.length > 0 ? cookies : null;
-  } catch {
-    return null;
-  }
-}
-
 export async function middleware(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
 
   /*
-   * 0. Canje del token de portal.
+   * 0. Portales de empleada y chofer.
    *
-   * Solo la primera vez: si ya hay cookie de acceso, la sesion esta abierta y
-   * el token de la URL sobra. Al canjear se redirige a la misma ruta sin el
-   * token, porque una URL con credencial acaba en el historial del telefono,
-   * en los registros del proxy y en la cabecera Referer de cualquier recurso.
-   */
-  /*
-   * La pantalla del servicio en curso entra aqui tambien: es a donde apuntan
-   * los avisos que se mandan durante un servicio, y sin el canje un enlace con
-   * token aterrizaria sin sesion.
+   * Solo con sesion web: no hay token en la URL que canjear. Esta rama existe
+   * para renovar el acceso caducado antes del render; sin ella la sesion de los
+   * portales moriria a la hora, cuando el navegador borra la cookie de acceso.
    */
   if (
     pathname === "/empleada/portal" ||
@@ -217,26 +173,6 @@ export async function middleware(request: NextRequest) {
     pathname === "/empleada/servicio" ||
     pathname === "/chofer/servicio"
   ) {
-    const tokenDePortal = request.nextUrl.searchParams.get("token");
-    if (tokenDePortal && !request.cookies.has(ACCESS_COOKIE)) {
-      const canjeadas = await canjearTokenDePortal(request, tokenDePortal);
-      if (canjeadas) {
-        const limpia = new URL(request.nextUrl);
-        limpia.searchParams.delete("token");
-        const respuesta = NextResponse.redirect(limpia);
-        for (const { name, value, options } of canjeadas) {
-          respuesta.cookies.set(name, value, options);
-        }
-        return respuesta;
-      }
-    }
-    /*
-     * Y si no habia token que canjear, se renueva como en cualquier otra ruta.
-     *
-     * Esta rama devolvia aqui mismo, asi que la sesion de los portales no se
-     * renovaba nunca: a la hora, cuando el navegador borraba la cookie de
-     * acceso, la modelo o el chofer se encontraban con el login del panel.
-     */
     return conCookies(
       NextResponse.next({ request: { headers: request.headers } }),
       await renovarSiHaceFalta(request),
@@ -467,13 +403,12 @@ export async function middleware(request: NextRequest) {
 }
 
 /*
- * Las pantallas nuevas de cada portal --el servicio en curso y los ajustes de
+ * Las pantallas de cada portal --el servicio en curso y los ajustes de
  * avisos-- se enumeran una a una, igual que los portales.
  *
- * No se usa `/empleada/:path*` porque el bloque de canje de token de arriba
- * distingue rutas exactas, y ampliarlo a comodin haria pasar por el canje a
- * pantallas que no lo necesitan. La autorizacion de verdad la hace el backend;
- * esto solo evita que quien no tiene sesion aterrice en una pagina rota.
+ * No se usa `/empleada/:path*` para no renovar en pantallas que no lo necesitan.
+ * La autorizacion de verdad la hace el backend; esto solo evita que quien no
+ * tiene sesion aterrice en una pagina rota.
  */
 export const config = {
   matcher: [

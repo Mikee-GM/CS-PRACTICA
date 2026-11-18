@@ -9,11 +9,9 @@ import { responderServicioAsignado } from "@/lib/actions/employee-portal";
 export default function AceptarServicio({
   servicioId,
   expiraAt,
-  token,
 }: {
   servicioId: string;
   expiraAt?: string | null;
-  token?: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -25,7 +23,6 @@ export default function AceptarServicio({
       const result = await responderServicioAsignado(
         servicioId,
         decision,
-        token,
       );
       if (!result.success) {
         setError(result.error ?? "No se pudo registrar tu respuesta");

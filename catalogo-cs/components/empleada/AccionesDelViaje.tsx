@@ -19,11 +19,9 @@ import type { EmployeePortalActiveService } from "@/lib/types";
 export default function AccionesDelViaje({
   transporte,
   accionesDisponibles,
-  token,
 }: {
   transporte: NonNullable<EmployeePortalActiveService["transporte"]>;
   accionesDisponibles: EmployeePortalActiveService["accionesDisponibles"];
-  token?: string;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +80,6 @@ export default function AccionesDelViaje({
       const resultado = await updateMyTripStatus(
         transporte.id,
         siguiente,
-        token,
       );
       if (!resultado.success) {
         setError(resultado.error ?? "No se pudo registrar el avance.");

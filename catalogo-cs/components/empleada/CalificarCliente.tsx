@@ -19,14 +19,14 @@ import {
  * llegaba vacío a quien tiene que decidir si se le vuelve a atender: la nota de
  * la modelo es la única fuente que hay sobre cómo se comportó.
  */
-export default function CalificarCliente({ token }: { token?: string }) {
-  const cargar = useCallback(() => getClientesPorCalificar(token), [token]);
+export default function CalificarCliente() {
+  const cargar = useCallback(() => getClientesPorCalificar(), []);
   const calificar = useCallback(
     (
       item: ClientePorCalificar,
       { stars, comment }: { stars: number; comment: string },
-    ) => calificarCliente({ servicioId: item.servicioId, stars, comment }, token),
-    [token],
+    ) => calificarCliente({ servicioId: item.servicioId, stars, comment }),
+    [],
   );
 
   return (

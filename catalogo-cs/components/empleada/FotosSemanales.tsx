@@ -222,11 +222,9 @@ export function AvisoFotosSemanales({
 export default function SubirFotosSemanales({
   estadoInicial,
   enviosIniciales,
-  token,
 }: {
   estadoInicial: EmployeeWeeklyContent;
   enviosIniciales: WeeklyPhotoSubmissionItem[];
-  token?: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [seleccion, setSeleccion] = useState<File[]>([]);
@@ -261,7 +259,7 @@ export default function SubirFotosSemanales({
         formData.append("fotos", await comprimirFoto(foto));
       }
 
-      const resultado = await uploadMyWeeklyPhotos(formData, token);
+      const resultado = await uploadMyWeeklyPhotos(formData);
 
       if (!resultado.success) {
         setError(resultado.error ?? "No se pudieron subir las fotos.");
@@ -279,7 +277,7 @@ export default function SubirFotosSemanales({
       if (resultado.estado) setEstado(resultado.estado);
 
       // Se recargan los envios para que las nuevas aparezcan con su estado.
-      const refresco = await getMyWeeklyPhotos(token);
+      const refresco = await getMyWeeklyPhotos();
       if (refresco.success && refresco.envios) setEnvios(refresco.envios);
     });
   };

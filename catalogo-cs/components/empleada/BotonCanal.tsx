@@ -19,11 +19,9 @@ import CanalCoordinacion from "@/components/empleada/CanalCoordinacion";
  * encendida diría algo que ya no es cierto.
  */
 export default function BotonCanal({
-  token,
   sinLeer,
   abrirAlEntrar = false,
 }: {
-  token?: string;
   sinLeer: number;
   /** El aviso push lleva a la conversación: se abre sola al aterrizar. */
   abrirAlEntrar?: boolean;
@@ -87,7 +85,7 @@ export default function BotonCanal({
           </button>
         </div>
 
-        <CanalCoordinacion token={token} />
+        <CanalCoordinacion />
       </div>
     </div>
   );

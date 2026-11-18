@@ -28,7 +28,7 @@ import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 /** El backend exige comentario por debajo de tres estrellas. */
 const ESTRELLAS_QUE_PIDEN_MOTIVO = 2;
 
-export default function CalificarEmpleada({ token }: { token?: string }) {
+export default function CalificarEmpleada() {
   const router = useRouter();
   const [pendientes, setPendientes] = useState<EmpleadaPorCalificar[] | null>(
     null,
@@ -40,12 +40,12 @@ export default function CalificarEmpleada({ token }: { token?: string }) {
 
   const releer = useCallback(async () => {
     try {
-      setPendientes(await getEmpleadasPorCalificar(token));
+      setPendientes(await getEmpleadasPorCalificar());
     } catch {
       // Sin lista no se dibuja nada; el resto del portal sigue funcionando.
       setPendientes([]);
     }
-  }, [token]);
+  }, []);
 
   useEffect(() => {
     void releer();
@@ -67,7 +67,6 @@ export default function CalificarEmpleada({ token }: { token?: string }) {
     startTransition(async () => {
       const resultado = await calificarEmpleada(
         { viajeId, stars: estrellas, comment: comentario },
-        token,
       );
       if (!resultado.success) {
         toast.error(resultado.error ?? "No se pudo enviar la calificación.");
