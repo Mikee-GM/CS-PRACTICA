@@ -59,7 +59,6 @@ describe('ServicesService cancel', () => {
     paymentReceiptValidationsRepository: {},
     realtimeEventsService: realtime,
     bot,
-    telegramService: {},
     aiMessageService,
     loyaltyService: {},
     liquidationSync,
@@ -222,19 +221,26 @@ describe('ServicesService cancel', () => {
     usuariosRepository.findOne.mockResolvedValue(null);
     choferesRepository.findOne.mockResolvedValue({
       id: 'chofer-1',
-      usuario: { telegramChatId: '777' },
+      usuarioId: 'user-chofer',
     });
 
     viajesRepository.find.mockResolvedValue([]);
 
     await service.cancel('svc-1', actor, { reason: 'cliente_desistio' });
 
-    expect(bot.telegram.sendMessage).toHaveBeenCalledWith(
-      '777',
+    // Al personal ya no le sale nada por Telegram: solo el push (Fase 5).
+    expect(bot.telegram.sendMessage).not.toHaveBeenCalledWith(
+      expect.anything(),
       expect.stringContaining('queda sin efecto'),
     );
+    expect(notificationsService.notificar).toHaveBeenCalledWith(
+      'user-chofer',
+      expect.objectContaining({
+        dedupeKey: 'driver:service_cancelled:svc-1:chofer-1',
+      }),
+    );
     /*
-     * Y queda libre de verdad, no solo en el mensaje. Se le avisaba "quedas
+     * Y queda libre de verdad, no solo en el aviso. Se le avisaba "quedas
      * libre" pero seguia marcado como ocupado, asi que el reparto dejaba de
      * contarlo desde ese momento y el sintoma era "no hay choferes
      * disponibles" con su ficha activa y en jornada.
@@ -312,7 +318,7 @@ describe('ServicesService cancel', () => {
         url: '/chofer/portal',
       }),
     );
-    // Sin chat no hay mensaje de Telegram, y aun asi se entera.
+    // Se entera solo por push: el mensaje de Telegram ya no sale.
     expect(bot.telegram.sendMessage).not.toHaveBeenCalledWith(
       expect.anything(),
       expect.stringContaining('queda sin efecto'),
@@ -354,7 +360,6 @@ describe('ServicesService settleCancelledTripCost', () => {
     paymentReceiptValidationsRepository: {},
     realtimeEventsService: {},
     bot,
-    telegramService: {},
     aiMessageService: {},
     loyaltyService: {},
     liquidationSync,

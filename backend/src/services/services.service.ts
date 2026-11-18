@@ -3,8 +3,6 @@ import {
   NotFoundException,
   ConflictException,
   ForbiddenException,
-  Inject,
-  forwardRef,
   OnModuleInit,
   OnModuleDestroy,
   BadRequestException,
@@ -26,7 +24,6 @@ import { Telegraf, Context, Markup } from 'telegraf';
 import { Servicios } from './entities/service.entity';
 import { Viajes } from '../trips/entities/trip.entity';
 import { RealtimeEventsService } from '../realtime/realtime.service';
-import { TelegramService } from '../telegram/telegram.service';
 import { ExtensionsService } from '../extensions/extensions.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { Empleadas } from '../employees/entities/employee.entity';
@@ -65,7 +62,6 @@ import { formatServiceDuration, roundOpenEndedHours } from './service-duration';
 import { APP_TIME_ZONE, APP_LOCALE } from '../common/locale';
 import { kilometrosEntre } from '../common/geo';
 import { TransportOperationsService } from '../transport-operations/transport-operations.service';
-import type { InlineKeyboardButton } from 'telegraf/types';
 import { ServiceOperationsService } from './operations/service-operations.service';
 import type { ServiceOperationAction } from './operations/service-operation-state';
 import { ExtensionesServicio } from '../service-extensions/entities/service-extension.entity';
@@ -74,6 +70,7 @@ import {
   EMPLOYEE_SERVICE_PERCENTAGE,
 } from './service-financial-calculator';
 import { ConversationNotifier } from '../conversations/conversation-notifier';
+import { AVISO_SANCION } from '../notifications/avisos-catalogo';
 import {
   avisarAlChatWeb,
   type OpcionesAvisoWeb,
@@ -199,9 +196,11 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     @InjectRepository(PaymentReceiptValidations)
     private readonly paymentReceiptValidationsRepository: Repository<PaymentReceiptValidations>,
     private readonly realtimeEventsService: RealtimeEventsService,
+    /*
+     * Solo para los avisos al cliente que todavia reserva por Telegram: el
+     * personal ya no recibe nada por ahi (Fase 5). Se va en la Fase 6.
+     */
     @InjectBot() private readonly bot: Telegraf<Context>,
-    @Inject(forwardRef(() => TelegramService))
-    private readonly telegramService: TelegramService,
     private readonly extensionsService: ExtensionsService,
     private readonly aiMessageService: AiMessageService,
     private readonly loyaltyService: LoyaltyService,
@@ -272,6 +271,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       requireInteraction?: boolean;
       relatedEntityId?: string;
       dedupeKey?: string;
+      /** Solo los de nivel 2, que la persona puede apagar en sus ajustes. */
+      tipo?: string;
     },
   ): Promise<void> {
     if (!usuarioId) return;
@@ -334,52 +335,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       });
     } catch (err) {
       this.logger.error('Error enviando el aviso push a la empleada:', err);
-    }
-  }
-
-  /**
-   * Le pide a la modelo que califique al cliente al cerrar el servicio.
-   *
-   * Vivia solo en el manejador de Telegram, asi que cerrar desde el portal no
-   * pedia nada: se cerraba el servicio y la valoracion del cliente no se
-   * recogia nunca. Ahora sale del cierre, que es el punto por el que pasan las
-   * dos vias.
-   *
-   * El mensaje va a su chat aunque haya cerrado desde el portal: los botones
-   * de calificar son de Telegram, no hay pantalla equivalente en la aplicacion.
-   */
-  private async pedirCalificacionDelCliente(
-    servicio: Servicios,
-  ): Promise<void> {
-    const chatId = servicio.empleada?.usuario?.telegramChatId;
-    if (!chatId || !servicio.clienteId) return;
-
-    try {
-      await this.telegramService.sendMessage(
-        chatId,
-        'Califica tu interacción con el cliente.',
-        {
-          buttons: [
-            [1, 2, 3, 4, 5].map((estrellas) =>
-              Markup.button.callback(
-                `${estrellas}`,
-                `rate_client_service:${servicio.id}:${estrellas}`,
-              ),
-            ),
-            [
-              Markup.button.callback(
-                'Reportar al cliente',
-                `conduct_employee_client:${servicio.id}`,
-              ),
-            ],
-          ],
-        },
-      );
-    } catch (err) {
-      this.logger.error(
-        'No se pudo pedir la calificación del cliente a la empleada:',
-        err,
-      );
     }
   }
 
@@ -787,31 +742,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     return (resultado.affected ?? 0) > 0;
   }
 
-  private getServiceTopic(servicio: Servicios) {
-    const chatId =
-      servicio.jefe?.grupoTelegramId ||
-      servicio.empleada?.jefe?.grupoTelegramId;
-    const threadId = Number(servicio.telegramThreadId);
-    if (!chatId || !Number.isInteger(threadId) || threadId <= 0) return null;
-    return { chatId, threadId };
-  }
-
-  private async deleteServiceTopic(servicio: Servicios): Promise<void> {
-    const topic = this.getServiceTopic(servicio);
-    if (!topic) return;
-    try {
-      await this.bot.telegram.deleteForumTopic(topic.chatId, topic.threadId);
-      await this.serviciosRepository.update(servicio.id, {
-        telegramThreadId: null,
-      });
-    } catch (error) {
-      this.logger.error(
-        `[ServicesService] No se pudo eliminar el tema ${topic.threadId} del servicio ${servicio.id}:`,
-        error,
-      );
-    }
-  }
-
   async create(createServiceDto: any): Promise<Servicios> {
     /*
      * Un servicio creado desde el panel no viene de una conversacion con la
@@ -880,18 +810,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       this.logger.error('Error emitting SSE event for new service:', sseErr);
     }
 
-    // Send Telegram notification to Jefes & Admins
-    try {
-      await this.telegramService.notifyJefesNewService(servicioGuardado.id);
-    } catch (telegramErr) {
-      this.logger.error(
-        'Error notifying jefes via Telegram for new service:',
-        telegramErr,
-      );
-    }
-
-    // El aviso push sale de `reserveNext`, que es por donde pasan tanto esta
-    // via como la reserva que hace el cliente desde el bot.
+    // El aviso push al jefe sale de `reserveNext`, que es por donde pasan tanto
+    // esta via como la reserva que hace el cliente. Ya no hay copia por
+    // Telegram: el jefe autoriza desde el panel.
     return servicioGuardado;
   }
 
@@ -2123,13 +2044,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
     if (yaConfirmado && service.empleadaId) {
       try {
-        const empleadaUser = await this.usuariosRepository.findOne({
-          where: { id: service.empleada?.usuarioId },
-        });
         /*
          * Nivel 1, y de los que mas urgen: si no se entera a tiempo sale de
-         * casa hacia un servicio que ya no existe. Va antes que el mensaje del
-         * chat porque es el unico que le llega si no usa Telegram.
+         * casa hacia un servicio que ya no existe. Es el unico aviso que le
+         * llega: el mensaje de Telegram que lo duplicaba ya no sale.
          */
         await this.avisar(service.empleada?.usuarioId, {
           titulo: 'Cancelaron el servicio',
@@ -2137,14 +2055,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           url: '/empleada/portal',
           tag: `cancelado-${service.id}`,
           requireInteraction: true,
+          relatedEntityId: service.id,
+          dedupeKey: `employee:service_cancelled_confirmed:${service.id}`,
         });
-
-        if (empleadaUser?.telegramChatId) {
-          await this.bot.telegram.sendMessage(
-            empleadaUser.telegramChatId,
-            'El servicio fue cancelado desde la oficina. Ya no tienes que asistir y quedas libre para el siguiente.',
-          );
-        }
       } catch (err) {
         this.logger.error(
           'Error al notificar a la empleada de la cancelación:',
@@ -2164,7 +2077,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       try {
         const chofer = await this.choferesRepository.findOne({
           where: { id: choferId },
-          relations: { usuario: true },
+          select: { id: true, usuarioId: true },
         });
         // Mismo caso que la modelo: puede estar ya en camino a recogerla.
         await this.avisar(chofer?.usuarioId, {
@@ -2173,14 +2086,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           url: '/chofer/portal',
           tag: `cancelado-${service.id}`,
           requireInteraction: true,
+          relatedEntityId: service.id,
+          dedupeKey: `driver:service_cancelled:${service.id}:${choferId}`,
         });
-
-        if (chofer?.usuario?.telegramChatId) {
-          await this.bot.telegram.sendMessage(
-            chofer.usuario.telegramChatId,
-            'El servicio fue cancelado desde la oficina. El viaje asignado queda sin efecto y estás libre para tomar otros.',
-          );
-        }
       } catch (err) {
         this.logger.error(
           'Error al notificar al chofer de la cancelación:',
@@ -2314,20 +2222,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       relatedEntityId: servicio.id,
       dedupeKey: `employee:service_waiting_employee_acceptance:${servicio.id}:event`,
     });
-
-    const chatId = servicio.empleada?.usuario?.telegramChatId;
-    if (chatId) {
-      try {
-        await this.bot.telegram.sendMessage(
-          chatId,
-          'Tienes un servicio por aceptar. Revisa los datos y responde desde tu portal web.',
-        );
-      } catch (error) {
-        this.logger.warn(
-          `No se pudo enviar el aviso informativo de asignación: ${describeError(error)}`,
-        );
-      }
-    }
 
     return offered;
   }
@@ -2680,31 +2574,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         type: 'service_scheduled',
         data: servicio,
       });
-      const employeeChatId = servicio.empleada?.usuario?.telegramChatId;
-      if (employeeChatId) {
-        const fechaStr = servicio.fechaProgramada
-          ? new Date(servicio.fechaProgramada).toLocaleString(APP_LOCALE, {
-              timeZone: APP_TIME_ZONE,
-            })
-          : 'próximamente';
-        let msg = isFutureScheduled
-          ? `📅 *Cita Programada Confirmada:*\n\nTienes una cita con ${servicio.cliente?.nombreTelegram || 'Cliente'} para el ${fechaStr}.\n• *Duración:* ${servicio.duracionPactadaHoras} horas\n• *Transporte asignado:* ${tipoTransporte.toUpperCase()}`
-          : `📝 Notas del jefe para tu siguiente servicio:\n${servicio.notasJefe || 'Sin notas.'}`;
-        if (servicio.habitacion) {
-          msg += `\n• *Habitación:* ${servicio.habitacion}`;
-        }
-        if (isFutureScheduled && servicio.notasJefe) {
-          msg += `\n• *Notas del jefe:* ${servicio.notasJefe}`;
-        }
-        try {
-          await this.bot.telegram.sendMessage(employeeChatId, msg, {
-            parse_mode: 'Markdown',
-          });
-        } catch (err) {
-          this.logger.error('Error notificando empleada cita agendada:', err);
-        }
-      }
-      // isFutureScheduled encadena una fecha, asi que no es un booleano puro.
+      // Fecha, habitacion y notas del jefe se leen en el portal; el aviso solo
+      // la lleva hasta ahi. isFutureScheduled encadena una fecha, asi que no es
+      // un booleano puro.
       await this.avisarEmpleadaDeServicio(servicio, Boolean(isFutureScheduled));
       return servicio;
     }
@@ -2826,49 +2698,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       data: servicio,
     });
 
-    // Notificar a la empleada por Telegram si tiene telegramChatId. `modo_bot`
-    // ya no la excluye: todas usan la plataforma.
-    const empUser = servicio.empleada?.usuario;
-    if (
-      empUser &&
-      empUser.telegramChatId &&
-      empUser.telegramChatId !== '111111111'
-    ) {
-      try {
-        const targetChatId = empUser.telegramChatId;
-        const threadId = undefined;
-
-        if (targetChatId) {
-          const empMsg = await this.bot.telegram.sendMessage(
-            targetChatId,
-            (esperandoAlistado
-              ? `*Servicio aceptado. Espera el transporte.*\n\n`
-              : `*Servicio aceptado.*\n\n`) +
-              `• *Cliente:* ${servicio.cliente?.nombreTelegram || 'Desconocido'}\n` +
-              `• *Duración:* ${servicio.duracionPactadaHoras} horas\n` +
-              `• *Método de Pago:* ${servicio.metodoPago.toUpperCase()}\n\n` +
-              (servicio.habitacion
-                ? `• *Habitación:* ${servicio.habitacion}\n\n`
-                : '') +
-              (servicio.notasJefe
-                ? `• *Notas del jefe:* ${servicio.notasJefe}\n\n`
-                : '') +
-              'Continúa el flujo desde tu portal web. Este mensaje es únicamente informativo.',
-            {
-              message_thread_id: threadId,
-              parse_mode: 'Markdown',
-            },
-          );
-          servicio.telegramEmpleadaMensajeId = empMsg.message_id.toString();
-          await this.serviciosRepository.save(servicio);
-        }
-      } catch (telegramErr) {
-        this.logger.error(
-          `Error al enviar notificación de Telegram a la empleada (chatId: ${empUser.telegramChatId}):`,
-          describeError(telegramErr),
-        );
-      }
-    }
+    // La modelo se entera por el push de `new_service` (puente) y por el de
+    // `avisarEmpleadaDeServicio` al final; el detalle lo lee en su portal.
 
     const respaldoAceptacion =
       'Oyeee, sí puedo ir contigo, nos vemos en un ratico';
@@ -3018,23 +2849,22 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     servicio.empleadaListaAt = new Date();
 
     const uberLink = this.buildUberLinkForTrip(servicio, 'ida');
-    await this.avisarAlJefeDeQueEstaLista(servicio, viaje?.id, uberLink);
-    await this.cambiarBotonesDeLaEmpleada(servicio, viaje?.id);
+    await this.avisarAlJefeDeQueEstaLista(servicio, viaje?.id);
 
     return { uberLink, viajeId: viaje?.id, yaEstaba: false };
   }
 
   /**
-   * Le dice al jefe que ya puede pedir el Uber, con el enlace puesto.
+   * Le dice al jefe que ya puede pedir el Uber.
    *
-   * Va por los tres canales --chat, panel y aviso push-- porque es el momento
-   * en el que alguien tiene que hacer algo y no se sabe donde esta mirando. El
-   * aviso no lleva `tipo` a proposito: no es de los que se pueden silenciar.
+   * Va por panel y aviso push porque es el momento en el que alguien tiene que
+   * hacer algo y no se sabe donde esta mirando; el enlace del Uber lo arma el
+   * panel. El aviso no lleva `tipo` a proposito: no es de los que se pueden
+   * silenciar.
    */
   private async avisarAlJefeDeQueEstaLista(
     servicio: Servicios,
     viajeId: string | undefined,
-    uberLink: string,
   ): Promise<void> {
     const nombre = servicio.empleada?.nombreArtistico ?? 'La modelo';
 
@@ -3055,76 +2885,11 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         url: '/jefe',
         tag: `lista-${servicio.id}`,
         requireInteraction: true,
+        relatedEntityId: servicio.id,
+        dedupeKey: `boss:employee_ready_for_service:${servicio.id}`,
       });
     } catch (error) {
       this.logger.error('No se pudo avisar al jefe de que está lista:', error);
-    }
-
-    const jefe = await this.usuariosRepository.findOneBy({
-      id: servicio.jefeId,
-    });
-    if (!jefe?.telegramChatId) return;
-
-    const botones: InlineKeyboardButton[][] = [
-      [Markup.button.url('Pedir Uber', uberLink)],
-    ];
-    if (viajeId) {
-      botones.push([
-        Markup.button.callback('Adjuntar captura', `uber_attach:${viajeId}`),
-      ]);
-      botones.push([
-        Markup.button.callback(
-          'Cambiar a chofer',
-          `cambiar_transporte:${viajeId}:interno`,
-        ),
-      ]);
-    }
-
-    try {
-      await this.bot.telegram.sendMessage(
-        jefe.telegramChatId,
-        `${nombre} ya está lista para salir. Ahora sí, pídele el Uber.`,
-        { ...Markup.inlineKeyboard(botones) },
-      );
-    } catch (error) {
-      this.logger.error(
-        'No se pudo avisar por Telegram de que la modelo está lista:',
-        error,
-      );
-    }
-  }
-
-  /**
-   * Cambia el boton de "ya estoy lista" por los del traslado.
-   *
-   * Sin esto el boton se queda ahi puesto y ella lo vuelve a pulsar pensando
-   * que no llego; y los botones que de verdad necesita --ya subi, ya llegue--
-   * no aparecerian hasta que alguien le mandara otro mensaje.
-   */
-  private async cambiarBotonesDeLaEmpleada(
-    servicio: Servicios,
-    viajeId: string | undefined,
-  ): Promise<void> {
-    const chatId = servicio.empleada?.usuario?.telegramChatId;
-    const mensajeId = servicio.telegramEmpleadaMensajeId;
-    if (!chatId || !mensajeId || !viajeId) return;
-
-    // Solo le quitamos el botón de 'Estoy lista' para que no lo vuelva a pulsar.
-    // Los demás botones llegarán de forma secuencial en los siguientes mensajes.
-    const botones: InlineKeyboardButton[][] = [];
-
-    try {
-      await this.bot.telegram.editMessageReplyMarkup(
-        chatId,
-        Number(mensajeId),
-        undefined,
-        Markup.inlineKeyboard(botones).reply_markup,
-      );
-    } catch (error) {
-      // El mensaje pudo borrarlo ella, o ser demasiado viejo para editarlo.
-      this.logger.warn(
-        `No se pudieron cambiar los botones del servicio ${servicio.id}: ${describeError(error)}`,
-      );
     }
   }
 
@@ -3172,17 +2937,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       type: 'service_settlement_closed',
       data: { serviceId: servicioId },
     });
-
-    // El tema del grupo se retira detras del cierre, no antes: mientras quede
-    // algo por confirmar sigue siendo el sitio donde se habla de ello.
-    setTimeout(() => {
-      this.deleteServiceTopic(servicio).catch((error) =>
-        this.logger.error(
-          `[ServicesService] No se pudo cerrar el tema del servicio ${servicioId}:`,
-          error,
-        ),
-      );
-    }, 1500);
   }
 
   /**
@@ -3277,9 +3031,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
    * Le dice al chofer que la espera se alargo.
    *
    * Es quien esta abajo con el motor encendido, asi que es el unico al que la
-   * prorroga le cambia el plan. Va por los dos canales y en su propio
-   * try/catch: la prorroga ya esta concedida y el reloj ya se reinicio, asi que
-   * un aviso que falla se registra y no deshace nada.
+   * prorroga le cambia el plan. Va en su propio try/catch: la prorroga ya esta
+   * concedida y el reloj ya se reinicio, asi que un aviso que falla se registra
+   * y no deshace nada.
    */
   private async avisarProrrogaAlChofer(
     servicio: Servicios,
@@ -3289,26 +3043,15 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     const chofer = servicio.viajes?.find((v) => v.tipo === 'ida')?.chofer;
     if (!chofer) return;
 
-    const nombre = servicio.empleada?.nombreArtistico ?? 'La modelo';
-    const chatId = chofer.usuario?.telegramChatId;
-    if (chatId) {
-      try {
-        await this.telegramService.sendMessage(
-          chatId,
-          `Aviso de demora: ${nombre} pidió una prórroga de ${minutos} minutos (${numero} de 3). El tiempo de espera se extendió.`,
-        );
-      } catch (err) {
-        this.logger.error('Error avisando al chofer de la prórroga:', err);
-      }
-    }
-
     if (chofer.usuarioId) {
       try {
         await this.notificationsService.notificar(chofer.usuarioId, {
           titulo: 'La espera se alargó',
-          cuerpo: `Pidieron ${minutos} minutos más. Toca para ver el viaje.`,
+          cuerpo: `Pidieron ${minutos} minutos más (${numero} de 3). Toca para ver el viaje.`,
           url: '/chofer/portal',
           tag: `prorroga-${servicio.id}`,
+          relatedEntityId: servicio.id,
+          dedupeKey: `driver:service_extension:${servicio.id}:${numero}`,
         });
       } catch (err) {
         this.logger.error(
@@ -3791,20 +3534,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       relatedEntityId: servicio.id,
       dedupeKey: `boss:SERVICE_PANIC_ACTIVATED:${servicio.id}:event`,
     });
-    const bossChatId =
-      servicio.jefe?.grupoTelegramId ?? servicio.jefe?.telegramChatId;
-    if (bossChatId) {
-      try {
-        await this.bot.telegram.sendMessage(
-          bossChatId,
-          `🚨 EMERGENCIA registrada en el servicio ${servicio.id}. Revisa el panel inmediatamente.`,
-        );
-      } catch (error) {
-        this.logger.error(
-          `No se pudo enviar el aviso auxiliar de pánico: ${describeError(error)}`,
-        );
-      }
-    }
     return { eventId: event.id, registeredAt };
   }
 
@@ -3871,20 +3600,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    const empUser = servicio.empleada?.usuario;
-    if (empUser?.telegramChatId && empUser.telegramChatId !== '111111111') {
-      try {
-        await this.bot.telegram.sendMessage(
-          empUser.telegramChatId,
-          `💼 *¡Tienes un nuevo servicio!*\n\nTu transporte de ida será en ${
-            tipoTransporte === 'uber' ? 'Uber' : 'Chofer interno'
-          }. Espera instrucciones para tu traslado.`,
-        );
-      } catch (err) {
-        this.logger.error('Error notificando empleada por Telegram:', err);
-      }
-    }
-
+    // La modelo se entera por el push que el puente deriva de `new_service`.
     return { uberLink, viajeId: viajeGuardado.id };
   }
 
@@ -3959,19 +3675,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       data: { id: servicio.id },
     });
 
-    // 3. Eliminar el tema (hilo) del grupo de Telegram si existe
-    if (servicio.telegramThreadId && servicio.jefe?.grupoTelegramId) {
-      try {
-        await this.bot.telegram.deleteForumTopic(
-          servicio.jefe.grupoTelegramId,
-          parseInt(servicio.telegramThreadId, 10),
-        );
-      } catch (err) {
-        this.logger.error('Error deleting forum topic on reject:', err);
-      }
-    }
-
-    // 4. Notificar al cliente via Telegram con opciones de reinicio
+    // 3. Notificar al cliente (Telegram mientras exista ese canal, y su chat web)
     const respaldoRechazo = 'Qué pena contigo, esta vez no voy a poder ir';
     const redactarRechazo = unaVez(() =>
       this.aiMessageService.generate(
@@ -4108,35 +3812,40 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       );
       if (provider === 'chofer') {
         await this.dispatchViaje(trip.id);
+        // El reparto ya avisa al chofer; a ella solo hay que decirle que su
+        // siguiente servicio arranco y que el chofer se le notificara.
+        await this.avisar(next.empleada?.usuarioId, {
+          titulo: 'Tu siguiente servicio está listo',
+          cuerpo: 'Te avisaremos cuando tu chofer vaya en camino.',
+          url: '/empleada/portal',
+          tag: `servicio-${next.id}`,
+          requireInteraction: true,
+          relatedEntityId: next.id,
+          dedupeKey: `employee:scheduled_successor_transport:${trip.id}`,
+        });
       } else {
-        const uberLink = this.buildUberLinkForTrip(next, 'ida');
-        const topic = this.getServiceTopic(next);
-        if (topic) {
-          await this.bot.telegram.sendMessage(
-            topic.chatId,
-            'La empleada terminó el servicio anterior. Solicita ahora el Uber hacia el siguiente servicio.',
-            {
-              message_thread_id: topic.threadId,
-              ...Markup.inlineKeyboard([
-                [Markup.button.url('Pedir Uber', uberLink)],
-              ]),
-            },
-          );
-        }
-        const employeeChatId = next.empleada?.usuario?.telegramChatId;
-        if (employeeChatId) {
-          if (trip.proveedorTransporte === 'uber') {
-            await this.bot.telegram.sendMessage(
-              employeeChatId,
-              'Tu siguiente servicio está listo. Tu transporte será en Uber. El jefe te enviará los detalles en breve.',
-            );
-          } else {
-            await this.bot.telegram.sendMessage(
-              employeeChatId,
-              'Tu siguiente servicio está listo. Te notificaremos cuando tu chofer esté en camino.',
-            );
-          }
-        }
+        /*
+         * Con Uber alguien tiene que pedirlo ya: antes salia al tema del grupo
+         * del jefe con el enlace, que no se porta. El enlace lo arma el panel.
+         */
+        await this.avisar(next.jefeId, {
+          titulo: 'Pide el Uber del siguiente servicio',
+          cuerpo: 'La modelo terminó el servicio anterior. Toca para pedirlo.',
+          url: '/jefe',
+          tag: `siguiente-${next.id}`,
+          requireInteraction: true,
+          relatedEntityId: next.id,
+          dedupeKey: `boss:scheduled_successor_uber:${trip.id}`,
+        });
+        await this.avisar(next.empleada?.usuarioId, {
+          titulo: 'Tu siguiente servicio está listo',
+          cuerpo: 'Tu transporte será en Uber. Toca para ver los detalles.',
+          url: '/empleada/portal',
+          tag: `servicio-${next.id}`,
+          requireInteraction: true,
+          relatedEntityId: next.id,
+          dedupeKey: `employee:scheduled_successor_transport:${trip.id}`,
+        });
       }
       const respaldoEnCamino = `Soy el asistente de la agencia. ${next.empleada?.nombreArtistico || 'La empleada'} terminó su servicio anterior y ahora va en camino.`;
       const redactarEnCamino = unaVez(() =>
@@ -4167,37 +3876,26 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     return { hasSuccessor: true, sameLocation };
   }
 
+  /**
+   * Avisa a la modelo de que el servicio encadenado ya empezo en el mismo
+   * sitio. Cerrar y agregar extras los hace desde `/empleada/servicio`; el
+   * texto no lleva cliente ni notas porque se lee en la pantalla de bloqueo.
+   */
   async notifyScheduledServiceStarted(serviceId: string): Promise<void> {
     const service = await this.serviciosRepository.findOne({
       where: { id: serviceId },
-      relations: { cliente: true, empleada: { usuario: true } },
+      relations: { empleada: true },
     });
-    const chatId = service?.empleada?.usuario?.telegramChatId;
-    if (!service || !chatId) return;
-    await this.bot.telegram.sendMessage(
-      chatId,
-      `💼 *Siguiente servicio iniciado*\n\n` +
-        `• *Cliente:* ${service.cliente?.nombreTelegram || 'Desconocido'}\n` +
-        `• *Duración:* ${service.duracionPactadaHoras} horas\n` +
-        (service.notasJefe ? `• *Notas del jefe:* ${service.notasJefe}\n` : ''),
-      {
-        parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard([
-          [
-            Markup.button.callback(
-              '🏁 Finalizar Servicio',
-              `finalizar_servicio:${service.id}`,
-            ),
-          ],
-          [
-            Markup.button.callback(
-              '➕ Agregar Extra',
-              `agregar_extra_list:${service.id}`,
-            ),
-          ],
-        ]),
-      },
-    );
+    if (!service) return;
+    await this.avisar(service.empleada?.usuarioId, {
+      titulo: 'Tu siguiente servicio ya empezó',
+      cuerpo: 'Es en el mismo lugar. Toca para verlo.',
+      url: '/empleada/servicio',
+      tag: `servicio-${service.id}`,
+      requireInteraction: true,
+      relatedEntityId: service.id,
+      dedupeKey: `employee:scheduled_service_started:${service.id}`,
+    });
   }
 
   onModuleInit() {
@@ -4273,54 +3971,17 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         await this.serviciosRepository.save(service);
 
         try {
-          const targetChatId = service.empleada?.usuario?.telegramChatId;
-          const threadId = undefined;
-
           // Nivel 1: la ventana para decidir es corta y ella esta trabajando.
-          // Fuera del `if` del chat: es el unico aviso que le llega si no usa
-          // Telegram.
+          // La extension se pide desde el portal.
           await this.avisar(service.empleada?.usuarioId, {
             titulo: '¿Extiendes el servicio?',
             cuerpo: 'Termina en unos 15 minutos. Toca para decidir.',
             url: '/empleada/portal',
             tag: `extender-${service.id}`,
             requireInteraction: true,
+            relatedEntityId: service.id,
+            dedupeKey: `employee:extension_prompt:${service.id}`,
           });
-
-          if (targetChatId) {
-            await this.bot.telegram.sendMessage(
-              targetChatId,
-              `⏳ *Aviso de Finalización* ⏳\n\n` +
-                `Tu servicio está programado para finalizar en aproximadamente 15 minutos.\n\n` +
-                `¿Deseas extender el tiempo del servicio?`,
-              {
-                message_thread_id: threadId,
-                parse_mode: 'Markdown',
-                ...Markup.inlineKeyboard([
-                  [
-                    Markup.button.callback(
-                      '➕ 1 Hora',
-                      `extender_servicio:${service.id}:1`,
-                    ),
-                    Markup.button.callback(
-                      '➕ 2 Horas',
-                      `extender_servicio:${service.id}:2`,
-                    ),
-                  ],
-                  [
-                    Markup.button.callback(
-                      '➕ 3 Horas',
-                      `extender_servicio:${service.id}:3`,
-                    ),
-                    Markup.button.callback(
-                      '❌ No extender',
-                      `no_extender_servicio:${service.id}`,
-                    ),
-                  ],
-                ]),
-              },
-            );
-          }
         } catch (err) {
           this.logger.error(
             `Error avisando de la extensión a la empleada del servicio ${service.id}:`,
@@ -4520,7 +4181,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     const chosen = shortlist[0];
 
     const nearestDriver = chosen.entity;
-    const distancia = chosen.distancia;
 
     // Actualizar viaje con el chofer asignado temporalmente, agregar a la lista de notificados
     viaje.choferId = nearestDriver.id;
@@ -4542,71 +4202,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       data: { tripId: viaje.id, servicioId: viaje.servicioId },
     });
 
-    // Enviar mensaje al chofer por privado
-    const driverChatId = nearestDriver.usuario.telegramChatId;
-    if (driverChatId) {
-      const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${searchLat},${searchLng}`;
-      let messageText = '';
-
-      if (viaje.tipo === 'ida') {
-        messageText =
-          `📢 *¡Oferta de Viaje Disponible (Ida)!* 🚗\n\n` +
-          `• *Pasajera (Empleada):* ${viaje.servicio.empleada.nombreArtistico}\n` +
-          `• *Punto de Recogida:* [Ver en Mapa](${mapsUrl})\n` +
-          `• *Distancia a ti:* ${distancia.toFixed(2)} km\n` +
-          `• *Duración del Servicio:* ${viaje.servicio.duracionPactadaHoras} horas\n` +
-          (viaje.servicio.habitacion
-            ? `• *Habitación/Detalle:* ${viaje.servicio.habitacion}\n`
-            : '') +
-          `\n⚠️ Tienes *2 minutos* para aceptar esta oferta antes de que pase al siguiente chofer más cercano.`;
-      } else {
-        const empDestName = viaje.servicio.empleada.nombreArtistico;
-        messageText =
-          `📢 *¡Oferta de Viaje Disponible (Regreso)!* 🚗\n\n` +
-          `• *Pasajera (Empleada):* ${empDestName}\n` +
-          `• *Punto de Recogida (Cliente):* [Ver en Mapa](${mapsUrl})\n` +
-          `• *Distancia a ti:* ${distancia.toFixed(2)} km\n` +
-          (viaje.servicio.habitacion
-            ? `• *Habitación/Detalle:* ${viaje.servicio.habitacion}\n`
-            : '') +
-          `\n⚠️ Tienes *2 minutos* para aceptar esta oferta antes de que pase al siguiente chofer más cercano.`;
-      }
-
-      try {
-        const sentMsg = await this.bot.telegram.sendMessage(
-          driverChatId,
-          messageText,
-          {
-            parse_mode: 'Markdown',
-            // Telegram es solo una notificaciÃ³n secundaria; la operaciÃ³n se
-            // confirma exclusivamente desde el panel del chofer.
-            /*
-              [
-                Markup.button.callback(
-                  '🚗 Aceptar Viaje',
-                  `c_ac_v:${viaje.id}:${driverChatId}`,
-                ),
-                Markup.button.callback(
-                  '❌ Rechazar Oferta',
-                  `r_v_o:${viaje.id}`,
-                ),
-              ],
-            ]),
-            */
-          },
-        );
-        viaje.telegramChoferMsgOfertaId = sentMsg.message_id.toString();
-        await this.viajesRepository.save(viaje);
-      } catch (err) {
-        this.logger.error(
-          `[dispatchViaje] Error enviando mensaje a Telegram de chofer ${nearestDriver.id}:`,
-          err,
-        );
-        await this.rechazarOfertaManual(viaje.id, nearestDriver.id);
-        return;
-      }
-    }
-
     // El vencimiento se guarda en base de datos ademas de programarse en
     // memoria: el setTimeout es la via rapida, pero si el proceso se reinicia
     // antes de dispararlo, `sweepExpiredDispatchOffers` recoge la oferta.
@@ -4617,12 +4212,12 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
      * Aviso push de la oferta.
      *
      * Es el aviso que mas cuesta perderse de todo el sistema: la oferta caduca
-     * sola, y un chofer que no la ve a tiempo deja el viaje sin cubrir. Hasta
-     * ahora dependia por completo de que Telegram le sonara, que es justo el
-     * problema del que se partio.
+     * sola, y un chofer que no la ve a tiempo deja el viaje sin cubrir. Es el
+     * unico aviso de la oferta: el mensaje de Telegram que la duplicaba ya no
+     * sale.
      *
-     * En su propio try/catch: el viaje ya esta ofrecido y el mensaje del chat
-     * ya salio; que falle el push no puede deshacer nada de eso.
+     * En su propio try/catch: el viaje ya esta ofrecido; que falle el push no
+     * puede deshacer eso.
      */
     try {
       await this.notificationsService.notificar(nearestDriver.usuarioId, {
@@ -4683,12 +4278,17 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     viaje: Viajes,
     motivo: string = `No se encontraron choferes disponibles para el viaje de ${viaje.tipo}.`,
   ): Promise<void> {
+    /*
+     * El motivo viaja en el evento para que el panel lo muestre: antes solo
+     * salia en el tema del grupo del jefe, que no se porta.
+     */
     const event = {
       type: 'no_drivers_available',
       data: {
         serviceId: viaje.servicioId,
         tripId: viaje.id,
         tripType: viaje.tipo,
+        motivo,
       },
     };
     this.realtimeEventsService.emitToBoss(viaje.servicio.jefeId, event);
@@ -4703,31 +4303,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       relatedEntityId: viaje.id,
       dedupeKey: `boss:no_drivers_available:${viaje.servicioId}:event`,
     });
-
-    const topic = this.getServiceTopic(viaje.servicio);
-    if (!topic) return;
-    await this.bot.telegram
-      .sendMessage(
-        topic.chatId,
-        `⚠️ ${motivo} Puedes cambiar el método de transporte a Uber.`,
-        {
-          message_thread_id: topic.threadId,
-          ...Markup.inlineKeyboard([
-            [
-              Markup.button.callback(
-                '📱 Cambiar a Uber',
-                `cambiar_transporte:${viaje.id}:uber`,
-              ),
-            ],
-          ]),
-        },
-      )
-      .catch((error) =>
-        this.logger.error(
-          `[dispatchViaje] No se pudo notificar al jefe del viaje ${viaje.id}:`,
-          error,
-        ),
-      );
   }
 
   async expirarOfertaYContinuar(
@@ -4738,30 +4313,12 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
     const viaje = await this.viajesRepository.findOne({
       where: { id: viajeId },
-      relations: { chofer: { usuario: true } },
     });
 
     if (viaje && viaje.estado === 'notificado' && viaje.choferId === choferId) {
-      const driverChatId = viaje.chofer?.usuario?.telegramChatId;
-      if (driverChatId && viaje.telegramChoferMsgOfertaId) {
-        try {
-          await this.bot.telegram.editMessageText(
-            driverChatId,
-            parseInt(viaje.telegramChoferMsgOfertaId, 10),
-            undefined,
-            `⏰ *Oferta expirada.*\nNo respondiste a tiempo y el viaje ha sido ofrecido al siguiente chofer disponible.`,
-          );
-        } catch (editErr) {
-          this.logger.error(
-            `Error al editar mensaje de oferta expirada:`,
-            editErr,
-          );
-        }
-      }
-
-      /* Mismo motivo que en el rechazo: `save` con la relacion cargada no
-       * suelta el chofer. Aqui el sintoma era mas callado --la oferta caducada
-       * seguia figurando como suya-- pero es el mismo fallo. */
+      /* Mismo motivo que en el rechazo: soltar el chofer con `update` y no con
+       * `save`. Aqui el sintoma era mas callado --la oferta caducada seguia
+       * figurando como suya-- pero es el mismo fallo. */
       await this.viajesRepository.update(viajeId, {
         choferId: null,
         telegramChoferMsgOfertaId: null,
@@ -4821,35 +4378,16 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
     const viaje = await this.viajesRepository.findOne({
       where: { id: viajeId },
-      relations: { chofer: { usuario: true } },
     });
 
     if (viaje && viaje.estado === 'notificado' && viaje.choferId === choferId) {
-      const driverChatId = viaje.chofer?.usuario?.telegramChatId;
-      if (driverChatId && viaje.telegramChoferMsgOfertaId) {
-        try {
-          await this.bot.telegram.editMessageText(
-            driverChatId,
-            parseInt(viaje.telegramChoferMsgOfertaId, 10),
-            undefined,
-            `❌ *Has rechazado esta oferta de viaje.*`,
-          );
-        } catch (editErr) {
-          this.logger.error(
-            `Error al editar mensaje de oferta rechazada:`,
-            editErr,
-          );
-        }
-      }
-
       /*
        * Se sueltan las columnas con un `update` y no guardando la entidad.
        *
-       * El viaje se carga con la relacion `chofer` para poder editarle el
-       * mensaje del chat, y TypeORM da precedencia al objeto de la relacion
-       * sobre la columna: poner `viaje.choferId = null` y llamar a `save` volvia
-       * a escribir el chofer que traia cargado, asi que el nulo se perdia sin
-       * ningun error.
+       * Cuando el viaje se cargaba con la relacion `chofer`, TypeORM daba
+       * precedencia al objeto de la relacion sobre la columna: poner
+       * `viaje.choferId = null` y llamar a `save` volvia a escribir el chofer
+       * que traia cargado, asi que el nulo se perdia sin ningun error.
        *
        * El efecto era que la oferta se quedaba pegada al mismo chofer: no
        * desaparecia de su portal, y cada vez que la rechazaba pasaba otra vez el
@@ -4869,14 +4407,12 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
       // El conteo va aparte y aislado: avisar al chofer o multarlo no puede
       // retrasar ni impedir que la oferta salga al siguiente.
-      await this.registrarRechazoDeChofer(choferId, driverChatId).catch(
-        (err) => {
-          this.logger.error(
-            `Error registrando el rechazo del chofer ${choferId}:`,
-            err,
-          );
-        },
-      );
+      await this.registrarRechazoDeChofer(choferId, viajeId).catch((err) => {
+        this.logger.error(
+          `Error registrando el rechazo del chofer ${choferId}:`,
+          err,
+        );
+      });
 
       await this.dispatchViaje(viajeId);
       return true;
@@ -4900,7 +4436,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
    */
   private async registrarRechazoDeChofer(
     choferId: string,
-    driverChatId?: string | null,
+    viajeId: string,
   ): Promise<void> {
     const choferes = this.serviciosRepository.manager.getRepository(Choferes);
     const chofer = await choferes.findOne({ where: { id: choferId } });
@@ -4914,13 +4450,13 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       ultimoRechazoAt: new Date(),
     });
 
-    if (alcanzaElTope) {
-      await this.disciplineService.applyDriverRejectionFine(
-        choferId,
-        seguidos,
-        DRIVER_REJECTION_FINE,
-      );
-    }
+    const multa = alcanzaElTope
+      ? await this.disciplineService.applyDriverRejectionFine(
+          choferId,
+          seguidos,
+          DRIVER_REJECTION_FINE,
+        )
+      : null;
 
     /*
      * El panel se entera de CADA rechazo, no solo del tercero: ver la racha
@@ -4937,22 +4473,27 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       montoMulta: alcanzaElTope ? DRIVER_REJECTION_FINE : null,
     });
 
-    if (!driverChatId) return;
-    const aviso = alcanzaElTope
-      ? `Rechazaste ${seguidos} ofertas de viaje seguidas.\n\n` +
-        `Se aplicó una multa de $${DRIVER_REJECTION_FINE.toLocaleString('es-MX')}. ` +
-        `El contador vuelve a cero. Si tienes un motivo, háblalo con administración.`
-      : `Rechazaste esta oferta. Llevas ${seguidos} de ${DRIVER_REJECTION_LIMIT} seguidas.\n\n` +
-        `Al llegar a ${DRIVER_REJECTION_LIMIT} se aplica una multa de $${DRIVER_REJECTION_FINE.toLocaleString('es-MX')}. ` +
-        `Aceptar un viaje pone el contador en cero.`;
-    await this.bot.telegram
-      .sendMessage(driverChatId, aviso)
-      .catch((err: unknown) => {
-        this.logger.error(
-          `No se pudo avisar al chofer ${choferId} de su racha de rechazos:`,
-          err,
-        );
-      });
+    /*
+     * Al chofer, por push. Va con `tipo` de sancion: es la advertencia de una
+     * multa o la multa misma, y quien ya las silencio no espera esta. El
+     * importe sale formateado en pesos mexicanos, como el resto del sistema.
+     */
+    const importe = DRIVER_REJECTION_FINE.toLocaleString(APP_LOCALE);
+    await this.avisar(chofer.usuarioId, {
+      titulo: alcanzaElTope
+        ? 'Se aplicó una multa'
+        : `Rechazaste ${seguidos} de ${DRIVER_REJECTION_LIMIT} ofertas`,
+      cuerpo: alcanzaElTope
+        ? `Rechazaste ${seguidos} ofertas seguidas: multa de $${importe}. El contador vuelve a cero.`
+        : `Al llegar a ${DRIVER_REJECTION_LIMIT} seguidas se aplica una multa de $${importe}. Aceptar un viaje pone el contador en cero.`,
+      url: '/chofer/portal',
+      tag: `rechazos-${choferId}`,
+      tipo: AVISO_SANCION,
+      relatedEntityId: viajeId,
+      dedupeKey: multa
+        ? `driver:rejection_fine:${multa.id}`
+        : `driver:offer_rejected:${viajeId}:${choferId}`,
+    });
   }
 
   /**
@@ -5075,18 +4616,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           relatedEntityId: service.id,
           dedupeKey: `employee:employee_acceptance_reminder:${service.id}:event`,
         });
-        if (service.empleada?.usuario?.telegramChatId) {
-          try {
-            await this.bot.telegram.sendMessage(
-              service.empleada.usuario.telegramChatId,
-              'Recordatorio: responde el servicio desde tu portal web. Quedan 6 minutos antes de avisar a coordinación.',
-            );
-          } catch (error) {
-            this.logger.warn(
-              `No se pudo enviar recordatorio informativo: ${describeError(error)}`,
-            );
-          }
-        }
         this.realtimeEventsService.emitToEmployee(service.empleadaId, {
           type: 'employee_acceptance_reminder',
           data: { serviceId: service.id, expiresAt: nextDeadline },
@@ -5268,7 +4797,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       if (viajeIda.choferId) {
         const chofer = await this.choferesRepository.findOne({
           where: { id: viajeIda.choferId },
-          relations: { usuario: true },
+          select: { id: true, usuarioId: true },
         });
         // Este se cae solo, sin que nadie lo decida: el chofer puede estar
         // esperando abajo sin saber que ya no hay a quien recoger.
@@ -5278,22 +4807,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           url: '/chofer/portal',
           tag: `cancelado-${servicio.id}`,
           requireInteraction: true,
+          relatedEntityId: servicio.id,
+          dedupeKey: `driver:service_cancelled_delay:${servicio.id}:${viajeIda.choferId}`,
         });
-
-        if (chofer && chofer.usuario?.telegramChatId) {
-          try {
-            await this.bot.telegram.sendMessage(
-              chofer.usuario.telegramChatId,
-              `❌ *Servicio Cancelado:*\nEl viaje ha sido cancelado automáticamente debido a la demora de la empleada. Estás libre para tomar otros viajes.`,
-              { parse_mode: 'Markdown' },
-            );
-          } catch (err) {
-            this.logger.error(
-              'Error al notificar al chofer de cancelación:',
-              err,
-            );
-          }
-        }
       }
     }
 
@@ -5301,26 +4817,16 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       .getRepository(Empleadas)
       .update(servicio.empleadaId, { disponible: true });
 
-    const empUser = servicio.empleada?.usuario;
-    if (empUser) {
-      const targetChatId = empUser.telegramChatId;
-      const threadId = undefined;
-
-      if (targetChatId) {
-        try {
-          await this.bot.telegram.sendMessage(
-            targetChatId,
-            `❌ *Servicio Cancelado por Tardanza:*\nSe agotó el tiempo de espera límite y no abordaste el vehículo. El servicio con el cliente ha sido cancelado.`,
-            { message_thread_id: threadId, parse_mode: 'Markdown' },
-          );
-        } catch (err) {
-          this.logger.error(
-            'Error al notificar a empleada de cancelación:',
-            err,
-          );
-        }
-      }
-    }
+    // Nivel 1: puede seguir creyendo que tiene que salir hacia el cliente.
+    await this.avisar(servicio.empleada?.usuarioId, {
+      titulo: 'Servicio cancelado por demora',
+      cuerpo: 'Se agotó el tiempo de espera y el servicio se canceló.',
+      url: '/empleada/portal',
+      tag: `cancelado-${servicio.id}`,
+      requireInteraction: true,
+      relatedEntityId: servicio.id,
+      dedupeKey: `employee:service_cancelled_delay:${servicio.id}`,
+    });
 
     /*
      * Aqui abajo se le ofrecen otras modelos, asi que la conversacion con esta
@@ -5950,25 +5456,26 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
-    // Se pide aqui y no en el manejador de Telegram: asi cerrar desde el chat
-    // y cerrar desde el portal recogen la valoracion igual.
-    await this.pedirCalificacionDelCliente(servicio);
-
     /*
-     * Y la del otro lado, que faltaba.
+     * La valoracion del cliente por parte de la modelo.
      *
-     * Al cliente se le pedia su valoracion desde siempre; a la modelo, nunca.
-     * El resultado es que el expediente de un cliente problematico llegaba
-     * vacio a quien tiene que decidir si se le vuelve a atender. Va sin `tipo`
+     * Se pide aqui y no en un manejador de canal: asi cerrar desde cualquier
+     * via la recoge igual. Califica en su portal (`ratings/pending-clients`);
+     * los botones de Telegram que lo duplicaban ya no salen. Va sin `tipo`
      * --no se puede apagar-- porque es el unico momento en el que se acuerda de
-     * como fue, y sin nota no hay expediente.
+     * como fue, y sin nota el expediente del cliente llega vacio a quien decide
+     * si se le vuelve a atender.
      */
-    await this.avisar(servicio.empleada?.usuarioId, {
-      titulo: 'Califica a tu cliente',
-      cuerpo: 'Terminaste un servicio. Toca para dejar tu valoración.',
-      url: '/empleada/portal',
-      tag: `calificar-cliente-${servicio.id}`,
-    });
+    if (servicio.clienteId) {
+      await this.avisar(servicio.empleada?.usuarioId, {
+        titulo: 'Califica a tu cliente',
+        cuerpo: 'Terminaste un servicio. Toca para dejar tu valoración.',
+        url: '/empleada/portal',
+        tag: `calificar-cliente-${servicio.id}`,
+        relatedEntityId: servicio.id,
+        dedupeKey: `employee:rate_client:${servicio.id}`,
+      });
+    }
 
     return {
       servicio: servicioConTotal,
@@ -6143,7 +5650,11 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       recordatoriosRegreso: 0,
       proximoRecordatorioRegresoAt: nextReminder,
     });
-    await this.sendReturnTransportPrompt(servicio, false);
+    await this.avisarRegresoPendiente(servicio, {
+      titulo: 'Elige el transporte de regreso',
+      cuerpo: 'Un servicio terminó. Toca para cuadrar el regreso de la modelo.',
+      clave: 'finalizado',
+    });
     await this.liquidationSync
       .syncOfficeRecord(servicio.id)
       .catch((error) =>
@@ -6165,9 +5676,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
    *
    * No se toca `estadoLiquidacion`: el servicio sigue en curso y marcarlo como
    * transporte pendiente lo sacaria de los activos antes de tiempo. Este aviso
-   * se adelanta al de `requestReturnTransport`, no lo sustituye; los botones
-   * son los mismos, asi que si el jefe resuelve aqui, al finalizar ya no queda
-   * nada que decidir.
+   * se adelanta al de `requestReturnTransport`, no lo sustituye: si el jefe
+   * resuelve en el panel, al finalizar ya no queda nada que decidir.
    */
   async notifyReturnTransportAhead(servicioId: string): Promise<void> {
     const servicio = await this.serviciosRepository.findOne({
@@ -6193,86 +5703,50 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         })
       : null;
 
-    const texto =
-      `${servicio.empleada?.nombreArtistico || 'La empleada'} no va a extender el servicio.` +
-      (hora ? ` Termina a las ${hora}.` : '') +
-      `\n\nVe cuadrando su viaje de regreso:`;
-
-    await this.sendReturnTransportPrompt(servicio, false, texto);
+    await this.avisarRegresoPendiente(servicio, {
+      titulo: 'Cuadra el regreso',
+      cuerpo:
+        'Una modelo no va a extender su servicio' +
+        (hora ? ` y termina a las ${hora}.` : '.') +
+        ' Toca para elegir su transporte.',
+      clave: 'adelantado',
+    });
   }
 
-  private async sendReturnTransportPrompt(
+  /**
+   * Pide a los jefes de la modelo que elijan el transporte de regreso.
+   *
+   * Antes salia al tema del servicio y a los grupos de Telegram de cada jefe,
+   * con un boton de chofer interno; el grupo con temas no se porta y el regreso
+   * se elige en el panel. Va a los tres jefes posibles --el del servicio, el
+   * principal y el secundario de la modelo-- porque cualquiera puede
+   * resolverlo y no se sabe quien esta mirando. Sin `tipo`: un regreso sin
+   * resolver deja a la modelo en la puerta.
+   *
+   * El texto no lleva nombre de la modelo: se lee en la pantalla de bloqueo.
+   */
+  private async avisarRegresoPendiente(
     servicio: Servicios,
-    reminder: boolean,
-    /** Texto propio. Sin el se usa el de un servicio ya finalizado. */
-    customText?: string,
+    aviso: { titulo: string; cuerpo: string; clave: string },
   ): Promise<void> {
-    const topic = this.getServiceTopic(servicio);
-    const text =
-      customText ??
-      `${reminder ? 'Recordatorio\n\n' : ''}🚗 *Seleccione el transporte de regreso*`;
-    const keyboard = Markup.inlineKeyboard([
+    const jefeIds = new Set(
       [
-        Markup.button.callback(
-          'Chofer interno',
-          `regreso_transporte:${servicio.id}:interno`,
-        ),
-      ],
-    ]);
-    const panelHint =
-      '\nPara transporte externo, abre el panel y registra plataforma, enlace y costo.';
-    const messages: Array<{ destination: string; request: Promise<unknown> }> =
-      [];
-    const usedChatIds = new Set<string>();
-    if (topic) {
-      usedChatIds.add(String(topic.chatId));
-      messages.push({
-        destination: `hilo ${topic.threadId}`,
-        request: this.bot.telegram.sendMessage(topic.chatId, text + panelHint, {
-          message_thread_id: topic.threadId,
-          ...keyboard,
-        }),
+        servicio.jefeId,
+        servicio.empleada?.jefeId,
+        servicio.empleada?.jefeSecundarioId,
+      ].filter((id): id is string => Boolean(id)),
+    );
+    for (const jefeId of jefeIds) {
+      await this.avisar(jefeId, {
+        titulo: aviso.titulo,
+        cuerpo: aviso.cuerpo,
+        url: '/jefe',
+        tag: `regreso-${servicio.id}`,
+        requireInteraction: true,
+        relatedEntityId: servicio.id,
+        dedupeKey: `boss:return_transport_requested:${servicio.id}:${aviso.clave}`,
       });
     }
-    const bosses = [
-      servicio.jefe,
-      servicio.empleada?.jefe,
-      servicio.empleada?.jefeSecundario,
-    ].filter(
-      (boss, index, rows) =>
-        boss && rows.findIndex((item) => item?.id === boss.id) === index,
-    );
-    for (const boss of bosses) {
-      if (boss!.grupoTelegramId) {
-        const groupId = String(boss!.grupoTelegramId);
-        if (!usedChatIds.has(groupId)) {
-          usedChatIds.add(groupId);
-          messages.push({
-            destination: `grupo del jefe ${boss!.id}`,
-            request: this.bot.telegram.sendMessage(groupId, text + panelHint, {
-              ...keyboard,
-            }),
-          });
-        }
-      }
-    }
-    if (!messages.length) {
-      this.logger.warn(
-        `El servicio ${servicio.id} no tiene un jefe con Telegram ni un hilo de servicio configurado`,
-      );
-      return;
-    }
-    const results = await Promise.allSettled(
-      messages.map((item) => item.request),
-    );
-    results.forEach((result, index) => {
-      if (result.status === 'rejected') {
-        this.logger.error(
-          `No se pudo enviar la solicitud de regreso a ${messages[index].destination}`,
-          result.reason,
-        );
-      }
-    });
   }
 
   async processReturnTransportReminders(): Promise<void> {
@@ -6289,7 +5763,14 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
     for (const servicio of pending) {
       const count = servicio.recordatoriosRegreso + 1;
-      await this.sendReturnTransportPrompt(servicio, true).catch((error) =>
+      // La clave lleva el numero de recordatorio: cada uno es un aviso propio,
+      // y dos replicas que lo procesen a la vez solo mandan uno.
+      await this.avisarRegresoPendiente(servicio, {
+        titulo: 'Recordatorio: regreso pendiente',
+        cuerpo:
+          'Una modelo sigue sin transporte de vuelta. Toca para elegirlo.',
+        clave: `recordatorio-${count}`,
+      }).catch((error) =>
         this.logger.error('Error sending return reminder:', error),
       );
       await this.serviciosRepository.update(servicio.id, {
@@ -6298,22 +5779,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           count < 3 ? new Date(Date.now() + 5 * 60_000) : null,
       });
       if (count === 3) {
-        const admins = await this.usuariosRepository.find({
-          where: [
-            { rol: 'admin', activo: true },
-            { rol: 'jefe', activo: true },
-          ],
-        });
-        await Promise.allSettled(
-          admins
-            .filter((user) => user.grupoTelegramId || user.telegramChatId)
-            .map((user) =>
-              this.bot.telegram.sendMessage(
-                user.grupoTelegramId || user.telegramChatId!,
-                `El servicio ${servicio.id} sigue sin transporte de regreso después de tres recordatorios.`,
-              ),
-            ),
-        );
+        // A los administradores les llega por el puente, que deriva su aviso
+        // de `return_transport_escalated`.
         await this.avisar(servicio.jefeId, {
           titulo: 'Regreso sin resolver',
           cuerpo:
@@ -6406,24 +5873,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           error,
         ),
       );
-      const employee = await this.serviciosRepository.findOne({
-        where: { id: result.servicio.id },
-        relations: { empleada: { usuario: true } },
-      });
-      const employeeChatId = employee?.empleada?.usuario?.telegramChatId;
-      if (employeeChatId) {
-        await this.bot.telegram
-          .sendMessage(
-            employeeChatId,
-            '🚗 Tu viaje de regreso con chofer ya fue solicitado. Te avisaremos cuando un chofer lo acepte.',
-          )
-          .catch((error) =>
-            this.logger.error(
-              `[chooseReturnTransport] No se pudo avisar a la empleada del viaje ${result.trip.id}:`,
-              error,
-            ),
-          );
-      }
+      // La modelo se entera por el push que el puente deriva de
+      // `return_transport_selected`.
       this.realtimeEventsService.emitToBoss(result.servicio.jefeId, {
         type: 'return_transport_selected',
         data: { serviceId: result.servicio.id, trip: result.trip },
@@ -6444,25 +5895,11 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     });
     const employee = await this.serviciosRepository.findOne({
       where: { id: result.servicio.id },
-      relations: { empleada: { usuario: true } },
+      relations: { empleada: true },
     });
-    const employeeChatId = employee?.empleada?.usuario?.telegramChatId;
     const uberLink = employee
       ? this.buildUberLinkForTrip(employee, 'regreso')
       : undefined;
-    if (employeeChatId) {
-      await this.bot.telegram
-        .sendMessage(
-          employeeChatId,
-          'Tu transporte de regreso será en Uber. El jefe te enviará los detalles en breve.',
-        )
-        .catch((error) =>
-          this.logger.error(
-            `[chooseReturnTransport] No se pudo avisar a la empleada del Uber ${result.trip.id}:`,
-            error,
-          ),
-        );
-    }
     return { trip: result.trip, uberLink };
   }
 
@@ -6569,15 +6006,17 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       }
     } else {
       uberLink = this.buildUberLinkForTrip(servicio, result.trip.tipo);
-      const employeeChatId = servicio.empleada?.usuario?.telegramChatId;
-      if (employeeChatId) {
-        await this.bot.telegram
-          .sendMessage(
-            employeeChatId,
-            `El viaje de ${result.trip.tipo} cambió a Uber. El jefe te enviará los detalles en breve.`,
-          )
-          .catch(() => undefined);
-      }
+      // El viaje puede cambiar de proveedor varias veces: la hora de
+      // notificacion, que se renueva en cada cambio, separa un aviso de otro.
+      await this.avisar(servicio.empleada?.usuarioId, {
+        titulo: 'Tu viaje cambió a Uber',
+        cuerpo: 'Tu jefe te mandará los datos del coche. Toca para verlo.',
+        url: '/empleada/portal',
+        tag: `viaje-${result.trip.id}`,
+        requireInteraction: true,
+        relatedEntityId: result.trip.id,
+        dedupeKey: `employee:trip_changed_to_uber:${result.trip.id}:${result.trip.horaNotificacion.getTime()}`,
+      });
     }
 
     this.realtimeEventsService.emitToBoss(servicio.jefeId, {
@@ -6650,6 +6089,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         url: '/empleada/portal',
         tag: `uber-${trip.id}`,
         requireInteraction: true,
+        relatedEntityId: trip.id,
       });
     } catch (err) {
       this.logger.error(
@@ -6676,19 +6116,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       uberScreenshotUrl: evidence.url,
       uberScreenshotUploadedAt: new Date(),
     });
-    const chatId = trip.servicio.empleada?.usuario?.telegramChatId;
-    if (chatId) {
-      // El `file_id` vale porque quien sube la captura y quien la recibe estan
-      // en el mismo bot: un `file_id` solo sirve dentro del bot que recibio el
-      // archivo.
-      await this.bot.telegram.sendPhoto(chatId, fileId, {
-        caption: `Datos del Uber de ${trip.tipo === 'ida' ? 'ida' : 'regreso'}.\nUsa los botones para confirmar cada etapa de tu trayecto.`,
-        ...Markup.inlineKeyboard([
-          [Markup.button.callback('🚗 Ya estoy en el Uber', `eu:${trip.id}:i`)],
-        ]),
-      });
-    }
-
+    // Ella la ve en su portal; el reenvio de la foto por Telegram ya no sale.
     await this.avisarCapturaDeUber(trip);
   }
 
@@ -6696,14 +6124,12 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     tripId: string,
     actorId: string,
     file: any,
-  ): Promise<{ fileId: string; imageUrl: string }> {
+  ): Promise<{ imageUrl: string }> {
+    /*
+     * Ya no exige que la modelo tenga Telegram ni le reenvia la foto por ahi:
+     * la captura queda en el almacen y ella la ve en su portal tras el aviso.
+     */
     const trip = await this.getAuthorizedUberTrip(tripId, actorId);
-    const chatId = trip.servicio.empleada?.usuario?.telegramChatId;
-    if (!chatId) {
-      throw new ConflictException(
-        'La empleada no tiene una cuenta de Telegram vinculada',
-      );
-    }
 
     const evidence = await this.uploadService.uploadEvidence({
       buffer: file.buffer,
@@ -6711,34 +6137,13 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       folder: 'uber',
       scopeId: trip.id,
     });
-    const uploadedAt = new Date();
     await this.viajesRepository.update(trip.id, {
       uberScreenshotUrl: evidence.url,
-      uberScreenshotUploadedAt: uploadedAt,
-    });
-    const message = await this.bot.telegram.sendPhoto(
-      chatId,
-      { source: file.buffer, filename: file.originalname },
-      {
-        caption: `Datos del Uber de ${trip.tipo === 'ida' ? 'ida' : 'regreso'}.\nUsa los botones para confirmar cada etapa de tu trayecto.`,
-        ...Markup.inlineKeyboard([
-          [Markup.button.callback('🚗 Ya estoy en el Uber', `eu:${trip.id}:i`)],
-        ]),
-      },
-    );
-    const photos = message.photo;
-    const fileId = photos[photos.length - 1]?.file_id;
-    if (!fileId) {
-      throw new ConflictException('Telegram no devolvió la captura enviada');
-    }
-    await this.viajesRepository.update(trip.id, {
-      telegramUberFileId: fileId,
-      uberScreenshotUrl: evidence.url,
-      uberScreenshotUploadedAt: uploadedAt,
+      uberScreenshotUploadedAt: new Date(),
     });
     await this.avisarCapturaDeUber(trip);
 
-    return { fileId, imageUrl: evidence.url };
+    return { imageUrl: evidence.url };
   }
 
   async confirmUberFare(
@@ -7137,23 +6542,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         dedupeKey: `employee:external_transport_assigned:${serviceId}:event`,
       });
     }
-    const employee = await this.empleadasRepository.findOne({
-      where: { id: result.service.empleadaId },
-      relations: { usuario: true },
-    });
-    const employeeChatId = employee?.usuario?.telegramChatId;
-    if (employeeChatId) {
-      await this.bot.telegram
-        .sendMessage(
-          employeeChatId,
-          'Tu transporte está listo. Abre tu portal para ver el viaje.',
-        )
-        .catch((error) =>
-          this.logger.warn(
-            `No se pudo enviar el aviso auxiliar del viaje ${result.trip.id}: ${describeError(error)}`,
-          ),
-        );
-    }
     return result.trip;
   }
 
@@ -7328,47 +6716,19 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       ),
     );
 
-    const employeeChatId = servicio.empleada?.usuario?.telegramChatId;
-    if (employeeChatId) {
-      const employeeText =
-        `✅ *Monto definitivo del servicio*\n\n` +
-        `• Servicio base: $${Number(servicio.totalBase).toFixed(2)}\n` +
-        `• Transporte: $${Number(servicio.totalTransporte).toFixed(2)}\n` +
-        `• *Total a cobrar: $${Number(servicio.totalFinal).toFixed(2)}*`;
-      try {
-        if (servicio.telegramEmpleadaMensajeId) {
-          await this.bot.telegram.editMessageText(
-            employeeChatId,
-            Number(servicio.telegramEmpleadaMensajeId),
-            undefined,
-            employeeText,
-            { parse_mode: 'Markdown' },
-          );
-        } else {
-          const message = await this.bot.telegram.sendMessage(
-            employeeChatId,
-            employeeText,
-            {
-              parse_mode: 'Markdown',
-            },
-          );
-          await this.serviciosRepository.update(servicio.id, {
-            telegramEmpleadaMensajeId: message.message_id.toString(),
-          });
-        }
-      } catch {
-        const message = await this.bot.telegram.sendMessage(
-          employeeChatId,
-          employeeText,
-          {
-            parse_mode: 'Markdown',
-          },
-        );
-        await this.serviciosRepository.update(servicio.id, {
-          telegramEmpleadaMensajeId: message.message_id.toString(),
-        });
-      }
-    }
+    /*
+     * El monto definitivo lo lee en su portal. El importe no viaja en el aviso:
+     * se ve en la pantalla de bloqueo. La clave es por servicio porque este
+     * metodo se alcanza por varios caminos de cierre del transporte.
+     */
+    await this.avisar(servicio.empleada?.usuarioId, {
+      titulo: 'Monto definitivo listo',
+      cuerpo: 'Ya puedes ver el total final de tu servicio en tu portal.',
+      url: '/empleada/portal',
+      tag: `monto-${servicio.id}`,
+      relatedEntityId: servicio.id,
+      dedupeKey: `employee:final_amount:${servicio.id}`,
+    });
     if (servicio.clienteId) {
       this.realtimeEventsService.emitToClient(servicio.clienteId, {
         type: 'service_total_updated',
@@ -7522,45 +6882,34 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
     await this.advanceOperationForTrip(trip, action, actorId);
 
-    const employeeChatId = trip.servicio.empleada?.usuario?.telegramChatId;
-    if (bossAction && employeeChatId && trip.proveedorTransporte === 'uber') {
-      const message =
-        action === 'uber_arrived'
-          ? 'Tu Uber ya llegó. Continúa el flujo desde tu portal web.'
-          : 'Tu Uber va en camino a recogerte. Consulta los detalles en tu portal web.';
-      await this.bot.telegram.sendMessage(employeeChatId, message);
+    /*
+     * Lo que marca el jefe sobre el Uber se le cuenta a la modelo. El evento en
+     * vivo dependia de que ella tuviera Telegram, asi que el portal no se
+     * enteraba sin recargar; ahora sale siempre, con su push. Lo que marca ella
+     * misma no se le confirma: ya lo ve en la pantalla donde lo marco.
+     */
+    if (bossAction && trip.proveedorTransporte === 'uber') {
       this.realtimeEventsService.emitToEmployee(trip.servicio.empleadaId, {
         type: action,
         data: { tripId: trip.id, serviceId: trip.servicioId },
       });
+      await this.avisar(trip.servicio.empleada?.usuarioId, {
+        titulo:
+          action === 'uber_arrived'
+            ? 'Tu Uber ya llegó'
+            : 'Tu Uber va en camino',
+        cuerpo:
+          action === 'uber_arrived'
+            ? 'Está en el punto de recogida. Toca para verlo.'
+            : 'Va a recogerte. Toca para ver los datos del coche.',
+        url: '/empleada/portal',
+        tag: `uber-${trip.id}`,
+        requireInteraction: true,
+        relatedEntityId: trip.id,
+        dedupeKey: `employee:${action}:${trip.id}`,
+      });
     }
     if (!bossAction) {
-      const chatId = trip.servicio.empleada?.usuario?.telegramChatId;
-      if (chatId) {
-        try {
-          if (action === 'employee_en_route') {
-            await this.bot.telegram.sendMessage(
-              chatId,
-              'Registramos que vas en camino. Marca tu llegada desde el portal web.',
-            );
-          } else if (action === 'employee_arrived') {
-            if (trip.tipo === 'ida') {
-              await this.bot.telegram.sendMessage(
-                chatId,
-                'Registramos tu llegada. Inicia el servicio desde el portal web.',
-              );
-            } else {
-              await this.bot.telegram.sendMessage(
-                chatId,
-                'El flujo del servicio quedó finalizado. El jefe fue notificado.',
-              );
-            }
-          }
-        } catch (err) {
-          this.logger.error('No se pudo enviar el aviso a la empleada:', err);
-        }
-      }
-
       if (trip.tipo === 'ida') {
         const respaldoTrayecto =
           action === 'employee_arrived'
@@ -7604,27 +6953,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         data: { serviceId: trip.servicioId, tripId: trip.id },
       });
     }
-    if (!bossAction) {
-      const topic = this.getServiceTopic(trip.servicio);
-      if (topic) {
-        const employeeName =
-          trip.servicio.empleada?.nombreArtistico || 'La empleada';
-        const message =
-          action === 'employee_arrived'
-            ? `La empleada ${employeeName} confirmó que llegó al destino del viaje de ${trip.tipo}.`
-            : `La empleada ${employeeName} confirmó que ya está dentro del Uber de ${trip.tipo}.`;
-        try {
-          await this.bot.telegram.sendMessage(topic.chatId, message, {
-            message_thread_id: topic.threadId,
-          });
-        } catch (error) {
-          this.logger.error(
-            `[ServicesService] No se pudo notificar el estado del viaje en el tema ${topic.threadId}:`,
-            error,
-          );
-        }
-      }
-    }
+    // El jefe se entera por el push que el puente deriva de este evento.
     this.realtimeEventsService.emitToBoss(trip.servicio.jefeId, {
       type: 'trip_status_updated',
       data: {

@@ -31,7 +31,6 @@ describe('ServicesService plazo de espera de la empleada', () => {
     paymentReceiptValidationsRepository: {},
     realtimeEventsService: {},
     bot: {},
-    telegramService: {},
     aiMessageService: {},
     loyaltyService: {},
     liquidationSync: {},

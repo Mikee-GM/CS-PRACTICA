@@ -51,7 +51,6 @@ describe('ServicesService reprogramar y cambiarUbicacion', () => {
     paymentReceiptValidationsRepository: {},
     realtimeEventsService: realtime,
     bot,
-    telegramService: {},
     extensionsService: {},
     aiMessageService: {},
     loyaltyService: {},

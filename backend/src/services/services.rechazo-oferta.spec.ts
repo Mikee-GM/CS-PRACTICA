@@ -67,7 +67,7 @@ describe('ServicesService rechazarOfertaManual', () => {
     });
     // `save` volveria a escribir el chofer que trae la relacion cargada.
     expect(viajesRepository.save).not.toHaveBeenCalled();
-    expect(contar).toHaveBeenCalledWith('chofer-1', null);
+    expect(contar).toHaveBeenCalledWith('chofer-1', 'viaje-1');
     expect(dispatch).toHaveBeenCalledWith('viaje-1');
   });
 

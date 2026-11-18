@@ -74,7 +74,6 @@ describe('ServicesService transport settlement', () => {
     paymentReceiptValidationsRepository: {},
     realtimeEventsService: realtime,
     bot,
-    telegramService: {},
     aiMessageService,
     loyaltyService: loyalty,
     liquidationSync,
@@ -122,22 +121,23 @@ describe('ServicesService transport settlement', () => {
     expect(viajesRepository.update).not.toHaveBeenCalled();
   });
 
-  it('almacena en R2 antes de enviar una captura cargada desde el panel', async () => {
+  /*
+   * Fase 5: la captura ya no exige que la modelo tenga Telegram ni se le
+   * reenvia por ahi. Queda en R2 y ella la ve en su portal tras el push.
+   */
+  it('almacena en R2 y avisa por push una captura cargada desde el panel', async () => {
     viajesRepository.findOne.mockResolvedValue({
       id: 'trip',
       tipo: 'ida',
       proveedorTransporte: 'uber',
       servicio: {
         jefeId: 'boss',
-        empleada: { usuario: { telegramChatId: '123' } },
+        empleada: { usuarioId: 'employee-user', usuario: {} },
       },
     });
     usuariosRepository.findOneBy.mockResolvedValue({ id: 'boss', rol: 'jefe' });
     uploadService.uploadEvidence.mockResolvedValue({
       url: 'https://media.example.com/evidencias/uber/trip/image.jpg',
-    });
-    bot.telegram.sendPhoto.mockResolvedValue({
-      photo: [{ file_id: 'telegram-photo' }],
     });
 
     const result = await service.saveUberScreenshotFromDashboard(
@@ -156,18 +156,24 @@ describe('ServicesService transport settlement', () => {
     expect(
       uploadService.uploadEvidence.mock.invocationCallOrder[0],
     ).toBeLessThan(viajesRepository.update.mock.invocationCallOrder[0]);
-    expect(viajesRepository.update.mock.invocationCallOrder[0]).toBeLessThan(
-      bot.telegram.sendPhoto.mock.invocationCallOrder[0],
-    );
-    expect(viajesRepository.update).toHaveBeenLastCalledWith(
+    expect(viajesRepository.update).toHaveBeenCalledTimes(1);
+    expect(viajesRepository.update).toHaveBeenCalledWith(
       'trip',
       expect.objectContaining({
-        telegramUberFileId: 'telegram-photo',
         uberScreenshotUrl:
           'https://media.example.com/evidencias/uber/trip/image.jpg',
       }),
     );
-    expect(result.imageUrl).toContain('/evidencias/uber/');
+    expect(bot.telegram.sendPhoto).not.toHaveBeenCalled();
+    expect(
+      (service as any).notificationsService.notificar,
+    ).toHaveBeenCalledWith(
+      'employee-user',
+      expect.objectContaining({ url: '/empleada/portal' }),
+    );
+    expect(result).toEqual({
+      imageUrl: 'https://media.example.com/evidencias/uber/trip/image.jpg',
+    });
   });
 
   it('no envía ni registra la captura si falla R2', async () => {
@@ -253,7 +259,7 @@ describe('ServicesService transport settlement', () => {
       servicio: {
         jefeId: 'boss',
         empleadaId: 'employee',
-        empleada: { usuario: { telegramChatId: '123' } },
+        empleada: { usuarioId: 'employee-user', usuario: {} },
       },
     });
     usuariosRepository.findOneBy.mockResolvedValue({
@@ -266,9 +272,20 @@ describe('ServicesService transport settlement', () => {
     expect(viajesRepository.update).toHaveBeenCalledWith('trip', {
       estado: 'llegado',
     });
-    expect(bot.telegram.sendMessage).toHaveBeenCalledWith(
-      '123',
-      expect.stringContaining('portal web'),
+    // La modelo se entera en su portal y por push aunque no tenga Telegram.
+    expect(bot.telegram.sendMessage).not.toHaveBeenCalled();
+    expect(realtime.emitToEmployee).toHaveBeenCalledWith(
+      'employee',
+      expect.objectContaining({ type: 'uber_arrived' }),
+    );
+    expect(
+      (service as any).notificationsService.notificar,
+    ).toHaveBeenCalledWith(
+      'employee-user',
+      expect.objectContaining({
+        titulo: 'Tu Uber ya llegó',
+        dedupeKey: 'employee:uber_arrived:trip',
+      }),
     );
   });
 
@@ -666,7 +683,8 @@ describe('ServicesService transport settlement', () => {
     expect(liquidationSync.syncOfficeRecord).toHaveBeenCalledWith('service');
   });
 
-  it('envía la confirmación de la empleada al tema asignado', async () => {
+  // El grupo del jefe con temas no se porta: el jefe lo ve por el evento.
+  it('no escribe en el tema del grupo cuando la empleada sube al Uber', async () => {
     viajesRepository.findOne.mockResolvedValue({
       id: 'trip',
       servicioId: 'service',
@@ -698,14 +716,21 @@ describe('ServicesService transport settlement', () => {
       'employee_en_route',
     );
 
-    expect(bot.telegram.sendMessage).toHaveBeenCalledWith(
+    expect(bot.telegram.sendMessage).not.toHaveBeenCalledWith(
       '-100123',
-      expect.stringContaining('dentro del Uber de ida'),
-      { message_thread_id: 77 },
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(realtime.emitToBoss).toHaveBeenCalledWith(
+      'boss',
+      expect.objectContaining({
+        type: 'trip_status_updated',
+        data: expect.objectContaining({ action: 'employee_en_route' }),
+      }),
     );
   });
 
-  it('elimina el tema cuando termina el regreso en Uber', async () => {
+  it('no escribe en el tema del grupo cuando termina el regreso en Uber', async () => {
     viajesRepository.findOne.mockResolvedValue({
       id: 'trip',
       servicioId: 'service',
@@ -733,11 +758,7 @@ describe('ServicesService transport settlement', () => {
 
     await service.updateUberStatus('trip', 'employee-user', 'employee_arrived');
 
-    expect(bot.telegram.sendMessage).toHaveBeenCalledWith(
-      '-100456',
-      expect.stringContaining('llegó al destino del viaje de regreso'),
-      { message_thread_id: 88 },
-    );
+    expect(bot.telegram.sendMessage).not.toHaveBeenCalled();
     expect(bot.telegram.deleteForumTopic).not.toHaveBeenCalled();
   });
 
@@ -921,15 +942,17 @@ describe('ServicesService transport settlement', () => {
 
     await service.dispatchViaje('trip');
 
+    // El motivo viaja en el evento del panel; el tema del grupo ya no se usa.
     expect(realtime.emitToBoss).toHaveBeenCalledWith(
       'boss',
-      expect.objectContaining({ type: 'no_drivers_available' }),
+      expect.objectContaining({
+        type: 'no_drivers_available',
+        data: expect.objectContaining({
+          motivo: expect.stringContaining('ubicación de la empleada'),
+        }),
+      }),
     );
-    expect(bot.telegram.sendMessage).toHaveBeenCalledWith(
-      '-100999',
-      expect.stringContaining('ubicación de la empleada'),
-      expect.objectContaining({ message_thread_id: 99 }),
-    );
+    expect(bot.telegram.sendMessage).not.toHaveBeenCalled();
   });
 
   it('avisa al jefe cuando falta la ubicación del cliente para despachar el viaje de regreso', async () => {
@@ -952,10 +975,15 @@ describe('ServicesService transport settlement', () => {
 
     await service.dispatchViaje('trip');
 
-    expect(bot.telegram.sendMessage).toHaveBeenCalledWith(
-      '-100999',
-      expect.stringContaining('ubicación del cliente'),
-      expect.objectContaining({ message_thread_id: 99 }),
+    expect(realtime.emitToBoss).toHaveBeenCalledWith(
+      'boss',
+      expect.objectContaining({
+        type: 'no_drivers_available',
+        data: expect.objectContaining({
+          motivo: expect.stringContaining('ubicación del cliente'),
+        }),
+      }),
     );
+    expect(bot.telegram.sendMessage).not.toHaveBeenCalled();
   });
 });

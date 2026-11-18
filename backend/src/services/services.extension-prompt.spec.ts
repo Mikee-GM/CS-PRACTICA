@@ -63,7 +63,8 @@ describe('ServicesService checkActiveServicesForExtension', () => {
     expect(sendMessage).not.toHaveBeenCalled();
   });
 
-  it('con Telegram salen los dos: el push y el mensaje con los botones', async () => {
+  // Fase 5: aunque tenga Telegram vinculado, solo sale el push.
+  it('con Telegram vinculado sale solo el push', async () => {
     const { service, notificar, sendMessage } = armar([
       porTerminar({
         empleada: { usuarioId: 'user-emp', usuario: { telegramChatId: '555' } },
@@ -73,11 +74,7 @@ describe('ServicesService checkActiveServicesForExtension', () => {
     await service.checkActiveServicesForExtension();
 
     expect(notificar).toHaveBeenCalledTimes(1);
-    expect(sendMessage).toHaveBeenCalledWith(
-      '555',
-      expect.stringContaining('15 minutos'),
-      expect.anything(),
-    );
+    expect(sendMessage).not.toHaveBeenCalled();
   });
 
   it('no avisa de uno al que todavia le sobra tiempo', async () => {

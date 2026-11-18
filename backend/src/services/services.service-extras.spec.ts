@@ -82,7 +82,6 @@ describe('ServicesService extras de servicio', () => {
       paymentReceiptValidationsRepository: {},
       realtimeEventsService: { emitToJefes: jest.fn(), emitToBoss: jest.fn() },
       bot: {},
-      telegramService: {},
       aiMessageService: {},
       loyaltyService: {},
       liquidationSync: {},

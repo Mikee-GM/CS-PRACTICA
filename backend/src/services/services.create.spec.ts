@@ -9,7 +9,6 @@ describe('ServicesService.create', () => {
     assertOperationallyAllowed: jest.fn().mockResolvedValue(undefined),
   };
   const realtime = { emitToBoss: jest.fn() };
-  const telegramService = { notifyJefesNewService: jest.fn() };
 
   /*
    * Se construye por nombre y no con `new`.
@@ -35,7 +34,6 @@ describe('ServicesService.create', () => {
     paymentReceiptValidationsRepository: {},
     realtimeEventsService: realtime,
     bot: {},
-    telegramService,
     aiMessageService: {},
     loyaltyService: {},
     liquidationSync: {},

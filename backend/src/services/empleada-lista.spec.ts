@@ -98,7 +98,7 @@ describe('ServicesService: la modelo avisa que ya esta lista', () => {
     ).rejects.toBeInstanceOf(ConflictException);
   });
 
-  it('le manda al jefe el enlace del Uber en cuanto ella avisa', async () => {
+  it('le avisa al jefe por panel y push en cuanto ella avisa', async () => {
     serviciosRepository.findOne.mockResolvedValue(servicioEnUber());
     marcaQueGana(1);
 
@@ -110,24 +110,24 @@ describe('ServicesService: la modelo avisa que ya esta lista', () => {
       'jefe-1',
       expect.objectContaining({ type: 'employee_ready_for_service' }),
     );
-    const [chatId, texto, opciones] = bot.telegram.sendMessage.mock.calls[0];
-    expect(chatId).toBe('111');
-    expect(texto).toContain('Ana');
-    expect(opciones.reply_markup.inline_keyboard[0][0].url).toContain(
-      'm.uber.com',
+    expect(notifications.notificar).toHaveBeenCalledWith(
+      'jefe-1',
+      expect.objectContaining({
+        url: '/jefe',
+        dedupeKey: 'boss:employee_ready_for_service:srv-1',
+      }),
     );
   });
 
-  it('le quita a ella el boton de lista para esperar indicaciones', async () => {
+  // Fase 5: ni el jefe ni la modelo reciben ya nada por Telegram.
+  it('no manda ni edita mensajes de Telegram', async () => {
     serviciosRepository.findOne.mockResolvedValue(servicioEnUber());
     marcaQueGana(1);
 
     await service.marcarEmpleadaLista('srv-1', 'user-emp');
 
-    const [, mensajeId, , markup] =
-      bot.telegram.editMessageReplyMarkup.mock.calls[0];
-    expect(mensajeId).toBe(77);
-    expect(markup.inline_keyboard).toHaveLength(0);
+    expect(bot.telegram.sendMessage).not.toHaveBeenCalled();
+    expect(bot.telegram.editMessageReplyMarkup).not.toHaveBeenCalled();
   });
 
   /*
@@ -142,7 +142,7 @@ describe('ServicesService: la modelo avisa que ya esta lista', () => {
     const resultado = await service.marcarEmpleadaLista('srv-1', 'user-emp');
 
     expect(resultado.yaEstaba).toBe(true);
-    expect(bot.telegram.sendMessage).not.toHaveBeenCalled();
+    expect(notifications.notificar).not.toHaveBeenCalled();
   });
 
   it('tampoco avisa dos veces si las dos llegan a la vez', async () => {
@@ -152,6 +152,6 @@ describe('ServicesService: la modelo avisa que ya esta lista', () => {
     const resultado = await service.marcarEmpleadaLista('srv-1', 'user-emp');
 
     expect(resultado.yaEstaba).toBe(true);
-    expect(bot.telegram.sendMessage).not.toHaveBeenCalled();
+    expect(notifications.notificar).not.toHaveBeenCalled();
   });
 });

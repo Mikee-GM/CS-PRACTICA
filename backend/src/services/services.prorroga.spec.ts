@@ -40,7 +40,7 @@ describe('ServicesService solicitarProrroga', () => {
         findOne: jest.fn().mockResolvedValue(participante),
       },
       extensionsService: { requestServiceExtension },
-      telegramService: { sendMessage },
+      bot: { telegram: { sendMessage } },
       notificationsService: { notificar },
       startWaitTimeout,
     });
@@ -93,13 +93,14 @@ describe('ServicesService solicitarProrroga', () => {
 
     await service.solicitarProrroga('servicio-1', 'usuario-modelo');
 
-    expect(sendMessage).toHaveBeenCalledWith(
-      '555',
-      expect.stringContaining('Ana'),
-    );
+    // Solo por push: el mensaje de Telegram al chofer ya no sale (Fase 5).
+    expect(sendMessage).not.toHaveBeenCalled();
     expect(notificar).toHaveBeenCalledWith(
       'usuario-chofer',
-      expect.objectContaining({ url: '/chofer/portal' }),
+      expect.objectContaining({
+        url: '/chofer/portal',
+        dedupeKey: 'driver:service_extension:servicio-1:1',
+      }),
     );
   });
 

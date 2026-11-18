@@ -117,7 +117,6 @@ describe('ServicesService.finishByEmployee', () => {
       paymentReceiptValidationsRepository: {},
       realtimeEventsService: realtime,
       bot,
-      telegramService: {},
       aiMessageService: {},
       loyaltyService: {},
       liquidationSync: { syncOfficeRecord: jest.fn().mockResolvedValue(null) },

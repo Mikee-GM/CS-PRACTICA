@@ -30,6 +30,7 @@ function viaje(overrides: Partial<Viajes> = {}): Viajes {
       jefe: { grupoTelegramId: '-100', telegramChatId: '55' },
       empleada: {
         nombreArtistico: 'Valentina',
+        usuarioId: 'usuario-modelo',
         usuario: { telegramChatId: '77' },
         jefe: null,
       },
@@ -99,6 +100,7 @@ function montar(trip: Viajes | null, afectadas = 1) {
       findOne: jest.fn(() =>
         Promise.resolve({
           id: CHOFER,
+          usuarioId: 'usuario-chofer',
           nombre: 'Luis',
           telefono: '555',
           vehiculoPlaca: 'ABC-123',
@@ -144,6 +146,8 @@ function montar(trip: Viajes | null, afectadas = 1) {
     startWaitTimeout,
     clearWaitTimeout,
     sendMessage,
+    notificar: (dependencias.notifications as { notificar: jest.Mock })
+      .notificar,
     serviciosUpdate,
     syncDriverSettlement,
     choferesUpdate,
@@ -154,27 +158,41 @@ function montar(trip: Viajes | null, afectadas = 1) {
 }
 
 describe('DriverTripsService.marcarLlegada', () => {
-  it('deja el viaje en llegado y avisa a la modelo y al jefe', async () => {
-    const { service, update, enviados, startWaitTimeout } = montar(viaje());
+  /*
+   * Fase 5: al personal ya no le sale nada por Telegram. La modelo se entera
+   * por push y el jefe por el evento del panel (y su push, via el puente).
+   */
+  it('deja el viaje en llegado y avisa a la modelo por push, no por Telegram', async () => {
+    const { service, update, enviados, notificar, startWaitTimeout } =
+      montar(viaje());
 
     const resultado = await service.marcarLlegada('viaje-1', CHOFER);
 
     expect(resultado.estado).toBe('llegado');
     expect(update).toHaveBeenCalledWith('viaje-1', { estado: 'llegado' });
-    // Uno al grupo del jefe y otro al chat de la modelo.
-    expect(enviados.map((e) => e.chatId).sort()).toEqual(['-100', '77']);
+    expect(enviados).toEqual([]);
+    expect(notificar).toHaveBeenCalledWith(
+      'usuario-modelo',
+      expect.objectContaining({
+        titulo: 'Tu chofer ya llegó',
+        dedupeKey: 'employee:trip_status_updated:servicio-1:driver_arrived',
+      }),
+    );
     // El margen de espera de la modelo arranca con la llegada, no antes.
     expect(startWaitTimeout).toHaveBeenCalledWith('servicio-1', 600_000);
   });
 
-  it('le manda a la modelo con que identificar el coche', async () => {
-    const { service, enviados } = montar(viaje());
+  it('el aviso no lleva nombre ni placa: se lee en la pantalla de bloqueo', async () => {
+    const { service, notificar } = montar(viaje());
 
     await service.marcarLlegada('viaje-1', CHOFER);
 
-    const paraLaModelo = enviados.find((e) => e.chatId === '77');
-    expect(paraLaModelo?.texto).toContain('Luis');
-    expect(paraLaModelo?.texto).toContain('ABC-123');
+    const [, aviso] = notificar.mock.calls[0] as [
+      string,
+      { titulo: string; cuerpo: string },
+    ];
+    expect(`${aviso.titulo} ${aviso.cuerpo}`).not.toContain('Luis');
+    expect(`${aviso.titulo} ${aviso.cuerpo}`).not.toContain('ABC-123');
   });
 
   it('no deja que un chofer toque el viaje de otro', async () => {
@@ -197,12 +215,10 @@ describe('DriverTripsService.marcarLlegada', () => {
     expect(update).not.toHaveBeenCalled();
   });
 
-  it('un fallo de Telegram no deshace la llegada', async () => {
-    const { service, update } = montar(viaje());
+  it('un fallo del push no deshace la llegada', async () => {
+    const { service, update, notificar } = montar(viaje());
     // El chofer ya esta fisicamente alli: el viaje avanza igual.
-    (
-      service as unknown as { telegram: { sendMessage: jest.Mock } }
-    ).telegram.sendMessage.mockRejectedValue(new Error('Telegram caido'));
+    notificar.mockRejectedValue(new Error('push caido'));
 
     const resultado = await service.marcarLlegada('viaje-1', CHOFER);
 
@@ -268,8 +284,9 @@ describe('DriverTripsService.marcarRecogida', () => {
     expect(clearWaitTimeout).toHaveBeenCalledWith('servicio-1');
   });
 
-  it('retira del chat de la modelo los avisos que ya no son ciertos', async () => {
-    const { service, borrados } = montar(
+  // Ya no se le mandan mensajes por Telegram, asi que no hay nada que retirar.
+  it('no toca el chat de Telegram de la modelo ni el del jefe', async () => {
+    const { service, borrados, enviados } = montar(
       viaje({
         estado: 'llegado',
         telegramEmpleadaMsgChoferCaminoId: '11',
@@ -279,10 +296,8 @@ describe('DriverTripsService.marcarRecogida', () => {
 
     await service.marcarRecogida('viaje-1', CHOFER);
 
-    expect(borrados).toEqual([
-      { chatId: '77', messageId: 11 },
-      { chatId: '77', messageId: 22 },
-    ]);
+    expect(borrados).toEqual([]);
+    expect(enviados).toEqual([]);
   });
 
   it('admite recoger sin haber marcado la llegada', async () => {
@@ -408,6 +423,50 @@ describe('DriverTripsService.finalizarViaje', () => {
   });
 });
 
+describe('DriverTripsService.finalizarViaje pide las calificaciones por push', () => {
+  it('a la modelo y al chofer, cada uno a su portal y sin Telegram', async () => {
+    const { service, notificar, enviados } = montar(
+      viaje({ estado: 'en_curso', tipo: 'regreso' }),
+    );
+
+    await service.finalizarViaje('viaje-1', CHOFER);
+
+    expect(notificar).toHaveBeenCalledWith(
+      'usuario-modelo',
+      expect.objectContaining({
+        url: '/empleada/portal',
+        dedupeKey: 'employee:rate_driver:viaje-1',
+      }),
+    );
+    expect(notificar).toHaveBeenCalledWith(
+      'usuario-chofer',
+      expect.objectContaining({
+        url: '/chofer/portal',
+        dedupeKey: 'driver:rate_employee:viaje-1',
+      }),
+    );
+    // El cliente de esta prueba no tiene Telegram: nada sale por ahi.
+    expect(enviados).toEqual([]);
+  });
+
+  it('en la ida le dice a la modelo que ya llego, por push', async () => {
+    const { service, notificar, enviados } = montar(
+      viaje({ estado: 'en_curso', tipo: 'ida' }),
+    );
+
+    await service.finalizarViaje('viaje-1', CHOFER);
+
+    expect(notificar).toHaveBeenCalledWith(
+      'usuario-modelo',
+      expect.objectContaining({
+        titulo: 'Llegaste al destino',
+        dedupeKey: 'employee:trip_finished:viaje-1',
+      }),
+    );
+    expect(enviados).toEqual([]);
+  });
+});
+
 describe('DriverTripsService.aceptarOferta', () => {
   it('toma la oferta y deja al chofer ocupado', async () => {
     const { service, managerUpdate, markTransportAssigned, realtime } = montar(
@@ -426,7 +485,7 @@ describe('DriverTripsService.aceptarOferta', () => {
     );
     expect(markTransportAssigned).toHaveBeenCalledWith(
       'servicio-1',
-      undefined,
+      'usuario-chofer',
       'chofer',
     );
     expect(realtime.emitToBoss).toHaveBeenCalledWith(

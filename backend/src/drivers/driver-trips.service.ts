@@ -10,7 +10,6 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Not, Repository } from 'typeorm';
-import { Markup } from 'telegraf';
 import { Viajes } from '../trips/entities/trip.entity';
 import { Choferes } from './entities/driver.entity';
 import { Servicios } from '../services/entities/service.entity';
@@ -55,8 +54,9 @@ export class DriverTripsService {
     private readonly settlements: SettlementsService,
     private readonly notifications: NotificationsService,
     private readonly aiMessages: AiMessageService,
-    // Se usa el servicio y no el bot crudo: ahi vive el limitador de ritmo
-    // por el que tiene que pasar todo lo que sale hacia Telegram.
+    // Solo para los avisos al cliente que todavia reserva por Telegram; el
+    // personal ya no recibe nada por ahi (Fase 5) y se va en la Fase 6. Se usa
+    // el servicio y no el bot crudo: ahi vive el limitador de ritmo.
     @Inject(forwardRef(() => TelegramService))
     private readonly telegram: TelegramService,
     @Inject(forwardRef(() => ServicesService))
@@ -218,14 +218,8 @@ export class DriverTripsService {
       'chofer',
     );
 
-    await this.avisarAlJefe(
-      viaje,
-      chofer,
-      'Viaje aceptado',
-      `El chofer *${chofer?.nombre ?? ''}* acepto el viaje de la empleada *${viaje.servicio?.empleada?.nombreArtistico || ''}* y va en camino.`,
-    );
-
-    await this.avisarALaModeloQueVaEnCamino(viaje, chofer);
+    // El jefe se entera por el push que el puente deriva de `trip_accepted`.
+    await this.avisarALaModeloQueVaEnCamino(viaje);
 
     this.realtime.emitToDriver(choferId, {
       type: 'trip_accepted',
@@ -248,19 +242,14 @@ export class DriverTripsService {
   /**
    * Le dice a la modelo que su chofer ya va en camino.
    *
-   * Lleva los datos con los que identificara el coche, y el id del mensaje se
-   * guarda porque se borra mas adelante, cuando ella ya subio: si no, el aviso
-   * se queda en su conversacion mucho despues de dejar de ser cierto.
+   * Solo por push: los datos del chofer y del coche los ve en su portal, detras
+   * del toque. El mensaje de Telegram que los llevaba ya no sale.
    */
-  private async avisarALaModeloQueVaEnCamino(
-    trip: Viajes,
-    chofer: Choferes | null,
-  ): Promise<void> {
+  private async avisarALaModeloQueVaEnCamino(trip: Viajes): Promise<void> {
     const servicio = trip.servicio;
     if (!servicio) return;
 
-    // Web Push es el canal operativo principal y no depende de que exista o
-    // responda un chat de Telegram. El evento posterior reutiliza esta clave.
+    // El evento posterior del puente reutiliza esta clave.
     await this.avisar(servicio.empleada?.usuarioId, {
       titulo: 'Tu chofer va en camino',
       cuerpo: 'Toca para ver los datos del coche.',
@@ -270,44 +259,6 @@ export class DriverTripsService {
       relatedEntityId: servicio.id,
       dedupeKey: `employee:trip_accepted:${servicio.id}:event`,
     });
-
-    const chatId = servicio.empleada?.usuario?.telegramChatId;
-    if (!chatId) return;
-
-    const vehiculo = [
-      chofer?.vehiculoMarca ? `• *Marca:* ${chofer.vehiculoMarca}` : null,
-      chofer?.vehiculoModelo ? `• *Modelo:* ${chofer.vehiculoModelo}` : null,
-      chofer?.vehiculoColor ? `• *Color:* ${chofer.vehiculoColor}` : null,
-      chofer?.vehiculoPlaca ? `• *Placa:* ${chofer.vehiculoPlaca}` : null,
-    ]
-      .filter(Boolean)
-      .join('\n');
-
-    const texto =
-      `*¡Tu chofer va en camino!*\n\n` +
-      `El chofer *${chofer?.nombre ?? ''}* ha aceptado tu viaje y se dirige a tu ubicación.\n\n` +
-      `*Datos del Chofer:*\n` +
-      `• *Nombre:* ${chofer?.nombre ?? 'No registrado'}\n` +
-      `• *Teléfono:* ${chofer?.telefono ?? 'No registrado'}\n\n` +
-      (vehiculo
-        ? `*Datos del Vehículo:*\n${vehiculo}\n`
-        : `*Datos del Vehículo:* No registrados\n`);
-
-    try {
-      const enviado = await this.telegram.sendMessage(chatId, texto, {
-        parseMode: 'Markdown',
-      });
-      trip.telegramEmpleadaMsgChoferCaminoId = enviado.message_id.toString();
-      await this.viajes.update(trip.id, {
-        telegramEmpleadaMsgChoferCaminoId:
-          trip.telegramEmpleadaMsgChoferCaminoId,
-      });
-    } catch (err) {
-      this.logger.error(
-        `No se pudo avisar a la empleada de que el chofer va en camino (chat ${chatId}):`,
-        err,
-      );
-    }
   }
 
   /**
@@ -336,9 +287,9 @@ export class DriverTripsService {
   /**
    * El chofer llego al punto de recogida.
    *
-   * Avisa a la modelo con los datos con los que puede identificar el coche
-   * --es su unica forma de saber que se sube al correcto-- y le arranca el
-   * margen de espera. Y deja constancia en el grupo del jefe.
+   * Avisa a la modelo --los datos del coche, que son su unica forma de saber
+   * que se sube al correcto, los ve en su portal-- y le arranca el margen de
+   * espera. El jefe lo ve en su panel por `trip_status_updated`.
    */
   async marcarLlegada(viajeId: string, choferId: string): Promise<Viajes> {
     const trip = await this.cargarViajeDelChofer(viajeId, choferId);
@@ -352,13 +303,7 @@ export class DriverTripsService {
 
     const chofer = await this.choferes.findOne({ where: { id: choferId } });
 
-    await this.avisarAlJefe(
-      trip,
-      chofer,
-      'Chofer llegó al punto de recogida',
-      `El chofer *${chofer?.nombre ?? ''}* ya llegó a la ubicación para recoger a la empleada *${trip.servicio?.empleada?.nombreArtistico || ''}*.`,
-    );
-    await this.avisarLlegadaALaEmpleada(trip, chofer);
+    await this.avisarLlegadaALaEmpleada(trip);
     this.avisarAvanceDelViaje(trip, chofer, 'driver_arrived');
 
     return trip;
@@ -367,9 +312,7 @@ export class DriverTripsService {
   /**
    * La modelo ya subio al coche y arranca el trayecto al cliente.
    *
-   * Cancela el margen de espera --ya no procede cobrarlo-- y retira del chat
-   * de la modelo los avisos que dejaron de ser ciertos: el de que el chofer va
-   * en camino y el de que ha llegado.
+   * Cancela el margen de espera: ya no procede cobrarlo.
    *
    * Admite venir de `llegado` y tambien de `aceptado`, igual que antes: hay
    * choferes que recogen sin llegar a marcar la llegada, y bloquearlo dejaria
@@ -401,38 +344,9 @@ export class DriverTripsService {
       { userId: chofer?.usuarioId, type: 'chofer' },
     );
 
-    await this.avisarAlJefe(
-      trip,
-      chofer,
-      'Empleada recogida',
-      `El chofer *${chofer?.nombre ?? ''}* ya recogió a la empleada *${trip.servicio?.empleada?.nombreArtistico || ''}* e inició el trayecto al destino.`,
-    );
-    await this.retirarAvisosDeCamino(trip);
     this.avisarAvanceDelViaje(trip, chofer, 'employee_picked_up');
 
     return trip;
-  }
-
-  /**
-   * Quita del chat de la modelo los avisos que ya no son ciertos.
-   *
-   * Sin esto, "tu chofer ha llegado" se quedaba en su conversacion mucho
-   * despues de haber subido al coche, compitiendo con lo que si importa.
-   */
-  private async retirarAvisosDeCamino(trip: Viajes): Promise<void> {
-    const chatId = trip.servicio?.empleada?.usuario?.telegramChatId;
-    if (!chatId) return;
-
-    for (const id of [
-      trip.telegramEmpleadaMsgChoferCaminoId,
-      trip.telegramEmpleadaMsgChoferLlegadoId,
-    ]) {
-      if (!id) continue;
-      // `deleteMessage` ya se traga sus propios fallos: un mensaje que el
-      // usuario borro, o mas viejo de lo que Telegram deja retirar, no puede
-      // impedir que el viaje avance.
-      await this.telegram.deleteMessage(chatId, parseInt(id, 10));
-    }
   }
 
   /**
@@ -445,8 +359,8 @@ export class DriverTripsService {
    *
    * Lo que cambia segun el tramo:
    *  - ida: el servicio arranca de verdad, y si estaba agendado pasa a en_curso.
-   *  - regreso: se anota la llegada a casa, se cierra la liquidacion --salvo que
-   *    quede cobro final pendiente-- y se cierra el tema del grupo.
+   *  - regreso: se anota la llegada a casa y se cierra la liquidacion --salvo
+   *    que quede cobro final pendiente--.
    */
   async finalizarViaje(viajeId: string, choferId: string): Promise<Viajes> {
     const trip = await this.cargarViajeDelChofer(viajeId, choferId);
@@ -461,13 +375,6 @@ export class DriverTripsService {
 
     const chofer = await this.choferes.findOne({ where: { id: choferId } });
 
-    await this.avisarAlJefe(
-      trip,
-      chofer,
-      'Viaje finalizado',
-      `El chofer *${chofer?.nombre ?? ''}* ha dejado a la empleada *${trip.servicio?.empleada?.nombreArtistico || ''}* en su destino y finalizó el viaje.`,
-    );
-
     await this.viajes.update(trip.id, {
       estado: 'finalizado',
       horaFinViaje: horaFin,
@@ -481,20 +388,15 @@ export class DriverTripsService {
       const cambios: Partial<Servicios> = {};
 
       if (trip.tipo === 'ida') {
-        const employeeChatId = trip.servicio.empleada?.usuario?.telegramChatId;
-        if (employeeChatId) {
-          try {
-            await this.telegram.sendMessage(
-              employeeChatId,
-              'Llegaste al destino. Inicia el servicio desde tu portal web cuando estés lista.',
-            );
-          } catch (err) {
-            this.logger.error(
-              'No se pudo enviar el aviso de llegada a la empleada:',
-              err,
-            );
-          }
-        }
+        await this.avisar(trip.servicio.empleada?.usuarioId, {
+          titulo: 'Llegaste al destino',
+          cuerpo: 'Inicia el servicio desde tu portal cuando estés lista.',
+          url: '/empleada/servicio',
+          tag: `viaje-${trip.id}`,
+          requireInteraction: true,
+          relatedEntityId: trip.servicio.id,
+          dedupeKey: `employee:trip_finished:${trip.id}`,
+        });
       } else {
         const horaLlegada = new Date();
         trip.servicio.horaLlegadaCasa = horaLlegada;
@@ -507,8 +409,6 @@ export class DriverTripsService {
         cambios.estadoLiquidacion = trip.servicio.cobroFinalPendiente
           ? 'transporte_pendiente'
           : 'cerrada';
-
-        escrituras.push(this.cerrarTemaDelServicio(trip));
       }
 
       escrituras.push(this.servicios.update(trip.servicio.id, cambios));
@@ -538,10 +438,10 @@ export class DriverTripsService {
       await this.cerrarServicioDeRegreso(trip);
     }
 
-    // Estos dos van al final y fuera de las ramas, igual que estaban en el
-    // chat: la calificacion se pide siempre, y al cliente se le avisa solo
-    // cuando el viaje que termina es el de ida, que es cuando llega ella.
-    await this.pedirCalificacionAlaEmpleada(trip, chofer);
+    // Estos van al final y fuera de las ramas, igual que estaban en el chat:
+    // la calificacion se pide siempre, y al cliente se le avisa solo cuando el
+    // viaje que termina es el de ida, que es cuando llega ella.
+    await this.pedirCalificacionAlaEmpleada(trip);
     await this.pedirCalificacionAlChofer(trip);
     if (trip.tipo === 'ida') await this.avisarLlegadaAlCliente(trip);
     this.avisarAvanceDelViaje(trip, chofer, 'trip_finished');
@@ -552,62 +452,40 @@ export class DriverTripsService {
   /**
    * Le pide al chofer que califique a la empleada del viaje.
    *
-   * En el chat esto viajaba pegado a la reescritura de su propio mensaje, asi
-   * que cerrar desde el portal no se lo pedia y esa valoracion se perdia. Sale
-   * a su chat aunque haya cerrado en la aplicacion: los botones de calificar
-   * son de Telegram y no hay pantalla equivalente todavia.
+   * Sale del cierre, que es el punto por el que pasan el portal y el chat, asi
+   * que ninguna via pierde la valoracion. Califica en su portal
+   * (`ratings/pending-employees`); los botones de Telegram que lo duplicaban ya
+   * no salen. Sin `tipo`: es el unico momento en que se acuerda del viaje.
    */
   private async pedirCalificacionAlChofer(trip: Viajes): Promise<void> {
     if (!trip.choferId) return;
     const chofer = await this.choferes.findOne({
       where: { id: trip.choferId },
-      relations: { usuario: true },
+      select: { id: true, usuarioId: true },
     });
-    const chatId = chofer?.usuario?.telegramChatId;
-    if (!chatId) return;
-
-    await this.telegram
-      .sendMessage(
-        chatId,
-        `Califica a ${trip.servicio?.empleada?.nombreArtistico ?? 'la empleada'} por este viaje.`,
-        {
-          buttons: [
-            [1, 2, 3, 4, 5].map((estrellas) =>
-              Markup.button.callback(
-                `${estrellas}`,
-                `rate_emp_trip:${trip.id}:${estrellas}`,
-              ),
-            ),
-          ],
-        },
-      )
-      .catch(() => undefined);
+    await this.avisar(chofer?.usuarioId, {
+      titulo: 'Califica el viaje',
+      cuerpo: 'Terminaste un viaje. Toca para calificar a tu pasajera.',
+      url: '/chofer/portal',
+      tag: `calificar-viaje-${trip.id}`,
+      relatedEntityId: trip.id,
+      dedupeKey: `driver:rate_employee:${trip.id}`,
+    });
   }
 
-  /** Le pide a la modelo que califique el trayecto recien terminado. */
-  private async pedirCalificacionAlaEmpleada(
-    trip: Viajes,
-    chofer: Choferes | null,
-  ): Promise<void> {
-    const chatId = trip.servicio?.empleada?.usuario?.telegramChatId;
-    if (!chatId) return;
-
-    await this.telegram
-      .sendMessage(
-        chatId,
-        `Califica el trayecto realizado por ${chofer?.nombre ?? 'tu chofer'}.`,
-        {
-          buttons: [
-            [1, 2, 3, 4, 5].map((estrellas) =>
-              Markup.button.callback(
-                `${estrellas}`,
-                `rate_driver_trip:${trip.id}:${estrellas}`,
-              ),
-            ),
-          ],
-        },
-      )
-      .catch(() => undefined);
+  /**
+   * Le pide a la modelo que califique el trayecto recien terminado. Califica en
+   * su portal (`ratings/pending-drivers`).
+   */
+  private async pedirCalificacionAlaEmpleada(trip: Viajes): Promise<void> {
+    await this.avisar(trip.servicio?.empleada?.usuarioId, {
+      titulo: 'Califica a tu chofer',
+      cuerpo: 'Terminó tu trayecto. Toca para dejar tu valoración.',
+      url: '/empleada/portal',
+      tag: `calificar-chofer-${trip.id}`,
+      relatedEntityId: trip.id,
+      dedupeKey: `employee:rate_driver:${trip.id}`,
+    });
   }
 
   /**
@@ -649,38 +527,6 @@ export class DriverTripsService {
       redactar,
       { respaldo },
     );
-  }
-
-  /**
-   * Avisa al grupo del jefe y cierra el tema del servicio.
-   *
-   * Solo al terminar el regreso: ahi el servicio esta completo y su hilo ya no
-   * tiene mas que decir.
-   */
-  private async cerrarTemaDelServicio(trip: Viajes): Promise<void> {
-    const servicio = trip.servicio;
-    if (!servicio) return;
-
-    const grupoId =
-      servicio.jefe?.grupoTelegramId ||
-      servicio.empleada?.jefe?.grupoTelegramId;
-    if (!servicio.telegramThreadId || !grupoId) return;
-
-    const threadId = parseInt(servicio.telegramThreadId, 10);
-    try {
-      await this.telegram.sendMessage(
-        grupoId,
-        `La empleada ${servicio.empleada?.nombreArtistico ?? ''} llegó a su destino. El servicio quedó completado.`,
-        { threadId },
-      );
-      await this.telegram.deleteForumTopic(grupoId, threadId);
-      await this.servicios.update(servicio.id, { telegramThreadId: null });
-    } catch (err) {
-      this.logger.error(
-        'No se pudo cerrar el tema del servicio al finalizar el regreso:',
-        err,
-      );
-    }
   }
 
   /**
@@ -784,16 +630,12 @@ export class DriverTripsService {
   }
 
   /**
-   * Le manda a la modelo los datos del coche y arranca su margen de espera.
+   * Avisa a la modelo de que el chofer ya llego y arranca su margen de espera.
    *
-   * El id del mensaje se guarda porque el chat lo borra despues, cuando el
-   * viaje avanza: sin guardarlo, el aviso de "tu chofer llego" se quedaba en
-   * la conversacion mucho despues de haber subido al coche.
+   * Los datos del coche y el boton de prorroga estan en su portal; el mensaje de
+   * Telegram que los duplicaba ya no sale.
    */
-  private async avisarLlegadaALaEmpleada(
-    trip: Viajes,
-    chofer: Choferes | null,
-  ): Promise<void> {
+  private async avisarLlegadaALaEmpleada(trip: Viajes): Promise<void> {
     const servicio = trip.servicio;
     if (!servicio) return;
 
@@ -807,110 +649,5 @@ export class DriverTripsService {
       dedupeKey: `employee:trip_status_updated:${servicio.id}:driver_arrived`,
     });
     this.servicesService.startWaitTimeout(servicio.id, ESPERA_MS);
-
-    const chatId = servicio.empleada?.usuario?.telegramChatId;
-    if (!chatId) return;
-
-    const vehiculo = [
-      chofer?.vehiculoMarca ? `• *Marca:* ${chofer.vehiculoMarca}` : null,
-      chofer?.vehiculoModelo ? `• *Modelo:* ${chofer.vehiculoModelo}` : null,
-      chofer?.vehiculoColor ? `• *Color:* ${chofer.vehiculoColor}` : null,
-      chofer?.vehiculoPlaca ? `• *Placa:* ${chofer.vehiculoPlaca}` : null,
-    ]
-      .filter(Boolean)
-      .join('\n');
-
-    const texto =
-      `*¡Tu chofer ha llegado!*\n\n` +
-      `El chofer *${chofer?.nombre ?? ''}* ya está fuera en el punto de recogida.\n\n` +
-      `*Datos de Identificación del Chofer:*\n` +
-      `• *Nombre:* ${chofer?.nombre ?? 'No registrado'}\n` +
-      `• *Teléfono:* ${chofer?.telefono ?? 'No registrado'}\n\n` +
-      (vehiculo
-        ? `*Datos del Vehículo:*\n${vehiculo}\n`
-        : `*Datos del Vehículo:* No registrados\n`) +
-      `Por favor, reúnete con él para iniciar el viaje.`;
-
-    try {
-      const enviado = await this.telegram.sendMessage(chatId, texto, {
-        parseMode: 'Markdown',
-        buttons: [
-          [
-            Markup.button.callback(
-              'Solicitar prórroga (10 min)',
-              `pedir_prorroga:${trip.servicio.id}`,
-            ),
-          ],
-        ],
-      });
-
-      trip.telegramEmpleadaMsgChoferLlegadoId = enviado.message_id.toString();
-      await this.viajes.update(trip.id, {
-        telegramEmpleadaMsgChoferLlegadoId:
-          trip.telegramEmpleadaMsgChoferLlegadoId,
-      });
-    } catch (err) {
-      /*
-       * Que no se pueda avisar por Telegram no deshace la llegada: el viaje ya
-       * cambio de estado y el chofer esta fisicamente alli. Se registra y se
-       * sigue.
-       */
-      this.logger.error(
-        `No se pudo avisar a la empleada de la llegada (chat ${chatId}):`,
-        err,
-      );
-    }
-  }
-
-  /** Deja constancia del avance en el grupo del jefe, en el tema del servicio. */
-  private async avisarAlJefe(
-    trip: Viajes,
-    chofer: Choferes | null,
-    titulo: string,
-    detalle: string,
-  ): Promise<void> {
-    const servicio = trip.servicio;
-    if (!servicio) return;
-
-    const grupoId =
-      servicio.jefe?.grupoTelegramId ||
-      servicio.empleada?.jefe?.grupoTelegramId;
-    const destino =
-      grupoId ||
-      servicio.jefe?.telegramChatId ||
-      servicio.empleada?.jefe?.telegramChatId;
-    if (!destino) return;
-
-    const vehiculo = [
-      chofer?.vehiculoMarca ? `• *Marca:* ${chofer.vehiculoMarca}` : null,
-      chofer?.vehiculoModelo ? `• *Modelo:* ${chofer.vehiculoModelo}` : null,
-      chofer?.vehiculoColor ? `• *Color:* ${chofer.vehiculoColor}` : null,
-      chofer?.vehiculoPlaca ? `• *Placa:* ${chofer.vehiculoPlaca}` : null,
-    ]
-      .filter(Boolean)
-      .join('\n');
-
-    const texto =
-      `*Actualización de Chofer:* ${titulo}\n\n` +
-      `${detalle}\n\n` +
-      `• *Chofer:* ${chofer?.nombre ?? ''}\n` +
-      `• *Teléfono:* ${chofer?.telefono || 'No registrado'}\n` +
-      `• *Empleada:* ${servicio.empleada?.nombreArtistico || 'N/A'}\n` +
-      `• *Tipo de Viaje:* ${trip.tipo === 'ida' ? 'Ida (hacia cliente)' : 'Regreso (hacia domicilio)'}\n` +
-      (vehiculo ? `\n*Datos del Vehículo:*\n${vehiculo}` : '');
-
-    try {
-      await this.telegram.sendMessage(destino, texto, {
-        parseMode: 'Markdown',
-        ...(grupoId && servicio.telegramThreadId
-          ? { threadId: parseInt(servicio.telegramThreadId, 10) }
-          : {}),
-      });
-    } catch (err) {
-      this.logger.error(
-        `No se pudo avisar al jefe del avance del viaje (destino ${destino}):`,
-        err,
-      );
-    }
   }
 }

@@ -1245,3 +1245,153 @@ Pendiente:
   bandeja lo ve al recargar.
 - Probar contra Postgres real la consulta de pendientes (LATERAL con `UNION`,
   `array_agg` de categorias) y el `UPDATE` de cierre de la conversacion.
+
+### Fase 5, B-candidatas
+
+Evaluacion de candidatas por web, sin Telegram ni sesion, sobre el
+`CandidateScreeningModule` que ya existia (banco de preguntas, evaluaciones con
+token, respuestas y alta en catalogo). Sin migracion: el token aleatorio de
+`candidate_screenings` (72 bits, base64url, indice unico) ya era la credencial
+del enlace de Telegram y pasa a serlo del enlace web. El flujo de Telegram sigue
+intacto hasta la Fase 6.
+
+- `CandidateScreeningPublicController` (`candidate-screening/public`), publico a
+  proposito: sin `JwtAuthGuard`, `RolesGuard`, `@Roles` ni `CsrfGuard` (la
+  candidata no tiene cuenta y un sitio ajeno no tiene el token). `@Throttle`
+  60/min en las dos rutas, holgado porque el trafico anonimo llega por el proxy
+  de Next y el throttler lo cuenta casi todo junto.
+  - `GET /candidate-screening/public/:token`: `{ nombre, estado, pregunta: { id,
+    texto, numero, total, opciones: [{ indice, texto }] } | null }`. Opciones
+    vacias = respuesta escrita. Lista cerrada: nunca `isCorrect`, telefono,
+    token ni quien la creo. Es lectura pura: no marca inicio, porque la vista
+    previa del enlace en mensajeria hace un GET. Completada devuelve `pregunta:
+    null` (el enlace no admite mas respuestas: es de un solo uso en ese
+    sentido). Token con forma imposible o inexistente: el mismo 404.
+  - `POST /candidate-screening/public/:token/answers` (200): `{ preguntaId,
+    opcion? | texto? }`. `preguntaId` debe ser la pregunta pendiente; si no, 409
+    (un doble envio no se guarda como respuesta de la pregunta siguiente). Con
+    opciones exige `opcion` en rango y guarda su texto, como el bot; sin
+    opciones exige `texto` de 2 a 4000. La primera respuesta pasa `pendiente` a
+    `en_progreso` (condicionado, no pisa el inicio de Telegram). Devuelve `{
+    completado: false, pregunta }` o `{ completado: true }`, sin puntaje.
+- `registrarRespuesta` es comun a Telegram y web: el indice unico (evaluacion,
+  pregunta) resuelve dos envios simultaneos con 409, y el cierre es un `UPDATE
+  ... WHERE status <> 'completado'`, de modo que solo quien la cierra avisa.
+- Resultado para quien decide: al completarse se mantiene el evento SSE
+  `candidate_screening.completed` a `jefes` y se anade push a cada admin activo
+  hacia `/admin/candidatas/:id`, sin el nombre de la candidata (pantalla de
+  bloqueo), con `dedupeKey` `candidate_screening:completed:<id>`. Solo admins:
+  `/admin/candidatas` y el controller de gestion siguen siendo `@Roles('admin')`.
+- Decision 8: el reglamento del personal y su trust score no se mezclan con
+  esta evaluacion; aqui no hay puntaje ni bloqueo.
+- Pruebas: `candidate-screening.service.spec.ts`.
+
+Pendiente:
+
+- Frontend: pagina publica `/candidata/[token]` (o la ruta que se elija) fuera
+  de las rutas protegidas del middleware, y en `CandidatasClient` cambiar
+  `getCandidateScreeningTelegramUrl` por el enlace web (y el texto "por
+  Telegram" del modal y del detalle).
+- Confirmar con el dueno: si el jefe debe ver o gestionar candidatas (hoy solo
+  admin); si los enlaces deben caducar (no hay columna de expiracion; el texto
+  del bot ya dice "o ya expiro" sin que exista); si se quiere un puntaje de
+  aciertos en preguntas con opciones (pediria guardar `is_correct` por
+  respuesta, porque el banco se puede editar despues).
+- `deleteQuestion` borra la pregunta del banco aunque una evaluacion abierta la
+  tenga en su lista: `getNextQuestion` responde 404 y la candidata queda
+  atascada, por web y por Telegram. Conviene desactivar en lugar de borrar o
+  saltar las que falten.
+- Con el token en la ruta, queda en los registros de acceso del proxy.
+- Alta tras evaluar: `CandidateDetailClient` sigue pasando `telegramChatId` al
+  registrar; sin Telegram queda vacio, sin efecto.
+- Fase 6: borrar `bindTelegram`, `telegram_chat_id` de `candidate_screenings`,
+  `onCandidateScreening*` de `telegram-auth.update.ts` y el payload
+  `candidata_` de `telegram-start-payload.ts`.
+
+### Fase 5, B-emisores
+
+Envios de Telegram al personal (jefe, admin, modelo, chofer) fuera de
+`services.service.ts` y `drivers/driver-trips.service.ts`. Cada uno se borro y,
+si no tenia ya gemelo, se le dio uno por push (`NotificationsService.notificar`,
+con `dedupeKey`). Los textos del push no llevan nombres, placas, notas ni
+importes: salen en la pantalla de bloqueo. Sin migracion.
+
+Regla aplicada: solo se quitan los envios al personal. Los del cliente que
+todavia reserva por Telegram se conservan, igual que en B-schedulers, porque
+la Fase 5 es del personal y ese canal se borra en la Fase 6.
+
+- Medida (metrica de avance, `rg -l` de la seccion de la Fase 5): 17 archivos
+  antes y 17 despues. Los dos archivos siguen contando porque conservan los
+  envios al cliente (`@InjectBot` en `ServicesService`, `TelegramService` en
+  `DriverTripsService`). Llamadas a la API de Telegram: `services.service.ts`
+  de 61 a 16 (15 al cliente y el `getFileLink` de la captura que el jefe sube
+  por el chat); `driver-trips.service.ts` de 8 a 2 (las dos al cliente).
+- `ServicesService` ya no inyecta `TelegramService`.
+- Gemelo que ya existia (solo se borro el Telegram): servicio pendiente al jefe
+  (`notificarJefeServicioPendiente`), asignacion y recordatorio de aceptacion a
+  la modelo, aceptacion y cita agendada (`new_service` del puente y
+  `avisarEmpleadaDeServicio`), panico, sin choferes, cancelacion a modelo y
+  chofer, regreso elegido (`return_transport_selected`), transporte externo
+  asignado, aviso de extension, prorroga al chofer, oferta de viaje, captura
+  del Uber, calificar al cliente, chofer en camino y chofer llegado.
+- Push nuevo:
+  - Chofer: racha de rechazos y multa (`tipo: sancion`, clave por viaje o por
+    sancion); calificar a la pasajera al terminar un viaje
+    (`ratings/pending-employees`).
+  - Modelo: cancelacion por demora; servicio encadenado iniciado en el mismo
+    sitio (`notifyScheduledServiceStarted`) o listo con transporte; viaje
+    cambiado a Uber; Uber en camino y Uber llegado (marcados por el jefe);
+    llegada al destino de la ida; monto definitivo; calificar al chofer
+    (`ratings/pending-drivers`).
+  - Jefe: regreso pendiente a los tres jefes posibles (el del servicio, el
+    principal y el secundario de la modelo), con clave por momento
+    (`adelantado`, `finalizado`, `recordatorio-N`); pedir el Uber del
+    servicio encadenado.
+- Corregido de paso: el evento en vivo `uber_en_route` / `uber_arrived` a la
+  modelo solo salia si tenia Telegram.
+- `no_drivers_available` lleva ahora `motivo` en `data`: antes el motivo solo
+  salia en el tema del grupo.
+- `saveUberScreenshotFromDashboard` ya no exige que la modelo tenga Telegram
+  (devolvia 409) ni le reenvia la foto; responde `{ imageUrl }` (el frontend
+  no leia `fileId`).
+- Borrado por "No se porta" (grupo del jefe con temas): mensajes al tema,
+  `deleteForumTopic` al rechazar y al cerrar, `cerrarTemaDelServicio`,
+  `avisarAlJefe` del chofer, `retirarAvisosDeCamino`,
+  `cambiarBotonesDeLaEmpleada`. El aviso de tres recordatorios de regreso a
+  todos los jefes y admins por Telegram queda en el push al jefe del servicio
+  y, para los admins, en el del puente.
+- Sin cambios: el reparto de choferes (consulta, frescura, turnos, sanciones),
+  `aceptar`/`rechazar` con jefe o admin y el relevo de jefe en `create`.
+- Pruebas: `services.avisos-personal.spec.ts` (nueva) y ajustes en las de
+  prorroga, cancelacion, empleada lista, transporte, aviso de extension,
+  rechazo de oferta y `driver-trips.service.spec.ts`.
+
+Pendiente:
+
+- Envios al cliente de Telegram en estos dos archivos y `TelegramSession` /
+  `parseSessionKey` (clientes que esperan a una modelo): Fase 6.
+- `ServicesModule` y `DriversModule` siguen importando `TelegramModule` (el
+  primero por `@InjectBot`, el segundo por `TelegramService`); se quitan con
+  los envios al cliente.
+- `saveUberScreenshot(fileId)` y `notifyReturnTransportAhead` solo los llama un
+  handler de Telegram; el portal no tiene "no extender" y el regreso se adelanta
+  solo desde el chat.
+- `requestOpenEndedFinalPayment` (cuenta final de un servicio abierto) solo
+  llega al cliente de Telegram; falta el aviso al chat web.
+- Frontend: secciones de calificar en los portales y mostrar `motivo` en
+  `no_drivers_available`; los push apuntan hoy a `/empleada/portal`,
+  `/empleada/servicio`, `/chofer/portal` y `/jefe`.
+- Columnas `telegram_empleada_mensaje_id`, `telegram_chofer_msg_oferta_id`,
+  `telegram_empleada_msg_chofer_*` y `telegram_uber_file_id` ya no se escriben
+  (salvo la ultima por la via del chat): borrarlas en la Fase 6.
+
+Decisiones a confirmar:
+
+- Conservar los envios al cliente de Telegram hasta la Fase 6 (criterio de
+  B-schedulers); si se quieren quitar ya, hay que decidir que pasa con los
+  clientes que solo usan el bot.
+- El aviso de tres recordatorios de regreso iba a todos los jefes y admins;
+  ahora va al jefe del servicio y a los admins.
+- La cancelacion por demora y la racha de rechazos ahora avisan por push
+  (antes solo por Telegram); la racha se puede silenciar con el interruptor de
+  sanciones.
