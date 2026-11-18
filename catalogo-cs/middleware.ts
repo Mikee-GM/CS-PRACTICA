@@ -484,12 +484,14 @@ export const config = {
     "/empleada/historial",
     "/empleada/servicio",
     "/empleada/ajustes",
+    "/empleada/reglamento",
     // Publicaciones del feed: renueva como los ajustes. Sube media por Server
     // Action, de ahi `middlewareClientMaxBodySize` en next.config.ts.
     "/empleada/posts",
     "/chofer/portal",
     "/chofer/servicio",
     "/chofer/ajustes",
+    "/chofer/reglamento",
     // Acceso del cliente: renuevan la sesion para que quien ya tiene cuenta no
     // vea el formulario con un acceso caducado.
     "/cuenta",

@@ -307,7 +307,7 @@ describe('ReglamentoWebService', () => {
       expect(notificaciones.notificar).toHaveBeenCalledWith(
         'u1',
         expect.objectContaining({
-          url: '/chofer/portal',
+          url: '/chofer/reglamento',
           dedupeKey: 'onboarding:recordatorio:a1:3',
         }),
       );

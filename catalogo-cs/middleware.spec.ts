@@ -309,6 +309,25 @@ describe("middleware: publicaciones de la modelo", () => {
     expect(respuesta.headers.get("set-cookie")).toMatch(/access_token=nuevo/);
   });
 
+  it.each(["/empleada/reglamento", "/chofer/reglamento"])(
+    "con el acceso caducado renueva tambien en %s",
+    async (ruta) => {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: true,
+        headers: new Headers({
+          "set-cookie": "access_token=nuevo; Path=/; HttpOnly",
+        }),
+      }) as unknown as typeof fetch;
+
+      const respuesta = await middleware(
+        peticion(ruta, { refresh_token: "s:refresco.firma" }),
+      );
+
+      expect(respuesta.headers.get("location")).toBeNull();
+      expect(respuesta.headers.get("set-cookie")).toMatch(/access_token=nuevo/);
+    },
+  );
+
   it("con sesion vigente no consulta al backend ni redirige", async () => {
     global.fetch = jest.fn() as unknown as typeof fetch;
 

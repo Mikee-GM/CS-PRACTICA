@@ -29,14 +29,13 @@ export const MAXIMO_DE_RECORDATORIOS = 7;
 export const HORAS_ENTRE_RECORDATORIOS = 24;
 
 /**
- * A donde lleva tocar el recordatorio. Son las pantallas de inicio que ya
- * existen para cada rol; cuando el frontend tenga su vista del reglamento,
- * este es el unico lugar que debe cambiar.
+ * A donde lleva tocar el recordatorio: la pantalla del reglamento de cada rol
+ * en el frontend. Si una ruta se renombra, este es el unico lugar que cambia.
  */
 const DESTINO_POR_ROL: Record<RolConReglamento, string> = {
-  empleada: '/empleada/portal',
-  chofer: '/chofer/portal',
-  jefe: '/jefe',
+  empleada: '/empleada/reglamento',
+  chofer: '/chofer/reglamento',
+  jefe: '/jefe/reglamento',
 };
 
 export type PreguntaDelCuestionario = {
