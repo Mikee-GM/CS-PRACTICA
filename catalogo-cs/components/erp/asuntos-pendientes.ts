@@ -297,56 +297,6 @@ export function asuntosPendientes({
   }
 
   /*
-   * Sin Telegram vinculado no llega nada: ni la oferta de un viaje ni la
-   * autorizacion de un servicio. Una modelo dada de alta y sin vincular parece
-   * disponible en el catalogo y no lo esta, asi que es un pendiente real y no
-   * un detalle administrativo.
-   */
-  const sinTelegram = [
-    ...empleadas
-      .filter(
-        (empleada) => empleada.usuario && !empleada.usuario.telegramChatId,
-      )
-      .map((empleada) => ({
-        nombre: empleada.nombreArtistico,
-        href: "/admin/modelos",
-      })),
-    ...choferes
-      .filter((chofer) => chofer.usuario && !chofer.usuario.telegramChatId)
-      .map((chofer) => ({ nombre: chofer.nombre, href: "/admin/choferes" })),
-  ];
-
-  if (sinTelegram.length === 1) {
-    asuntos.push({
-      id: "telegram",
-      severidad: "alta",
-      area: "personal",
-      titulo: `${sinTelegram[0].nombre} sigue sin vincular su Telegram`,
-      detalle: "Sin el vinculo no recibe ofertas ni autorizaciones",
-      href: sinTelegram[0].href,
-      accion: "Vincular",
-      desde: null,
-    });
-  } else if (sinTelegram.length > 1) {
-    asuntos.push({
-      id: "telegram",
-      severidad: "alta",
-      area: "personal",
-      titulo: `${sinTelegram.length} personas sin Telegram vinculado`,
-      detalle: detalle(
-        sinTelegram
-          .slice(0, 4)
-          .map((persona) => persona.nombre)
-          .join(", "),
-        sinTelegram.length > 4 ? `y ${sinTelegram.length - 4} mas` : null,
-      ),
-      href: sinTelegram[0].href,
-      accion: "Vincular",
-      desde: null,
-    });
-  }
-
-  /*
    * Orden final: primero lo que se rompe antes y, dentro de una misma
    * severidad, lo que lleva mas tiempo esperando. Lo que no tiene fecha va
    * detras de lo que si la tiene: un agregado sin antiguedad no puede

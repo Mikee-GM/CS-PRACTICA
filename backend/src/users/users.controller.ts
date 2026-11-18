@@ -197,28 +197,4 @@ export class UsersController {
   ): Promise<{ passwordTemporal: string }> {
     return this.cuentaDelPersonal.restablecerPassword(actor, id);
   }
-
-  @Post(':id/telegram-otp')
-  @ApiActionDocs(
-    'Generar codigo OTP para vincular Telegram',
-    true,
-    'ID del usuario',
-  )
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'jefe')
-  generateTelegramOtp(@Param('id') id: string) {
-    return this.usersService.generateTelegramOtp(id);
-  }
-
-  @Post(':id/unlink-telegram')
-  @ApiActionDocs(
-    'Desvincular cuenta de Telegram del usuario',
-    true,
-    'ID del usuario',
-  )
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin', 'jefe')
-  unlinkTelegram(@Param('id') id: string) {
-    return this.usersService.unlinkTelegram(id);
-  }
 }

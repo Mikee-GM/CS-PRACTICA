@@ -1,14 +1,11 @@
 import {
   ForbiddenException,
-  Inject,
   Injectable,
   Logger,
   NotFoundException,
-  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, IsNull, Repository } from 'typeorm';
-import { Markup } from 'telegraf';
 import { MensajesEquipo } from './entities/team-message.entity';
 import type { TipoMensajeEquipo } from './entities/team-message.entity';
 import type {
@@ -17,7 +14,6 @@ import type {
 } from './dto/team-channel.dto';
 import { Empleadas } from '../employees/entities/employee.entity';
 import { Usuarios } from '../users/entities/user.entity';
-import { TelegramService } from '../telegram/telegram.service';
 import { RealtimeEventsService } from '../realtime/realtime.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
@@ -55,8 +51,6 @@ export class TeamChannelService {
     private readonly empleadas: Repository<Empleadas>,
     @InjectRepository(Usuarios)
     private readonly usuarios: Repository<Usuarios>,
-    @Inject(forwardRef(() => TelegramService))
-    private readonly telegram: TelegramService,
     private readonly realtime: RealtimeEventsService,
     private readonly notifications: NotificationsService,
   ) {}
@@ -153,7 +147,7 @@ export class TeamChannelService {
   }
 
   /**
-   * La modelo escribe. Llega a sus jefes por Telegram, por el panel y por aviso
+   * La modelo escribe. Llega a sus jefes por el panel y por aviso
    * push, porque no hay forma de saber cual de los tres esta mirando.
    */
   async enviarDesdeEmpleada(
@@ -374,8 +368,7 @@ export class TeamChannelService {
    * Avisa a los jefes de lo que escribio la modelo.
    *
    * Nunca lanza: el mensaje ya esta guardado y lo peor que puede pasar es que
-   * alguien se entere por el panel en vez de por el chat. Perderlo por un fallo
-   * de Telegram seria mucho peor.
+   * alguien se entere por el panel o por el aviso push.
    */
   private async avisarALosJefes(
     empleada: Empleadas,
@@ -399,29 +392,6 @@ export class TeamChannelService {
           tipo: fila.tipo,
         },
       });
-
-      if (!jefe.telegramChatId) continue;
-      try {
-        await this.telegram.sendMessage(
-          jefe.telegramChatId,
-          `Mensaje de ${empleada.nombreArtistico}:\n\n${fila.cuerpo}`,
-          {
-            buttons: [
-              [
-                Markup.button.callback(
-                  'Responder',
-                  `canal_jefe:${empleada.id}`,
-                ),
-              ],
-            ],
-          },
-        );
-      } catch (error) {
-        this.logger.error(
-          `No se pudo avisar al jefe ${jefe.id} del mensaje de la modelo:`,
-          error,
-        );
-      }
     }
   }
 
@@ -444,25 +414,6 @@ export class TeamChannelService {
       });
     } catch (error) {
       this.logger.error('No se pudo mandar el aviso push del canal:', error);
-    }
-
-    const chatId = empleada.usuario?.telegramChatId;
-    if (!chatId) return;
-    try {
-      await this.telegram.sendMessage(
-        chatId,
-        `${NOMBRE_ANONIMO}:\n\n${fila.cuerpo}`,
-        {
-          buttons: [
-            [Markup.button.callback('Responder', `canal_emp:${empleada.id}`)],
-          ],
-        },
-      );
-    } catch (error) {
-      this.logger.error(
-        `No se pudo entregar el mensaje del canal a la modelo ${empleada.id}:`,
-        error,
-      );
     }
   }
 }

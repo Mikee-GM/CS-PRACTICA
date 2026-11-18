@@ -18,7 +18,6 @@ describe('DisciplineService: la version de quien fue reportado', () => {
     };
     const realtime = { emitToJefes: jest.fn(), emitToBoss: jest.fn() };
     const notifications = { notificar: jest.fn().mockResolvedValue(1) };
-    const telegram = { sendMessage: jest.fn().mockResolvedValue(undefined) };
     const query = jest.fn().mockResolvedValue([{ id: 'emp-1' }]);
 
     /*
@@ -34,12 +33,11 @@ describe('DisciplineService: la version de quien fue reportado', () => {
       reports,
       realtime,
       notifications,
-      telegram,
       dataSource: { query },
       ...overrides,
     });
 
-    return { service, reports, realtime, notifications, telegram, query };
+    return { service, reports, realtime, notifications, query };
   }
 
   const reporteAbierto = (extra: Record<string, unknown> = {}) => ({
@@ -54,12 +52,11 @@ describe('DisciplineService: la version de quien fue reportado', () => {
 
   describe('el aviso al reportado', () => {
     /*
-     * No se puede silenciar y sale por los dos canales: de ese aviso depende
-     * que pueda defenderse, y el push solo llega si tiene la aplicacion
-     * instalada.
+     * No se puede silenciar y exige interaccion: de ese aviso depende
+     * que pueda defenderse.
      */
-    it('avisa por push y por chat, sin poder apagarlo', async () => {
-      const { service, notifications, telegram, query } = armar();
+    it('avisa por push, sin poder apagarlo', async () => {
+      const { service, notifications, query } = armar();
       query.mockResolvedValue([{ telegramChatId: '555' }]);
       (service as any).usuarioDelSujeto = jest
         .fn()
@@ -75,16 +72,12 @@ describe('DisciplineService: la version de quien fue reportado', () => {
       const aviso = notifications.notificar.mock.calls[0][1];
       expect(aviso.tipo).toBeUndefined();
       expect(aviso.url).toContain('/empleada/portal');
-      expect(telegram.sendMessage).toHaveBeenCalledWith(
-        '555',
-        expect.stringContaining('tu versión'),
-      );
+      expect(aviso.requireInteraction).toBe(true);
     });
 
     /** Un chofer reportado se entera igual, y por su portal. */
     it('vale igual para un chofer', async () => {
-      const { service, notifications, query } = armar();
-      query.mockResolvedValue([{ telegramChatId: '777' }]);
+      const { service, notifications } = armar();
       (service as any).usuarioDelSujeto = jest
         .fn()
         .mockResolvedValue('user-chofer');
@@ -106,7 +99,7 @@ describe('DisciplineService: la version de quien fue reportado', () => {
      * y avisarle solo serviria para que se escondiera.
      */
     it('no le avisa a un cliente reportado', async () => {
-      const { service, notifications, telegram } = armar();
+      const { service, notifications } = armar();
 
       await (service as any).avisarAlReportado({
         id: 'rep-3',
@@ -116,7 +109,6 @@ describe('DisciplineService: la version de quien fue reportado', () => {
       });
 
       expect(notifications.notificar).not.toHaveBeenCalled();
-      expect(telegram.sendMessage).not.toHaveBeenCalled();
     });
   });
 

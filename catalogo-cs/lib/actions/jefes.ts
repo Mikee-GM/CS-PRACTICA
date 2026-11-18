@@ -105,18 +105,3 @@ export async function deleteJefeAction(id: string): Promise<{ success: boolean; 
     return { success: false, error: error.message || "Error de conexion con el servidor" };
   }
 }
-
-// Verificado: UsersController expone POST /users/{id}/telegram-otp con roles admin y jefe.
-export async function generateTelegramOtpAction(id: string): Promise<{ success: boolean; code?: string; expiresAt?: string; error?: string }> {
-  try {
-    const data = await apiFetch<any>(`/users/${id}/telegram-otp`, {
-      method: "POST",
-      authenticated: true,
-    });
-    return { success: true, code: data.code, expiresAt: data.expiresAt };
-  } catch (error: any) {
-    if (isRedirectError(error)) throw error;
-    console.error("generateTelegramOtpAction error:", error);
-    return { success: false, error: error.message || "Error de conexion con el servidor" };
-  }
-}

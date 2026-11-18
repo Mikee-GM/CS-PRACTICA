@@ -26,7 +26,6 @@ describe('TeamChannelService', () => {
   };
   const empleadas = { findOne: jest.fn(), find: jest.fn() };
   const usuarios = { find: jest.fn(), findOne: jest.fn(), update: jest.fn() };
-  const telegram = { sendMessage: jest.fn() };
   const realtime = { emitToBoss: jest.fn(), emitToEmployee: jest.fn() };
   const notifications = { notificar: jest.fn().mockResolvedValue(1) };
 
@@ -38,7 +37,6 @@ describe('TeamChannelService', () => {
     mensajes,
     empleadas,
     usuarios,
-    telegram,
     realtime,
     notifications,
   });
@@ -49,7 +47,7 @@ describe('TeamChannelService', () => {
     nombreArtistico: 'Ana',
     jefeId: 'jefe-1',
     jefeSecundarioId: null,
-    usuario: { telegramChatId: '555', enJornada: true, jornadaMotivo: null },
+    usuario: { enJornada: true, jornadaMotivo: null },
   };
 
   const jefe = {
@@ -57,7 +55,6 @@ describe('TeamChannelService', () => {
     rol: 'jefe',
     nombre: 'Carlos',
     apellido: 'Ruiz',
-    telegramChatId: '111',
   } as any;
 
   beforeEach(() => {
@@ -87,13 +84,13 @@ describe('TeamChannelService', () => {
     expect(JSON.stringify(hilo)).not.toContain('Carlos');
   });
 
-  it('el mensaje que le llega por el chat tampoco lleva nombre', async () => {
+  it('el aviso push que le llega tampoco lleva nombre', async () => {
     await service.enviarDesdeJefe(jefe, 'emp-1', 'Avísame cuando salgas');
 
-    const [chatId, texto] = telegram.sendMessage.mock.calls[0];
-    expect(chatId).toBe('555');
-    expect(texto).toContain('Coordinación');
-    expect(texto).not.toContain('Carlos');
+    const [usuarioId, aviso] = notifications.notificar.mock.calls[0];
+    expect(usuarioId).toBe('user-emp');
+    expect(aviso.titulo).toContain('Coordinación');
+    expect(JSON.stringify(aviso)).not.toContain('Carlos');
   });
 
   it('al jefe si le dice con quien habla', async () => {
@@ -125,15 +122,14 @@ describe('TeamChannelService', () => {
       jefeId: null,
       jefeSecundarioId: null,
     });
-    usuarios.find.mockResolvedValue([{ id: 'admin-1', telegramChatId: '999' }]);
+    usuarios.find.mockResolvedValue([{ id: 'admin-1' }]);
     mensajes.findOne.mockResolvedValue(null);
 
     await service.enviarDesdeEmpleada('user-emp', 'Tengo una duda');
 
-    expect(telegram.sendMessage).toHaveBeenCalledWith(
-      '999',
-      expect.stringContaining('Ana'),
-      expect.anything(),
+    expect(realtime.emitToBoss).toHaveBeenCalledWith(
+      'admin-1',
+      expect.objectContaining({ type: 'team_channel_message' }),
     );
   });
 

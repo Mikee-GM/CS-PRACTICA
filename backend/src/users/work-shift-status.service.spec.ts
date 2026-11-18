@@ -2,7 +2,7 @@ import { WorkShiftStatusService } from './work-shift-status.service';
 
 /**
  * Cerrar la jornada tiene que avisar a alguien: a su jefe si es una modelo, al
- * panel de admin si es un chofer o un jefe. Y ningun fallo de mensajeria puede
+ * panel de admin si es un chofer o un jefe. Y ningun fallo de aviso puede
  * impedir que la persona cierre su dia.
  */
 describe('WorkShiftStatusService', () => {
@@ -12,7 +12,7 @@ describe('WorkShiftStatusService', () => {
     find: jest.fn(),
   };
   const empleadas = { findOne: jest.fn() };
-  const telegram = { sendMessage: jest.fn() };
+  const notifications = { notificar: jest.fn().mockResolvedValue(1) };
   const realtime = { emitToBoss: jest.fn(), emitToJefes: jest.fn() };
 
   /*
@@ -30,7 +30,7 @@ describe('WorkShiftStatusService', () => {
     logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
     usuarios,
     empleadas,
-    telegram,
+    notifications,
     realtime,
   });
 
@@ -55,7 +55,7 @@ describe('WorkShiftStatusService', () => {
     empleadas.findOne.mockResolvedValue({
       id: 'emp-1',
       nombreArtistico: 'Ana',
-      jefe: { id: 'jefe-1', telegramChatId: '111' },
+      jefe: { id: 'jefe-1' },
       jefeSecundario: null,
     });
   });
@@ -64,7 +64,7 @@ describe('WorkShiftStatusService', () => {
     await service.setStatus(modelo, true);
 
     expect(usuarios.update).not.toHaveBeenCalled();
-    expect(telegram.sendMessage).not.toHaveBeenCalled();
+    expect(notifications.notificar).not.toHaveBeenCalled();
   });
 
   it('guarda el cambio con su marca de tiempo', async () => {
@@ -76,35 +76,28 @@ describe('WorkShiftStatusService', () => {
     expect(cambios.jornadaActualizadaAt).toBeInstanceOf(Date);
   });
 
-  it('le avisa por Telegram al jefe cuando la modelo cierra su jornada', async () => {
+  it('le avisa por push al jefe cuando la modelo cierra su jornada', async () => {
     await service.setStatus(modelo, false);
 
-    const [chatId, texto] = telegram.sendMessage.mock.calls[0];
-    expect(chatId).toBe('111');
-    expect(texto).toContain('cerró su jornada');
+    const [usuarioId, aviso] = notifications.notificar.mock.calls[0];
+    expect(usuarioId).toBe('jefe-1');
+    expect(aviso.titulo).toContain('cerró su jornada');
+    expect(aviso.url).toBe('/jefe/equipo');
   });
 
   /*
-   * El motivo es opcional en los dos sentidos: si lo escribe, viaja en el mismo
-   * aviso; si no, el jefe recibe con que preguntarlo. Antes no habia ninguna de
-   * las dos cosas y el jefe tenia que salirse del sistema para enterarse.
+   * Una notificacion se lee en la pantalla bloqueada: ni el nombre de la modelo
+   * ni el motivo viajan en el texto. El motivo si queda guardado.
    */
-  it('manda el motivo dentro del aviso cuando ella lo escribe', async () => {
+  it('no pone el nombre ni el motivo en el aviso', async () => {
     await service.setStatus(modelo, false, 'Me siento mal');
 
-    const [, texto, opciones] = telegram.sendMessage.mock.calls[0];
-    expect(texto).toContain('Me siento mal');
-    expect(opciones?.buttons).toBeUndefined();
+    const [, aviso] = notifications.notificar.mock.calls[0];
+    expect(JSON.stringify(aviso)).not.toContain('Ana');
+    expect(JSON.stringify(aviso)).not.toContain('Me siento mal');
 
     const [, cambios] = usuarios.update.mock.calls[0];
     expect(cambios.jornadaMotivo).toBe('Me siento mal');
-  });
-
-  it('le ofrece al jefe preguntar la razón cuando ella no la dio', async () => {
-    await service.setStatus(modelo, false);
-
-    const [, , opciones] = telegram.sendMessage.mock.calls[0];
-    expect(opciones.buttons[0][0].callback_data).toBe('jornada_motivo:emp-1');
   });
 
   it('borra el motivo al volver a la jornada', async () => {
@@ -132,17 +125,17 @@ describe('WorkShiftStatusService', () => {
     empleadas.findOne.mockResolvedValue({
       id: 'emp-1',
       nombreArtistico: 'Ana',
-      jefe: { id: 'jefe-1', telegramChatId: '111' },
-      jefeSecundario: { id: 'jefe-2', telegramChatId: '222' },
+      jefe: { id: 'jefe-1' },
+      jefeSecundario: { id: 'jefe-2' },
     });
 
     await service.setStatus(modelo, false);
 
-    expect(telegram.sendMessage).toHaveBeenCalledTimes(2);
+    expect(notifications.notificar).toHaveBeenCalledTimes(2);
   });
 
   it('no avisa dos veces si el principal y el secundario son el mismo', async () => {
-    const jefe = { id: 'jefe-1', telegramChatId: '111' };
+    const jefe = { id: 'jefe-1' };
     empleadas.findOne.mockResolvedValue({
       id: 'emp-1',
       nombreArtistico: 'Ana',
@@ -152,13 +145,13 @@ describe('WorkShiftStatusService', () => {
 
     await service.setStatus(modelo, false);
 
-    expect(telegram.sendMessage).toHaveBeenCalledTimes(1);
+    expect(notifications.notificar).toHaveBeenCalledTimes(1);
   });
 
-  it('marca en el panel de admin el cambio de un chofer, sin Telegram', async () => {
+  it('marca en el panel de admin el cambio de un chofer, sin push', async () => {
     await service.setStatus(chofer, false);
 
-    expect(telegram.sendMessage).not.toHaveBeenCalled();
+    expect(notifications.notificar).not.toHaveBeenCalled();
     expect(realtime.emitToJefes).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'staff_work_shift_changed',
@@ -171,8 +164,8 @@ describe('WorkShiftStatusService', () => {
     );
   });
 
-  it('deja cerrar la jornada aunque Telegram falle', async () => {
-    telegram.sendMessage.mockRejectedValue(new Error('sin red'));
+  it('deja cerrar la jornada aunque el aviso falle', async () => {
+    notifications.notificar.mockRejectedValue(new Error('sin red'));
 
     const result = await service.setStatus(modelo, false);
 

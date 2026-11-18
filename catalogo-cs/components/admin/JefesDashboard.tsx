@@ -11,7 +11,6 @@ import {
   updateJefeAction,
   type RolDeOficina,
 } from "@/lib/actions/jefes";
-import EstadoDeTelegram from "@/components/erp/estado-de-telegram";
 import RestablecerContrasena from "@/components/cuenta/RestablecerContrasena";
 import ConfirmDialog from "../ui/ConfirmDialog";
 import InputField from "../ui/InputField";
@@ -345,9 +344,6 @@ export default function JefesDashboard({
                 <th className="px-6 py-4 text-[10px] font-bold tracking-[0.2em] text-zinc-400 uppercase">
                   Confiabilidad
                 </th>
-                <th className="px-6 py-4 text-[10px] font-bold tracking-[0.2em] text-zinc-400 uppercase">
-                  Telegram
-                </th>
                 <th className="px-6 py-4 text-[10px] font-bold tracking-[0.2em] text-zinc-400 uppercase text-right">
                   Acciones
                 </th>
@@ -380,12 +376,6 @@ export default function JefesDashboard({
                   </td>
                   <td className="px-6 py-4">
                     <ReliabilityRating score={jefe.trustScore} compact />
-                  </td>
-                  <td className="px-6 py-4 text-sm font-medium">
-                    <EstadoDeTelegram
-                      usuarioId={jefe.id}
-                      telegramChatId={jefe.telegramChatId}
-                    />
                   </td>
                   <td className="px-6 py-4 text-right space-x-4">
                     <button

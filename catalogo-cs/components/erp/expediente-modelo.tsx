@@ -22,7 +22,6 @@ import {
   type BadgeTone,
 } from "@/components/erp/primitives";
 import GaleriaFotos from "@/components/erp/galeria-fotos";
-import TelegramOtpButton from "@/components/erp/telegram-otp-button";
 import { formatCurrency } from "@/lib/calculations";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 import type { Dossier } from "@/lib/actions/discipline";
@@ -479,16 +478,6 @@ export default function ExpedienteModelo({
               </div>
             </Panel>
           ) : null}
-
-          <Panel title="Vinculacion de Telegram" subtitle="usuarios">
-            <TelegramOtpButton usuarioId={employee.usuarioId} />
-
-            <p className="text-[11px] leading-relaxed text-zinc-500">
-              El codigo caduca a los 10 minutos. Se envia al bot con el comando{" "}
-              <span className="font-semibold text-zinc-300">/vincular</span>{" "}
-              seguido del codigo.
-            </p>
-          </Panel>
 
           <Panel title="Operacion" subtitle="estado en vivo">
             <div className="flex flex-col">

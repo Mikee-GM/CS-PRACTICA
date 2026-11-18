@@ -1,15 +1,10 @@
-import {
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { Usuarios } from './entities/user.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { generateLinkCode, hashLinkCode } from '../telegram/telegram-link-code';
 
 @Injectable()
 export class UsersService {
@@ -17,47 +12,6 @@ export class UsersService {
     @InjectRepository(Usuarios)
     private readonly usuariosRepository: Repository<Usuarios>,
   ) {}
-
-  async generateTelegramOtp(userId: string) {
-    const user = await this.usuariosRepository.findOne({
-      where: { id: userId },
-    });
-    if (!user) {
-      throw new NotFoundException(`Usuario con ID ${userId} no encontrado`);
-    }
-
-    const code = generateLinkCode();
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 días de validez
-
-    // En la base solo queda la huella. El codigo en claro se devuelve una vez,
-    // para que el panel se lo enseñe a quien lo pidio, y no se guarda en ningun
-    // sitio del que se pueda recuperar despues.
-    user.telegramVerificationCode = hashLinkCode(code);
-    user.telegramVerificationExpiresAt = expiresAt;
-    await this.usuariosRepository.save(user);
-
-    return {
-      code,
-      expiresAt,
-    };
-  }
-
-  async unlinkTelegram(userId: string) {
-    const user = await this.usuariosRepository.findOne({
-      where: { id: userId },
-    });
-    if (!user) {
-      throw new NotFoundException(`Usuario con ID ${userId} no encontrado`);
-    }
-
-    user.telegramChatId = null;
-    user.telegramVerificationCode = null;
-    user.telegramVerificationExpiresAt = null;
-
-    await this.usuariosRepository.save(user);
-
-    return { unlinked: true };
-  }
 
   /**
    * Solo un admin puede crear otro admin. Sin esta comprobacion cualquier jefe

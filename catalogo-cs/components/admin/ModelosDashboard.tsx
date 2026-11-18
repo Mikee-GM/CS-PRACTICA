@@ -13,7 +13,6 @@ import {
   createModeloAction as createModelo,
   updateModeloAction as updateModelo,
 } from "@/lib/actions/modelos";
-import EstadoDeTelegram from "@/components/erp/estado-de-telegram";
 import RestablecerContrasena from "@/components/cuenta/RestablecerContrasena";
 import type { Modelo, ModeloPayload } from "@/types";
 import ModelModal from "./ModelModal";
@@ -185,12 +184,6 @@ export default function ModelosDashboard({
           compact
           className="mb-3"
         />
-        <div className="mb-3">
-          <EstadoDeTelegram
-            usuarioId={modelo.usuarioId}
-            telegramChatId={modelo.telegramChatId}
-          />
-        </div>
         {modelo.usuarioId ? (
           <div className="mb-1">
             <RestablecerContrasena

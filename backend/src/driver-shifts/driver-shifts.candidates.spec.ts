@@ -33,7 +33,6 @@ describe('DriverShiftsService listCandidates', () => {
     // Los avisos push no intervienen en elegir candidatos.
     notifications: { notificar: jest.fn().mockResolvedValue(0) },
     dataSource,
-    telegram: {},
   });
 
   beforeEach(() => {
@@ -115,7 +114,6 @@ describe('DriverShiftsService listShiftsForDriver', () => {
     choferesRepository,
     notifications: { notificar: jest.fn().mockResolvedValue(0) },
     dataSource: {},
-    telegram: {},
   });
 
   function conteos(filas: Array<{ shiftId: string; count: number }>) {

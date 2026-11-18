@@ -3,19 +3,16 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
-  Inject,
   Injectable,
   Logger,
   NotFoundException,
   OnModuleDestroy,
   OnModuleInit,
-  forwardRef,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, LessThanOrEqual, MoreThan, Repository } from 'typeorm';
 import { RealtimeEventsService } from '../realtime/realtime.service';
-import { TelegramService } from '../telegram/telegram.service';
 import {
   CloseConductReportDto,
   CreateConductReportDto,
@@ -96,11 +93,6 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     private readonly notifications: NotificationsService,
     private readonly realtime: RealtimeEventsService,
     private readonly configService: ConfigService,
-    // Por el aviso a quien fue reportado o calificado mal: el chat es el unico
-    // canal que tiene todo el mundo. Con forwardRef porque Telegram ya alcanza
-    // a disciplina para levantar reportes desde el bot.
-    @Inject(forwardRef(() => TelegramService))
-    private readonly telegram: TelegramService,
   ) {}
 
   onModuleInit() {
@@ -293,17 +285,6 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
           },
           { silenciable: !esBaja },
         );
-        if (esBaja) {
-          await this.avisarPorChat(
-            usuarioId,
-            interaction.subjectType,
-            `Recibiste una calificación de ${dto.stars} ${dto.stars === 1 ? 'estrella' : 'estrellas'}.` +
-              (dto.comment?.trim()
-                ? `\n\nComentario: ${dto.comment.trim()}`
-                : '') +
-              '\n\nSi no estás de acuerdo, puedes apelarla y contar tu versión desde tu portal.',
-          );
-        }
       }
       if (dto.direction === 'client_to_employee' && dto.stars <= 2) {
         await this.autoCreateReportFromBadRating(dto, interaction, saved.id);
@@ -457,14 +438,6 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
         tag: `reporte-${report.id}`,
       },
       { silenciable: false },
-    );
-
-    await this.avisarPorChat(
-      usuarioId,
-      report.subjectType,
-      'Se levantó un reporte sobre un servicio tuyo.' +
-        `\n\nMotivo: ${report.description}` +
-        '\n\nAntes de que se resuelva puedes contar tu versión desde tu portal, en Reputación.',
     );
   }
 
@@ -719,37 +692,6 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
       });
     } catch (err) {
       this.logger.error(`Error enviando el aviso push "${aviso.titulo}":`, err);
-    }
-  }
-
-  /**
-   * El mismo aviso, por el chat.
-   *
-   * El push depende de que tenga la aplicacion instalada y los avisos
-   * concedidos; el chat lo tiene todo el mundo, porque es por donde entra a
-   * trabajar. Para algo de lo que depende su defensa hacen falta los dos.
-   *
-   * Nunca lanza: el reporte o la calificacion ya estan guardados y que el aviso
-   * falle no puede deshacerlos.
-   */
-  private async avisarPorChat(
-    usuarioId: string | null,
-    tipo: 'employee' | 'driver',
-    texto: string,
-  ): Promise<void> {
-    if (!usuarioId) return;
-    try {
-      const [fila] = await this.dataSource.query<
-        Array<{ telegramChatId: string | null }>
-      >(
-        `SELECT telegram_chat_id AS "telegramChatId" FROM usuarios WHERE id = $1`,
-        [usuarioId],
-      );
-      const chatId = fila?.telegramChatId;
-      if (!chatId) return;
-      await this.telegram.sendMessage(chatId, texto);
-    } catch (err) {
-      this.logger.error(`Error avisando por chat a ${tipo} ${usuarioId}:`, err);
     }
   }
 

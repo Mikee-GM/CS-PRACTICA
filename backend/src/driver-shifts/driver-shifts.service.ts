@@ -9,7 +9,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { Choferes } from '../drivers/entities/driver.entity';
 import { NotificationsService } from '../notifications/notifications.service';
-import { TelegramService } from '../telegram/telegram.service';
 import {
   AssignDriverShiftDto,
   CreateDriverShiftDto,
@@ -31,7 +30,6 @@ export class DriverShiftsService {
     private readonly choferesRepository: Repository<Choferes>,
     private readonly notifications: NotificationsService,
     private readonly dataSource: DataSource,
-    private readonly telegram: TelegramService,
   ) {}
 
   async createShift(
@@ -253,11 +251,6 @@ export class DriverShiftsService {
     await this.assignments.save(
       this.assignments.create({ shiftId, driverId: dto.driverId }),
     );
-    await this.notifyDriver(
-      dto.driverId,
-      `Se te asignó el turno "${shift.title}" (${shift.startsAt}-${shift.endsAt}, ${this.formatDays(shift.daysOfWeek)}). ` +
-        `Fuera de ese horario no recibirás ofertas de viaje automáticas.`,
-    );
     /*
      * Nivel 2: organiza su semana, pero no es algo que resuelva en el momento.
      *
@@ -285,25 +278,24 @@ export class DriverShiftsService {
     }
     const shift = await this.getShiftOrFail(shiftId);
     await this.assignments.remove(existing);
-    await this.notifyDriver(
-      driverId,
-      `Se te retiró del turno "${shift.title}". Si no tienes otros turnos asignados, vuelves a estar disponible para ofertas de viaje en cualquier horario.`,
-    );
-  }
-
-  private async notifyDriver(driverId: string, message: string) {
-    const rows: Array<{ telegram_chat_id: string | null }> =
-      await this.dataSource.query(
-        `SELECT u.telegram_chat_id FROM choferes c
-         JOIN usuarios u ON u.id = c.usuario_id WHERE c.id = $1`,
-        [driverId],
-      );
-    const chatId = rows[0]?.telegram_chat_id;
-    if (!chatId) return;
+    /*
+     * En su propio try/catch: el chofer ya esta fuera del turno y un aviso que
+     * falla no puede deshacerlo. Sin datos del turno en el texto: una
+     * notificacion se lee en la pantalla bloqueada.
+     */
     try {
-      await this.telegram.sendMessage(String(chatId), message);
-    } catch {
-      // best-effort, no interrumpe el flujo por un fallo de Telegram
+      const driver = await this.choferesRepository.findOneBy({ id: driverId });
+      if (driver) {
+        await this.notifications.notificar(driver.usuarioId, {
+          titulo: 'Te retiraron de un turno',
+          cuerpo: 'Toca para ver tus turnos en el portal.',
+          url: '/chofer/portal',
+          tag: `turno-retirado-${shift.id}`,
+          dedupeKey: `turno-retirado:${existing.id}`,
+        });
+      }
+    } catch (err) {
+      this.logger.error('Error enviando el aviso push del retiro:', err);
     }
   }
 

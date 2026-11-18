@@ -1,11 +1,10 @@
-import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Usuarios } from './entities/user.entity';
 import { Empleadas } from '../employees/entities/employee.entity';
-import { TelegramService } from '../telegram/telegram.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { RealtimeEventsService } from '../realtime/realtime.service';
-import { Markup } from 'telegraf';
 
 export type WorkShiftStatus = {
   enJornada: boolean;
@@ -34,9 +33,8 @@ export class WorkShiftStatusService {
     private readonly usuarios: Repository<Usuarios>,
     @InjectRepository(Empleadas)
     private readonly empleadas: Repository<Empleadas>,
-    @Inject(forwardRef(() => TelegramService))
-    private readonly telegram: TelegramService,
     private readonly realtime: RealtimeEventsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async getStatus(userId: string): Promise<WorkShiftStatus> {
@@ -51,7 +49,7 @@ export class WorkShiftStatusService {
   /**
    * Cambia el estado y avisa a quien corresponda segun el rol.
    *
-   * El aviso va despues de guardar y aislado: que Telegram falle no puede dejar
+   * El aviso va despues de guardar y aislado: que el aviso falle no puede dejar
    * a la persona sin poder cerrar su jornada.
    */
   async setStatus(
@@ -84,7 +82,7 @@ export class WorkShiftStatusService {
     try {
       /*
        * El admin se entera pase lo que pase. La modelo ademas avisa a su jefe
-       * por Telegram, porque es ante quien responde: el tablero de admin puede
+       * con un push, porque es ante quien responde: el tablero de admin puede
        * no estar abierto cuando ella cierra su dia.
        */
       this.marcarParaAdmin(
@@ -95,7 +93,12 @@ export class WorkShiftStatusService {
       );
 
       if (user.rol === 'empleada') {
-        await this.avisarAlJefeDeLaModelo(user, enJornada, jornadaMotivo);
+        await this.avisarAlJefeDeLaModelo(
+          user,
+          enJornada,
+          jornadaMotivo,
+          jornadaActualizadaAt,
+        );
       }
     } catch (error) {
       this.logger.error('No se pudo avisar del cambio de jornada:', error);
@@ -105,13 +108,14 @@ export class WorkShiftStatusService {
   }
 
   /**
-   * La modelo responde ante su jefe, asi que el aviso va a el por Telegram y no
+   * La modelo responde ante su jefe, asi que el aviso va a el como push y no
    * a un tablero que quiza nadie este mirando.
    */
   private async avisarAlJefeDeLaModelo(
     user: Usuarios,
     enJornada: boolean,
     motivo: string | null,
+    cambioAt: Date,
   ): Promise<void> {
     const empleada = await this.empleadas.findOne({
       where: { usuarioId: user.id },
@@ -120,43 +124,29 @@ export class WorkShiftStatusService {
     if (!empleada) return;
 
     const nombre = empleada.nombreArtistico || 'Una modelo';
-    const texto = enJornada
-      ? `${nombre} volvió a estar en jornada y puede recibir servicios.`
-      : `${nombre} cerró su jornada y ya no va a tomar más servicios hoy.` +
-        (motivo ? `\n\nMotivo: ${motivo}` : '');
-
-    /*
-     * Si no dijo por que, se le ofrece preguntarlo en el mismo aviso.
-     *
-     * El jefe se enteraba de que alguien cerraba su dia y no tenia como
-     * preguntar sin salirse del sistema. El boton manda la pregunta por el
-     * canal, que es donde ella puede contestar sin ver quien pregunto.
-     */
-    const botones =
-      !enJornada && !motivo
-        ? [
-            [
-              Markup.button.callback(
-                'Preguntar la razón',
-                `jornada_motivo:${empleada.id}`,
-              ),
-            ],
-          ]
-        : undefined;
-
     // Se avisa al jefe principal y al secundario: cualquiera de los dos puede
     // estar cubriendo el turno cuando llega el cambio.
     const destinos = [empleada.jefe, empleada.jefeSecundario]
-      .filter((jefe): jefe is Usuarios => Boolean(jefe?.telegramChatId))
+      .filter((jefe): jefe is Usuarios => Boolean(jefe))
       .filter(
         (jefe, indice, lista) =>
           lista.findIndex((otro) => otro.id === jefe.id) === indice,
       );
 
+    /*
+     * Sin el nombre de la modelo ni el motivo: una notificacion se lee en la
+     * pantalla bloqueada. El detalle esta en el panel, al tocarla.
+     */
     for (const jefe of destinos) {
       try {
-        await this.telegram.sendMessage(jefe.telegramChatId!, texto, {
-          ...(botones ? { buttons: botones } : {}),
+        await this.notifications.notificar(jefe.id, {
+          titulo: enJornada
+            ? 'Una modelo volvió a su jornada'
+            : 'Una modelo cerró su jornada',
+          cuerpo: 'Toca para ver tu equipo.',
+          url: '/jefe/equipo',
+          tag: `jornada-${empleada.id}`,
+          dedupeKey: `jornada:${empleada.id}:${jefe.id}:${cambioAt.getTime()}`,
         });
       } catch (error) {
         this.logger.error(

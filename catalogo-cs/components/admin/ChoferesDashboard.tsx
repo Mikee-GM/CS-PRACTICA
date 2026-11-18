@@ -14,7 +14,6 @@ import {
   updateChoferAction,
 } from "@/lib/actions/choferes";
 import UbicacionBadge from "@/components/drivers/ubicacion-badge";
-import EstadoDeTelegram from "@/components/erp/estado-de-telegram";
 import RestablecerContrasena from "@/components/cuenta/RestablecerContrasena";
 import ConfirmDialog from "../ui/ConfirmDialog";
 import InputField from "../ui/InputField";
@@ -387,7 +386,7 @@ export default function ChoferesDashboard({
             Choferes
           </h2>
           <p className="text-[13px] text-zinc-500 mt-1.5">
-            Gestiona las cuentas de los choferes y su vinculacion con Telegram
+            Gestiona las cuentas de los choferes y su acceso al portal
           </p>
         </div>
         <CreateButton onClick={openCreateModal} label="Nuevo Chofer" />
@@ -439,9 +438,6 @@ export default function ChoferesDashboard({
                 <th className="px-6 py-4 text-xs font-bold tracking-wider text-zinc-400 uppercase">
                   Ubicación
                 </th>
-                <th className="px-6 py-4 text-xs font-bold tracking-wider text-zinc-400 uppercase">
-                  Telegram
-                </th>
                 <th className="px-6 py-4 text-xs font-bold tracking-wider text-zinc-400 uppercase text-right">
                   Acciones
                 </th>
@@ -485,12 +481,6 @@ export default function ChoferesDashboard({
                     <UbicacionBadge
                       ubicacionVieja={chofer.ubicacionVieja}
                       ultimaUbicacionAt={chofer.ultimaUbicacionAt}
-                    />
-                  </td>
-                  <td className="px-6 py-4 text-sm font-medium">
-                    <EstadoDeTelegram
-                      usuarioId={chofer.usuarioId}
-                      telegramChatId={chofer.telegramChatId}
                     />
                   </td>
                   <td className="px-6 py-4 text-right space-x-4">
