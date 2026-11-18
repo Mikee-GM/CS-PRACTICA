@@ -51,6 +51,11 @@ const TABLAS_PRESERVADAS = new Set([
 
 /** Tablas operacionales y transaccionales a vaciar completamente. */
 const TABLAS_A_VACIAR = [
+  // Chats web de clientes y sus borradores de reserva
+  'messages',
+  'conversations',
+  'customer_booking_sessions',
+
   // Clientes y fidelidad
   'alertas_clientes',
   'loyalty_transactions',
