@@ -14,7 +14,7 @@ describe('flujo de aceptación de la empleada', () => {
     transporteAgendado: 'chofer',
     empleada: {
       usuarioId: 'employee-user-1',
-      usuario: { id: 'employee-user-1', telegramChatId: null },
+      usuario: { id: 'employee-user-1' },
     },
     ...overrides,
   });
@@ -48,8 +48,8 @@ describe('flujo de aceptación de la empleada', () => {
     const disciplineService = {
       assertOperationallyAllowed: jest.fn().mockResolvedValue(undefined),
     };
-    const bot = {
-      telegram: { sendMessage: jest.fn().mockResolvedValue(undefined) },
+    const conversationNotifier = {
+      notifyClient: jest.fn().mockResolvedValue(true),
     };
     const service = Object.create(ServicesService.prototype) as ServicesService;
     Object.assign(service, {
@@ -71,7 +71,7 @@ describe('flujo de aceptación de la empleada', () => {
         emitToClient: jest.fn(),
       },
       notificationsService,
-      bot,
+      conversationNotifier,
       assertActorCanManageService: jest.fn(),
     });
     return {
@@ -82,8 +82,8 @@ describe('flujo de aceptación de la empleada', () => {
       recordEvent,
       execute,
       notificationsService,
+      conversationNotifier,
       disciplineService,
-      bot,
     };
   }
 
@@ -277,9 +277,10 @@ describe('flujo de aceptación de la empleada', () => {
       horaInicioServicio: new Date('2026-10-05T10:14:00.000Z'),
       duracionPactadaHoras: 2,
       endingSoonNotifiedAt: null,
-      cliente: { telegramChatId: 'client-chat' },
+      cliente: { usuarioId: 'client-user' },
     });
-    const { service, repository, recordEvent, bot } = setup(row);
+    const { service, repository, recordEvent, conversationNotifier } =
+      setup(row);
     repository.find.mockResolvedValue([row]);
 
     await service.sweepServicesEndingSoon(now);
@@ -290,9 +291,12 @@ describe('flujo de aceptación de la empleada', () => {
       { type: 'system' },
       { expectedEndAt: '2026-10-05T12:14:00.000Z' },
     );
-    expect(bot.telegram.sendMessage).toHaveBeenCalledWith(
-      'client-chat',
-      expect.stringContaining('15 minutos'),
+    expect(conversationNotifier.notifyClient).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clienteId: 'client-1',
+        serviceId: 'service-1',
+        texto: expect.stringContaining('15 minutos'),
+      }),
     );
   });
 });

@@ -20,7 +20,7 @@ describe('ServicesService reprogramar y cambiarUbicacion', () => {
     manager: { find: jest.fn().mockResolvedValue([]) },
   };
   const realtime = { emitToBoss: jest.fn(), emitToDriver: jest.fn() };
-  const bot = { telegram: { sendMessage: jest.fn() } };
+  const conversationNotifier = { notifyClient: jest.fn() };
   const notificationsService = { notificar: jest.fn().mockResolvedValue(1) };
   const transportOperations = {
     activeLocations: jest.fn(),
@@ -46,11 +46,9 @@ describe('ServicesService reprogramar y cambiarUbicacion', () => {
     viajesRepository: {},
     choferesRepository: {},
     usuariosRepository: {},
-    conversationsRepository: {},
     bankAccountsRepository: {},
     paymentReceiptValidationsRepository: {},
     realtimeEventsService: realtime,
-    bot,
     extensionsService: {},
     aiMessageService: {},
     loyaltyService: {},
@@ -59,8 +57,7 @@ describe('ServicesService reprogramar y cambiarUbicacion', () => {
     disciplineService: {},
     uploadService: {},
     empleadasRepository: {},
-    clientesRepository: {},
-    telegramSessionRepository: {},
+    conversationNotifier,
     extrasCatalogoRepository: {},
     extrasServicioRepository: {},
     serviceParticipantsRepository: {},
@@ -85,7 +82,8 @@ describe('ServicesService reprogramar y cambiarUbicacion', () => {
       locationNameSnapshot: null,
       locationAddressSnapshot: 'Una dirección vieja',
       customerTransportCharge: 0,
-      cliente: { telegramChatId: '555' },
+      clienteId: 'cli-1',
+      cliente: { usuarioId: 'usr-cliente' },
       empleada: { usuarioId: 'user-emp', nombreArtistico: 'Lauren' },
       ...extra,
     };
@@ -93,6 +91,7 @@ describe('ServicesService reprogramar y cambiarUbicacion', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    conversationNotifier.notifyClient.mockResolvedValue(true);
     servicioGuardado = citaAgendada();
     serviciosRepository.findOne.mockImplementation(() =>
       Promise.resolve(servicioGuardado),
@@ -187,26 +186,31 @@ describe('ServicesService reprogramar y cambiarUbicacion', () => {
     it('avisa al cliente con un texto fijo, sin pasar por la IA', async () => {
       await service.reprogramar('svc-1', EN_TRES_HORAS, actor, true);
 
-      expect(bot.telegram.sendMessage).toHaveBeenCalledWith(
-        '555',
-        expect.stringContaining('Lauren'),
+      expect(conversationNotifier.notifyClient).toHaveBeenCalledWith(
+        expect.objectContaining({
+          clienteId: 'cli-1',
+          serviceId: 'svc-1',
+          texto: expect.stringContaining('Lauren'),
+        }),
       );
     });
 
     it('no avisa al cliente cuando es una corrección de captura', async () => {
       await service.reprogramar('svc-1', EN_TRES_HORAS, actor, false);
 
-      expect(bot.telegram.sendMessage).not.toHaveBeenCalled();
+      expect(conversationNotifier.notifyClient).not.toHaveBeenCalled();
       // A la modelo se le avisa siempre: es ella quien se tiene que presentar.
       expect(notificationsService.notificar).toHaveBeenCalled();
     });
 
     /*
-     * El aviso es accesorio: la hora ya esta guardada y que Telegram falle no
+     * El aviso es accesorio: la hora ya esta guardada y que el aviso falle no
      * la deshace.
      */
     it('no deshace el cambio porque el aviso falle', async () => {
-      bot.telegram.sendMessage.mockRejectedValueOnce(new Error('Telegram 403'));
+      conversationNotifier.notifyClient.mockRejectedValueOnce(
+        new Error('canal caido'),
+      );
 
       await expect(
         service.reprogramar('svc-1', EN_TRES_HORAS, actor, true),

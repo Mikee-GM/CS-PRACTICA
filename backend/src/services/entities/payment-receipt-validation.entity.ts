@@ -38,25 +38,12 @@ export class PaymentReceiptValidations {
     length: 255,
     nullable: true,
   })
-  @ApiPropertyOptional({ description: 'Nombre del cliente en Telegram' })
-  clienteTelegram?: string;
-
-  @Column({ name: 'chat_id', type: 'varchar', length: 50, nullable: true })
-  @ApiPropertyOptional({ description: 'Chat ID de Telegram del cliente' })
-  chatId?: string;
+  @ApiPropertyOptional({ description: 'Nombre del cliente' })
+  clienteNombre?: string;
 
   @Column({ name: 'image_url', type: 'text', nullable: true })
   @ApiPropertyOptional({ description: 'URL permanente del comprobante' })
   imageUrl?: string;
-
-  @Column({
-    name: 'telegram_file_id',
-    type: 'varchar',
-    length: 255,
-    nullable: true,
-  })
-  @ApiPropertyOptional({ description: 'File ID original de Telegram' })
-  telegramFileId?: string;
 
   @Column({ name: 'es_comprobante', type: 'boolean', default: false })
   @ApiProperty({

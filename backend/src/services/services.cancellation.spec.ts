@@ -26,7 +26,7 @@ describe('ServicesService cancel', () => {
   const choferesRepository = { findOne: jest.fn(), update: jest.fn() };
   const usuariosRepository = { findOne: jest.fn(), findOneBy: jest.fn() };
   const realtime = { emitToBoss: jest.fn(), emitToDriver: jest.fn() };
-  const bot = { telegram: { sendMessage: jest.fn() } };
+  const conversationNotifier = { notifyClient: jest.fn() };
   const aiMessageService = {
     generate: jest
       .fn()
@@ -54,21 +54,18 @@ describe('ServicesService cancel', () => {
     viajesRepository,
     choferesRepository,
     usuariosRepository,
-    conversationsRepository: {},
     bankAccountsRepository: {},
     paymentReceiptValidationsRepository: {},
     realtimeEventsService: realtime,
-    bot,
     aiMessageService,
+    conversationNotifier,
     loyaltyService: {},
     liquidationSync,
     configService: { get: jest.fn() },
     disciplineService: {},
     uploadService: {},
-    // empleadas, clientes y sesiones: solo los usa el cierre por la empleada.
+    // empleadas: solo las usa el cierre por la empleada.
     empleadasRepository: {},
-    clientesRepository: {},
-    telegramSessionRepository: {},
     // catalogo de extras, extras cobrados y participantes: solo los usa
     // agregar un extra. Ninguna de las dos cosas se ejercita aqui.
     extrasCatalogoRepository: {},
@@ -86,13 +83,17 @@ describe('ServicesService cancel', () => {
       empleadaId: 'emp-1',
       jefeId: 'jefe-1',
       serviceType: 'individual',
-      cliente: { telegramChatId: '555' },
+      clienteId: 'cli-1',
+      cliente: { usuarioId: 'usr-cliente' },
       empleada: { nombreArtistico: 'Ana', usuarioId: 'user-emp' },
       viajes: [],
     };
   }
 
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    conversationNotifier.notifyClient.mockResolvedValue(true);
+  });
 
   it('guarda motivo, nota, autor y momento de la cancelacion', async () => {
     const servicio = servicioEnCurso();
@@ -137,9 +138,12 @@ describe('ServicesService cancel', () => {
       { employeeName: 'Ana' },
       expect.stringContaining('Qué pena contigo'),
     );
-    expect(bot.telegram.sendMessage).toHaveBeenCalledWith(
-      '555',
-      'Que pena contigo, no voy a poder ir',
+    expect(conversationNotifier.notifyClient).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clienteId: 'cli-1',
+        serviceId: 'svc-1',
+        texto: 'Que pena contigo, no voy a poder ir',
+      }),
     );
   });
 
@@ -228,11 +232,6 @@ describe('ServicesService cancel', () => {
 
     await service.cancel('svc-1', actor, { reason: 'cliente_desistio' });
 
-    // Al personal ya no le sale nada por Telegram: solo el push (Fase 5).
-    expect(bot.telegram.sendMessage).not.toHaveBeenCalledWith(
-      expect.anything(),
-      expect.stringContaining('queda sin efecto'),
-    );
     expect(notificationsService.notificar).toHaveBeenCalledWith(
       'user-chofer',
       expect.objectContaining({
@@ -261,7 +260,7 @@ describe('ServicesService cancel', () => {
     usuariosRepository.findOne.mockResolvedValue(null);
     choferesRepository.findOne.mockResolvedValue({
       id: 'chofer-1',
-      usuario: { telegramChatId: '777' },
+      usuario: {},
     });
     // Le queda el viaje de otro servicio.
     viajesRepository.find.mockResolvedValue([
@@ -276,10 +275,7 @@ describe('ServicesService cancel', () => {
   /*
    * El aviso push de la cancelacion, para los dos que estan a punto de salir.
    *
-   * Iba solo por Telegram, que es justo el canal del que se partio: un chat
-   * silenciado no avisa a nadie, y aqui enterarse tarde significa hacer el
-   * viaje para nada. Ademas, desde que se puede entrar al portal con correo y
-   * contrasena, hay gente sin chat a la que no le llegaba por ningun sitio.
+   * Enterarse tarde significa hacer el viaje para nada.
    */
   it('avisa a la modelo por push, no solo por el chat', async () => {
     serviciosRepository.findOne.mockResolvedValue(servicioEnCurso());
@@ -296,7 +292,7 @@ describe('ServicesService cancel', () => {
     );
   });
 
-  it('avisa al chofer por push aunque no tenga Telegram', async () => {
+  it('avisa al chofer por push', async () => {
     const servicio = servicioEnCurso();
     servicio.viajes = [
       { id: 'trip-1', estado: 'aceptado', choferId: 'chofer-1' },
@@ -318,11 +314,6 @@ describe('ServicesService cancel', () => {
         url: '/chofer/portal',
       }),
     );
-    // Se entera solo por push: el mensaje de Telegram ya no sale.
-    expect(bot.telegram.sendMessage).not.toHaveBeenCalledWith(
-      expect.anything(),
-      expect.stringContaining('queda sin efecto'),
-    );
   });
 });
 
@@ -336,7 +327,6 @@ describe('ServicesService settleCancelledTripCost', () => {
   const liquidationSync = {
     syncCancelledRecord: jest.fn().mockResolvedValue(null),
   };
-  const bot = { telegram: { sendMessage: jest.fn() } };
 
   /*
    * Se construye por nombre y no con `new`.
@@ -355,21 +345,17 @@ describe('ServicesService settleCancelledTripCost', () => {
     viajesRepository,
     choferesRepository: {},
     usuariosRepository,
-    conversationsRepository: {},
     bankAccountsRepository: {},
     paymentReceiptValidationsRepository: {},
     realtimeEventsService: {},
-    bot,
     aiMessageService: {},
     loyaltyService: {},
     liquidationSync,
     configService: { get: jest.fn() },
     disciplineService: {},
     uploadService: {},
-    // empleadas, clientes y sesiones: solo los usa el cierre por la empleada.
+    // empleadas: solo las usa el cierre por la empleada.
     empleadasRepository: {},
-    clientesRepository: {},
-    telegramSessionRepository: {},
     // catalogo de extras, extras cobrados y participantes: solo los usa
     // agregar un extra. Ninguna de las dos cosas se ejercita aqui.
     extrasCatalogoRepository: {},
@@ -386,7 +372,6 @@ describe('ServicesService settleCancelledTripCost', () => {
       canceladoConCosto: true,
       fareConfirmedAt: null,
       uberScreenshotUrl: 'https://cdn/captura.jpg',
-      telegramUberFileId: null,
       servicio: { jefeId: 'boss' },
       ...overrides,
     };

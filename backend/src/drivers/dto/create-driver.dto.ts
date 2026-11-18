@@ -32,16 +32,6 @@ export class CreateDriverDto {
   @MinLength(6, { message: 'La contraseña debe tener al menos 6 caracteres' })
   readonly password: string;
 
-  @ApiPropertyOptional({
-    description: 'Chat ID de Telegram vinculado al usuario',
-    example: '123456789',
-  })
-  @IsString({
-    message: 'El ID de chat de Telegram debe ser una cadena de texto',
-  })
-  @IsOptional()
-  readonly telegramChatId?: string;
-
   @ApiProperty({
     description: 'Nombre del chofer',
     example: 'Carlos Perez',
@@ -134,15 +124,4 @@ export class CreateDriverDto {
     message: 'La placa del vehículo no puede superar los 50 caracteres',
   })
   readonly vehiculoPlaca?: string;
-
-  @ApiPropertyOptional({
-    description:
-      'Si true, el chofer recibe ofertas de viaje por Telegram normalmente. ' +
-      'Si false, el viaje se despacha como Uber automatico sin notificarle.',
-    example: true,
-    default: true,
-  })
-  @IsBoolean({ message: 'modoBot debe ser un valor booleano' })
-  @IsOptional()
-  readonly modoBot?: boolean;
 }

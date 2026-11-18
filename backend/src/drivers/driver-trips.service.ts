@@ -18,7 +18,6 @@ import { RealtimeEventsService } from '../realtime/realtime.service';
 import { SettlementsService } from '../transport-operations/settlements.service';
 import { AiMessageService } from '../ai/ai-message.service';
 import { ServicesService } from '../services/services.service';
-import { TelegramService } from '../telegram/telegram.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { ConversationNotifier } from '../conversations/conversation-notifier';
 import { avisarAlChatWeb, unaVez } from '../services/aviso-al-cliente-web';
@@ -29,9 +28,8 @@ const ESPERA_MS = 600_000;
 /**
  * El avance de un viaje, contado desde el lado del chofer.
  *
- * Existe porque estas transiciones vivian enteras dentro de los manejadores de
- * Telegram, mezcladas con la edicion de mensajes y los teclados, y por eso el
- * portal del chofer no las tenia: no habia nada que llamar desde HTTP.
+ * Existe para que las transiciones del viaje tengan un unico lugar que llamar
+ * desde HTTP, sin depender de ningun canal de mensajeria.
  *
  * Aqui vive solo el negocio --validar, cambiar el estado y avisar a quien
  * corresponda--; lo que es propio del chat, como reescribir el mensaje del
@@ -55,17 +53,12 @@ export class DriverTripsService {
     private readonly settlements: SettlementsService,
     private readonly notifications: NotificationsService,
     private readonly aiMessages: AiMessageService,
-    // Solo para los avisos al cliente que todavia reserva por Telegram; el
-    // personal ya no recibe nada por ahi (Fase 5) y se va en la Fase 6. Se usa
-    // el servicio y no el bot crudo: ahi vive el limitador de ritmo.
-    @Inject(forwardRef(() => TelegramService))
-    private readonly telegram: TelegramService,
     @Inject(forwardRef(() => ServicesService))
     private readonly servicesService: ServicesService,
     /*
      * Los avisos al cliente que reservo por la web. Opcional y al final por la
-     * misma razon que en `ServicesService`: sin el, el canal web no existe y
-     * Telegram sigue igual.
+     * misma razon que en `ServicesService`: sin el, el aviso web simplemente no
+     * sale.
      */
     @Optional()
     private readonly conversationNotifier?: ConversationNotifier,
@@ -244,7 +237,7 @@ export class DriverTripsService {
    * Le dice a la modelo que su chofer ya va en camino.
    *
    * Solo por push: los datos del chofer y del coche los ve en su portal, detras
-   * del toque. El mensaje de Telegram que los llevaba ya no sale.
+   * del toque.
    */
   private async avisarALaModeloQueVaEnCamino(trip: Viajes): Promise<void> {
     const servicio = trip.servicio;
@@ -460,8 +453,7 @@ export class DriverTripsService {
    *
    * Sale del cierre, que es el punto por el que pasan el portal y el chat, asi
    * que ninguna via pierde la valoracion. Califica en su portal
-   * (`ratings/pending-employees`); los botones de Telegram que lo duplicaban ya
-   * no salen. Sin `tipo`: es el unico momento en que se acuerda del viaje.
+   * (`ratings/pending-employees`) Sin `tipo`: es el unico momento en que se acuerda del viaje.
    */
   private async pedirCalificacionAlChofer(trip: Viajes): Promise<void> {
     if (!trip.choferId) return;
@@ -515,17 +507,6 @@ export class DriverTripsService {
       ),
     );
 
-    const chatId = servicio.cliente?.telegramChatId;
-    if (chatId) {
-      try {
-        await this.telegram.sendMessage(chatId, await redactar());
-      } catch (err) {
-        this.logger.error(
-          `No se pudo avisar al cliente de la llegada (chat ${chatId}):`,
-          err,
-        );
-      }
-    }
     await avisarAlChatWeb(
       this.conversationNotifier,
       this.logger,
@@ -548,11 +529,6 @@ export class DriverTripsService {
 
     const textoCompletado =
       'El servicio quedó completado: la empleada llegó a su destino.';
-    if (servicio.cliente?.telegramChatId) {
-      await this.telegram
-        .sendMessage(servicio.cliente.telegramChatId, textoCompletado)
-        .catch(() => undefined);
-    }
     // En la web sale el mismo aviso nombrandola a ella en vez de "la
     // empleada" (lo adapta `avisarAlChatWeb`).
     await avisarAlChatWeb(
@@ -638,8 +614,7 @@ export class DriverTripsService {
   /**
    * Avisa a la modelo de que el chofer ya llego y arranca su margen de espera.
    *
-   * Los datos del coche y el boton de prorroga estan en su portal; el mensaje de
-   * Telegram que los duplicaba ya no sale.
+   * Los datos del coche y el boton de prorroga estan en su portal.
    */
   private async avisarLlegadaALaEmpleada(trip: Viajes): Promise<void> {
     const servicio = trip.servicio;

@@ -7,11 +7,9 @@ import type { ConversationNotifier } from '../conversations/conversation-notifie
 /**
  * Avisos del ciclo de vida del servicio al chat web del cliente.
  *
- * Criterio de canales: cada aviso sale por todos los que el cliente tiene, una
- * vez por canal. El de Telegram no cambia; el web se intenta siempre que el
- * cliente tenga cuenta web (`usuarioId`), y el notificador decide si hay una
- * conversacion a la que mandarlo. Un cliente de Telegram sin cuenta web no
- * cuesta nada mas: ni consulta ni llamada a la IA.
+ * El aviso se intenta siempre que el cliente tenga cuenta web (`usuarioId`), y
+ * el notificador decide si hay una conversacion a la que mandarlo. Un cliente
+ * sin cuenta web no cuesta nada: ni consulta ni llamada a la IA.
  */
 
 /** Lo que hace falta del servicio para saber a quien y a que chat avisar. */
@@ -34,8 +32,8 @@ export type OpcionesAvisoWeb = {
 };
 
 /**
- * El texto de Telegram adaptado al chat web: sin emojis y sin las marcas de
- * Markdown de Telegram, que la web mostraria como asteriscos sueltos.
+ * El texto de un aviso adaptado al chat web: sin emojis y sin las marcas de
+ * Markdown, que la web mostraria como asteriscos sueltos.
  */
 export function textoParaChatWeb(texto: string): string {
   // Linea a linea: `quitarEmojis` recompone los espacios de todo el texto y
@@ -66,10 +64,10 @@ function conMayusculaSiHaceFalta(original: string, reemplazo: string): string {
 }
 
 /**
- * Reescribe las formas conocidas de los textos de Telegram que en la web no
+ * Reescribe las formas conocidas de los textos de los avisos que en la web no
  * se dicen.
  *
- * Los avisos de Telegram se escribieron hablando de "la empleada" y firmando
+ * Los avisos se escribieron hablando de "la empleada" y firmando
  * como "el asistente de la agencia". El prompt web le veta esas palabras a la
  * IA para que el cliente no vea la estructura interna, y un aviso que las
  * dijera a renglon seguido desharia esa politica. Aqui se arreglan las que se
@@ -126,7 +124,7 @@ function sinFrasesVetadas(texto: string): string {
 
 /**
  * El texto final que se deja en el chat web: sin emojis, sin formato de
- * Telegram y sin ninguna de `PALABRAS_VETADAS_WEB`.
+ * Markdown y sin ninguna de `PALABRAS_VETADAS_WEB`.
  *
  * Es la unica salida de los avisos hacia la web, asi que la garantia vale
  * para cualquier texto, tambien para el que redacte la IA. Por orden: el
@@ -157,10 +155,8 @@ export function textoWebSeguro(
 /**
  * Cancelacion por demora en el chat web.
  *
- * Es el texto de Telegram sin su formato y sin la invitacion a "ver otras
- * opciones ahora mismo": en Telegram la siguen tarjetas con botones para
- * contratar a otra, y en la web esas tarjetas no existen; se le remite al
- * catalogo, que es donde elige.
+ * No ofrece otras opciones ahora mismo: en la web no hay tarjetas para
+ * contratar a otra; se le remite al catalogo, que es donde elige.
  */
 export function textoAvisoCancelacionPorDemora(
   nombreArtistico: string | null | undefined,
@@ -173,9 +169,9 @@ export function textoAvisoCancelacionPorDemora(
 }
 
 /**
- * Comparte una sola redaccion entre canales: si Telegram ya pidio el texto a
- * la IA, la web reutiliza esa misma promesa en vez de pagar otra llamada y
- * recibir un mensaje distinto.
+ * Comparte una sola redaccion entre destinatarios: si ya se pidio el texto a
+ * la IA, se reutiliza esa misma promesa en vez de pagar otra llamada y recibir
+ * un mensaje distinto.
  */
 export function unaVez<T>(producir: () => Promise<T>): () => Promise<T> {
   let resultado: Promise<T> | null = null;
@@ -189,8 +185,8 @@ export function unaVez<T>(producir: () => Promise<T>): () => Promise<T> {
  * El notificador puede faltar porque es opcional en quien lo inyecta (ver
  * `ServicesService`); sin el no hay canal web y se sigue.
  *
- * El texto pasa siempre por `textoWebSeguro`: quien llama le da el mismo que a
- * Telegram y aqui se adapta, para que ningun sitio pueda saltarse el filtro.
+ * El texto pasa siempre por `textoWebSeguro`: aqui se adapta, para que ningun
+ * sitio pueda saltarse el filtro.
  */
 export async function avisarAlChatWeb(
   notifier: ConversationNotifier | undefined,

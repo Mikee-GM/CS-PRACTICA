@@ -32,7 +32,6 @@ import { PresetServiceLocation } from '../transport-operations/entities/preset-s
 import { EmployeeCashObligation } from '../transport-operations/entities/employee-cash-obligation.entity';
 import { Viajes } from '../trips/entities/trip.entity';
 import { Usuarios } from '../users/entities/user.entity';
-import { ConversacionesTelegram } from '../telegram-conversations/entities/telegram-conversation.entity';
 import {
   AddGroupParticipantDto,
   ChangeGroupDurationDto,
@@ -52,8 +51,6 @@ import { ServiceGroupAudit } from './entities/service-group-audit.entity';
 import { ServiceParticipant } from './entities/service-participant.entity';
 import { ServicePayment } from './entities/service-payment.entity';
 import { TripPassenger } from './entities/trip-passenger.entity';
-import { InjectBot } from 'nestjs-telegraf';
-import { Context, Markup, Telegraf } from 'telegraf';
 import { ConfigService } from '@nestjs/config';
 import { OfficeLiquidationSyncService } from '../liquidations/office-liquidation-sync.service';
 import { ServicesService } from '../services/services.service';
@@ -90,7 +87,6 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
     private readonly employees: Repository<Empleadas>,
     @InjectRepository(Viajes)
     private readonly trips: Repository<Viajes>,
-    @InjectBot() private readonly bot: Telegraf<Context>,
     private readonly discipline: DisciplineService,
     private readonly realtime: RealtimeEventsService,
     private readonly notifications: NotificationsService,
@@ -125,25 +121,12 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
     return this.createRequest(dto, bossId);
   }
 
-  async createFromDetectedIntent(
-    clientId: string,
-    initialEmployeeId?: string,
-    bookingSessionId?: string,
-  ) {
-    const bossId = await this.bossAssignment.resolve(initialEmployeeId);
-    return this.createRequest(
-      { clientId, initialEmployeeId, bookingSessionId },
-      bossId,
-    );
-  }
-
   /**
    * Solicitud grupal desde una conversacion del chat web (decision 6 de la
    * Fase 5). La crea el jefe: el turno de la IA solo entrega la conversacion
    * al equipo cuando el cliente pide varias chicas. La conversacion pasa a
    * manos de quien organiza, para que la IA no conteste mientras se arma el
-   * grupo, y desde ahi todo lo que Telegram le mandaba al cliente sale por
-   * ese chat.
+   * grupo, y desde ahi todo lo que se le dice al cliente sale por ese chat.
    */
   async createFromConversation(conversationId: string, actor: Actor) {
     if (!['jefe', 'admin'].includes(actor.rol)) {
@@ -224,8 +207,8 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
       relations: { selections: { employee: true }, client: true, boss: true },
     });
     if (existing) {
-      // Un cliente solo tiene una solicitud viva. Si ya la tenia (por
-      // Telegram, o creada a mano) y aun no hablaba por ningun chat web, se
+      // Un cliente solo tiene una solicitud viva. Si ya la tenia (creada
+      // a mano) y aun no hablaba por ningun chat web, se
       // le engancha este, para que la cotizacion le llegue donde escribe.
       if (conversationId && !existing.conversationId) {
         await this.requests.update(existing.id, { conversationId });
@@ -261,14 +244,6 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
         aiActive: false,
       }),
     );
-    if (dto.bookingSessionId) {
-      await this.dataSource
-        .getRepository(ConversacionesTelegram)
-        .update(
-          { bookingSessionId: dto.bookingSessionId },
-          { groupRequestId: request.id, iaActiva: false },
-        );
-    }
     await this.audit(null, request.id, bossId, 'solicitud_creada', null, {
       initialEmployeeId: dto.initialEmployeeId ?? null,
       ...(conversationId ? { canal: 'web', conversationId } : {}),
@@ -298,7 +273,7 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
       },
       order: { createdAt: 'DESC' },
     });
-    // Un cliente web no tiene nombreTelegram: su nombre vive en el usuario. Se
+    // El nombre del cliente web vive en el usuario. Se
     // expone solo ese dato como clientNombre para no filtrar la entidad
     // Usuarios completa en la respuesta.
     return solicitudes.map(({ client, ...resto }) => ({
@@ -462,41 +437,27 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * La conversacion con el cliente. Una solicitud del chat web lee su
-   * conversacion; las de Telegram siguen leyendo `conversaciones_telegram`
-   * hasta que se retire ese canal.
+   * La conversacion con el cliente. Todo grupo nace del chat web; una solicitud
+   * sin conversacion es un dato heredado y no tiene mensajes que mostrar.
    */
   async requestMessages(id: string, actor: Actor) {
     const request = await this.findOne(id, actor);
-    if (request.conversationId) return this.grupoWeb.mensajes(request);
-    return this.dataSource.getRepository(ConversacionesTelegram).find({
-      where: { groupRequestId: request.id },
-      order: { enviadoAt: 'ASC' },
-    });
+    this.assertConversacionWeb(request);
+    return this.grupoWeb.mensajes(request);
   }
 
   async sendRequestMessage(id: string, message: string, actor: Actor) {
     const request = await this.findOne(id, actor);
-    if (request.conversationId) {
-      const enviado: MensajeDelGrupo = await this.grupoWeb.escribirDelJefe(
-        request,
-        message,
-      );
-      this.realtime.emitToBoss(request.bossId, {
-        type: 'group_chat_message',
-        data: enviado,
-      });
-      return enviado;
-    }
-    if (!request.client.telegramChatId)
-      throw new ConflictException(
-        'El cliente no tiene un chat de Telegram disponible',
-      );
-    await this.bot.telegram.sendMessage(
-      request.client.telegramChatId,
-      message.trim(),
+    this.assertConversacionWeb(request);
+    const enviado: MensajeDelGrupo = await this.grupoWeb.escribirDelJefe(
+      request,
+      message,
     );
-    return this.recordRequestConversation(request, 'jefe', message.trim());
+    this.realtime.emitToBoss(request.bossId, {
+      type: 'group_chat_message',
+      data: enviado,
+    });
+    return enviado;
   }
 
   async openCatalog(id: string, actor: Actor) {
@@ -505,293 +466,37 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
       throw new ConflictException('La solicitud ya fue confirmada');
     // Decision 6 de la Fase 5: en el chat web el cliente no elige de un
     // catalogo con botones; las modelos las reserva el jefe desde el panel.
-    if (request.conversationId)
-      throw new ConflictException(
-        'En las solicitudes del chat web el jefe elige a las modelos desde el panel',
-      );
-    request.catalogVersion += 1;
-    request.status = 'seleccionando';
-    await this.requests.save(request);
-    await this.audit(null, id, actor.id, 'catalogo_enviado', null, {
-      catalogVersion: request.catalogVersion,
-    });
-    const result = {
-      requestId: id,
-      catalogVersion: request.catalogVersion,
-      employees: await this.availableEmployees(actor),
-    };
-    const fullRequest = await this.requests.findOne({
-      where: { id },
-      relations: { client: true },
-    });
-    if (!fullRequest?.client?.telegramChatId)
-      throw new ConflictException(
-        'El cliente no tiene un chat de Telegram disponible',
-      );
-    await this.bot.telegram.sendMessage(
-      fullRequest.client.telegramChatId,
-      'Selecciona las empleadas que deseas para el servicio grupal. La disponibilidad se reservará cuando confirmes la selección.',
+    throw new ConflictException(
+      'El jefe elige a las modelos desde el panel; el cliente no recibe catalogo',
     );
-    for (const employee of result.employees) {
-      const callback = `gs:${this.compactUuid(id)}:${this.compactUuid(employee.id)}:${request.catalogVersion}`;
-      const caption = `${employee.nombreArtistico}\n$${Number(employee.precioBaseHora).toFixed(2)} por hora`;
-      const keyboard = Markup.inlineKeyboard([
-        [Markup.button.callback('Seleccionar', callback)],
-      ]);
-      if (employee.fotoPerfilUrl) {
-        await this.bot.telegram
-          .sendPhoto(
-            fullRequest.client.telegramChatId,
-            employee.fotoPerfilUrl,
-            {
-              caption,
-              ...keyboard,
-            },
-          )
-          .catch(() =>
-            this.bot.telegram.sendMessage(
-              // Este flujo solo atiende a clientes de Telegram, que siempre
-              // traen chat; desaparece al retirar Telegram.
-              fullRequest.client.telegramChatId as string,
-              caption,
-              keyboard,
-            ),
-          );
-      } else {
-        await this.bot.telegram.sendMessage(
-          fullRequest.client.telegramChatId,
-          caption,
-          keyboard,
-        );
-      }
-
-      /*
-       * El cliente elegia entre varias chicas viendo solo la portada de cada
-       * una. El resto de sus fotos publicas ya se cargan (`empleadaFotos` en
-       * `availableEmployees`) pero nunca se enviaban; se mandan aparte, en un
-       * album, para no competir con el boton de Seleccionar de la portada.
-       */
-      const otrasFotos = (employee.empleadaFotos ?? [])
-        .filter((foto) => foto.url && foto.url !== employee.fotoPerfilUrl)
-        .slice(0, 9); // limite de Telegram por sendMediaGroup
-      if (otrasFotos.length > 0) {
-        await this.bot.telegram
-          .sendMediaGroup(
-            fullRequest.client.telegramChatId,
-            otrasFotos.map((foto) => ({
-              type: 'photo' as const,
-              media: foto.url,
-            })),
-          )
-          .catch((error: unknown) => {
-            this.logger.warn(
-              `No se pudo enviar el album de fotos de ${employee.nombreArtistico}: ${String(error)}`,
-            );
-          });
-      }
-    }
-    await this.bot.telegram.sendMessage(
-      fullRequest.client.telegramChatId,
-      'Cuando termines, confirma la selección.',
-      Markup.inlineKeyboard([
-        [
-          Markup.button.callback(
-            'Confirmar selección',
-            `gsc:${this.compactUuid(id)}:${request.catalogVersion}`,
-          ),
-        ],
-      ]),
-    );
-    return result;
   }
 
   async requestClientLocation(id: string, actor: Actor) {
     const request = await this.findOne(id, actor);
-    if (request.conversationId) {
-      await this.grupoWeb.pedirUbicacion(request);
-      await this.audit(null, id, actor.id, 'ubicacion_solicitada', null, {
-        canal: 'web',
-      });
-      return { sent: true };
-    }
-    if (!request.client.telegramChatId)
-      throw new ConflictException(
-        'El cliente no tiene un chat de Telegram disponible',
-      );
-    await this.bot.telegram.sendMessage(
-      request.client.telegramChatId,
-      'El jefe necesita la ubicación del servicio. Compártela usando el botón.',
-      Markup.keyboard([[Markup.button.locationRequest('Compartir ubicación')]])
-        .resize()
-        .oneTime(),
-    );
-    await this.audit(null, id, actor.id, 'ubicacion_solicitada', null, null);
+    this.assertConversacionWeb(request);
+    await this.grupoWeb.pedirUbicacion(request);
+    await this.audit(null, id, actor.id, 'ubicacion_solicitada', null, {
+      canal: 'web',
+    });
     return { sent: true };
   }
 
-  async toggleCatalogSelection(
-    compactRequestId: string,
-    compactEmployeeId: string,
-    catalogVersion: number,
-  ) {
-    const requestId = this.expandUuid(compactRequestId);
-    const employeeId = this.expandUuid(compactEmployeeId);
-    return this.dataSource.transaction(async (manager) => {
-      const request = await manager.findOneBy(GroupServiceRequest, {
-        id: requestId,
-      });
-      if (!request || request.catalogVersion !== catalogVersion)
-        throw new ConflictException('Este catálogo ya no está vigente');
-      if (
-        request.serviceId ||
-        ['cancelada', 'vencida'].includes(request.status)
-      )
-        throw new ConflictException('La solicitud ya no admite cambios');
-      const employee = await manager.findOne(Empleadas, {
-        where: { id: employeeId },
-        relations: { usuario: true },
-      });
-      if (
-        !employee ||
-        !employee.disponible ||
-        !employee.catalogoActivo ||
-        !employee.usuario?.activo
-      )
-        throw new ConflictException('La empleada ya no está disponible');
-      await this.assertEmployeeFree(manager, employeeId, requestId);
-      const existing = await manager.findOneBy(GroupServiceRequestSelection, {
-        requestId,
-        employeeId,
-      });
-      const selected = existing?.status !== 'seleccionada';
-      await manager.upsert(
-        GroupServiceRequestSelection,
-        {
-          requestId,
-          employeeId,
-          status: selected ? 'seleccionada' : 'liberada',
-          selectedBy: 'cliente',
-          hourlyRateSnapshot: Number(employee.precioBaseHora),
-          expiresAt: new Date(Date.now() + GroupServicesService.HOLD_MS),
-        },
-        ['requestId', 'employeeId'],
+  /**
+   * Todo grupo nace del chat web: sin conversacion no hay por donde hablar con
+   * el cliente, y no existe otro canal al que recurrir.
+   */
+  private assertConversacionWeb(request: GroupServiceRequest): void {
+    if (!request.conversationId)
+      throw new ConflictException(
+        'La solicitud no tiene conversacion en el chat web',
       );
-      return {
-        requestId,
-        employeeId,
-        selected,
-        employeeName: employee.nombreArtistico,
-      };
-    });
-  }
-
-  async confirmClientCatalog(compactRequestId: string, catalogVersion: number) {
-    const requestId = this.expandUuid(compactRequestId);
-    const request = await this.requests.findOneBy({ id: requestId });
-    if (!request || request.catalogVersion !== catalogVersion)
-      throw new ConflictException('Este catálogo ya no está vigente');
-    const selected = await this.selections.find({
-      where: { requestId, status: 'seleccionada' },
-    });
-    if (selected.length < 2)
-      throw new BadRequestException('Selecciona al menos dos empleadas');
-    return this.reserveSelections(requestId, {
-      employeeIds: selected.map((item) => item.employeeId),
-      selectedBy: 'cliente',
-      catalogVersion,
-    });
-  }
-
-  async findActiveRequestByClientTelegram(telegramId: string) {
-    return this.requests.findOne({
-      where: {
-        client: { telegramChatId: telegramId },
-        status: In([
-          'esperando_jefe',
-          'seleccionando',
-          'reservada',
-          'esperando_pago',
-        ]),
-      },
-      relations: { client: true, boss: true, service: true },
-      order: { createdAt: 'DESC' },
-    });
-  }
-
-  async findRequestByThread(threadId: string, groupTelegramId: string) {
-    return this.requests.findOne({
-      where: {
-        telegramThreadId: threadId,
-        boss: { grupoTelegramId: groupTelegramId },
-        status: In([
-          'esperando_jefe',
-          'seleccionando',
-          'reservada',
-          'esperando_pago',
-          'confirmada',
-        ]),
-      },
-      relations: { client: true, boss: true },
-    });
-  }
-
-  async setTelegramThread(requestId: string, threadId: string) {
-    await this.requests.update(requestId, { telegramThreadId: threadId });
-  }
-
-  async recordRequestConversation(
-    request: GroupServiceRequest,
-    sender: 'jefe' | 'cliente' | 'sistema',
-    message: string,
-  ) {
-    const saved = await this.dataSource
-      .getRepository(ConversacionesTelegram)
-      .save({
-        clienteId: request.clientId,
-        servicioId: request.serviceId,
-        groupRequestId: request.id,
-        bookingSessionId: request.bookingSessionId,
-        emisor: sender,
-        mensaje: message,
-        iaActiva: false,
-      });
-    this.realtime.emitToBoss(request.bossId, {
-      type: 'group_chat_message',
-      data: saved,
-    });
-    return saved;
-  }
-
-  async setLocationFromClient(
-    requestId: string,
-    latitude: number,
-    longitude: number,
-  ) {
-    const request = await this.requests.findOneBy({ id: requestId });
-    if (!request || request.serviceId) return null;
-    request.locationLat = latitude;
-    request.locationLng = longitude;
-    await this.requests.save(request);
-    await this.audit(
-      null,
-      requestId,
-      null,
-      'ubicacion_cliente_recibida',
-      null,
-      { latitude, longitude },
-    );
-    this.realtime.emitToBoss(request.bossId, {
-      type: 'group_location_received',
-      data: { requestId, latitude, longitude },
-    });
-    return request;
   }
 
   /**
    * Usa como ubicacion del grupo el ultimo pin que el cliente mando por el
-   * chat web. En Telegram el pin llegaba a la solicitud solo; en la web lo
+   * chat web. El pin no llega solo a la solicitud: lo
    * aplica el jefe, que es quien lo ve en la conversacion y decide si vale.
-   * La cobertura no se juzga aqui, igual que en `setLocationFromClient`.
+   * La cobertura no se juzga aqui, aqui.
    */
   async useChatLocation(id: string, actor: Actor) {
     const request = await this.findRequestForMutation(id, actor);
@@ -1058,7 +763,6 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
             estado: 'pendiente',
             estadoLiquidacion: 'cerrada',
             iaActiva: false,
-            clienteTelegramId: client.telegramChatId,
           }),
         );
 
@@ -1121,11 +825,6 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
         request.status = requiresPayment ? 'esperando_pago' : 'confirmada';
         request.holdExpiresAt = holdExpiresAt;
         await manager.save(GroupServiceRequest, request);
-        await manager.update(
-          ConversacionesTelegram,
-          { groupRequestId: id },
-          { servicioId: service.id, iaActiva: false },
-        );
         if (request.conversationId) {
           await this.grupoWeb.enlazarServicio(
             manager,
@@ -1162,7 +861,6 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
       data: { requestId: id, serviceId },
     });
     const result = await this.findService(serviceId, actor);
-    await this.notifyPendingTransferTelegram(result);
     // En la web la cotizacion entera, saldo y cuentas incluidos: es lo
     // primero que el cliente sabe del grupo que se le armo.
     await this.grupoWeb.avisarCotizacion({ conversationId }, result);
@@ -1307,17 +1005,8 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
     });
 
     const result = await this.findService(serviceId, actor);
-    if (decision === 'rechazado' && result.cliente?.telegramChatId) {
-      await this.bot.telegram
-        .sendMessage(
-          result.cliente.telegramChatId,
-          `Tu comprobante fue rechazado tras revisión manual${reason ? `: ${reason}` : ''}. Por favor envía un nuevo comprobante.`,
-        )
-        .catch(() => undefined);
-    }
     if (decision === 'rechazado') {
-      // Por cada canal que tenga el cliente, una vez: el web no depende de
-      // que tambien tenga Telegram.
+      // Aviso al chat web del cliente; el origen decide si hay chat.
       await this.grupoWeb.avisarComprobanteRechazado(
         await this.origenWeb(serviceId),
         reason,
@@ -2087,30 +1776,11 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
     return service;
   }
 
-  async participantAccess(
-    serviceId: string,
-    telegramId: string,
-  ): Promise<{ participant: ServiceParticipant; responsible: boolean } | null> {
-    const participant = await this.participants.findOne({
-      where: {
-        serviceId,
-        status: In(['activa', 'reservada', 'pendiente_pago']),
-        employee: { usuario: { telegramChatId: telegramId } },
-      },
-      relations: { employee: { usuario: true } },
-    });
-    return participant
-      ? { participant, responsible: participant.role === 'responsable' }
-      : null;
-  }
-
   /**
    * El mismo acceso, resuelto por id de usuario en vez de por chat.
    *
-   * El portal no tiene chat de Telegram: se identifica con la sesion o con un
-   * token de la Mini App, y de los dos sale un id de usuario. Sin esta variante
-   * la responsable de un grupal no podia cerrarlo desde la aplicacion, que es
-   * justo lo que pasaba hasta ahora.
+   * El portal se identifica con la sesion, y de ella sale un id de usuario:
+   * es la unica forma en que la responsable de un grupal puede cerrarlo.
    */
   async accesoDeParticipantePorUsuario(
     serviceId: string,
@@ -2135,18 +1805,6 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
       serviceId,
       usuarioId,
     );
-    if (!access?.responsible)
-      throw new ForbiddenException(
-        'Solamente la responsable puede finalizar el servicio',
-      );
-    return this.cerrarComoResponsable(
-      serviceId,
-      access.participant.employee.usuarioId,
-    );
-  }
-
-  async finishByResponsible(serviceId: string, telegramId: string) {
-    const access = await this.participantAccess(serviceId, telegramId);
     if (!access?.responsible)
       throw new ForbiddenException(
         'Solamente la responsable puede finalizar el servicio',
@@ -2494,9 +2152,8 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Push a cada participante al iniciar (Fase 5: el personal no necesita
-   * Telegram). Antes era un mensaje del bot con botones para finalizar y
-   * agregar extras; esas acciones viven en el portal. El texto no lleva
+   * Push a cada participante al iniciar. Finalizar y agregar extras viven en
+   * el portal. El texto no lleva
    * nombres ni importes porque sale en la pantalla de bloqueo. Nunca lanza:
    * el servicio ya empezo.
    */
@@ -2553,7 +2210,6 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
     service: Servicios,
     opciones: { pagoRegistrado?: boolean } = {},
   ) {
-    await this.notifyPendingTransferTelegram(service);
     await this.grupoWeb.avisarSaldo(
       await this.origenWeb(service.id),
       service,
@@ -2578,31 +2234,6 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
       );
       return { conversationId: null };
     }
-  }
-
-  private async notifyPendingTransferTelegram(service: Servicios) {
-    if (
-      service.metodoPago !== 'transferencia' ||
-      Number(service.pendingBalance) <= 0.009 ||
-      !service.cliente?.telegramChatId
-    )
-      return;
-    const bankDetails = await this.servicesService.bankTransferDetails();
-    await this.bot.telegram.sendMessage(
-      service.cliente.telegramChatId,
-      `Cotización del servicio grupal\nTotal: $${Number(service.totalFinal).toFixed(2)}\nPagado: $${Number(service.totalPaid).toFixed(2)}\nSaldo por transferir: $${Number(service.pendingBalance).toFixed(2)}\n\n${bankDetails}\n\nEnvía una foto del comprobante en este chat. El servicio o incremento se activará después de validarlo.`,
-    );
-  }
-
-  private compactUuid(uuid: string): string {
-    return Buffer.from(uuid.replace(/-/g, ''), 'hex').toString('base64url');
-  }
-
-  private expandUuid(compact: string): string {
-    const hex = Buffer.from(compact, 'base64url').toString('hex');
-    if (hex.length !== 32)
-      throw new BadRequestException('Identificador de catálogo inválido');
-    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
   }
 
   private async audit(

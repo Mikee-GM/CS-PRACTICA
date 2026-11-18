@@ -26,7 +26,7 @@ export class RescheduleServiceDto {
    * correcciones de captura, donde nunca hubo una hora equivocada que deshacer.
    */
   @ApiPropertyOptional({
-    description: 'Mandar al cliente el aviso del cambio por Telegram',
+    description: 'Mandar al cliente el aviso del cambio',
     default: true,
   })
   @IsOptional()

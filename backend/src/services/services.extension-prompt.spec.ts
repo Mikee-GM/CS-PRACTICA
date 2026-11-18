@@ -3,18 +3,13 @@ import { ServicesService } from './services.service';
 /**
  * El aviso de "termina en quince minutos, ¿lo extiendes?".
  *
- * Es de nivel 1: la ventana para decidir es corta y ella esta trabajando. Y
- * hasta hace poco el bucle descartaba el servicio entero cuando la modelo no
- * tenia chat de Telegram, con lo que ni siquiera salia el push. Desde que se
- * puede entrar al portal con correo y contrasena eso deja gente sin el aviso,
- * asi que aqui se fija que el push no dependa del chat.
+ * Es de nivel 1: la ventana para decidir es corta y ella esta trabajando.
  */
 describe('ServicesService checkActiveServicesForExtension', () => {
   const UNA_HORA_MS = 60 * 60 * 1000;
 
   function armar(servicios: unknown[]) {
     const notificar = jest.fn().mockResolvedValue(1);
-    const sendMessage = jest.fn().mockResolvedValue(undefined);
     const save = jest.fn((v) => v);
 
     /*
@@ -32,11 +27,10 @@ describe('ServicesService checkActiveServicesForExtension', () => {
         find: jest.fn().mockResolvedValue(servicios),
         save,
       },
-      bot: { telegram: { sendMessage } },
       notificationsService: { notificar },
     });
 
-    return { service, notificar, sendMessage, save };
+    return { service, notificar, save };
   }
 
   /** Uno que termina dentro de diez minutos: ya entra en la ventana de aviso. */
@@ -51,8 +45,8 @@ describe('ServicesService checkActiveServicesForExtension', () => {
     };
   }
 
-  it('avisa por push a una modelo que no usa Telegram', async () => {
-    const { service, notificar, sendMessage } = armar([porTerminar()]);
+  it('avisa por push a la modelo', async () => {
+    const { service, notificar } = armar([porTerminar()]);
 
     await service.checkActiveServicesForExtension();
 
@@ -60,21 +54,6 @@ describe('ServicesService checkActiveServicesForExtension', () => {
       'user-emp',
       expect.objectContaining({ titulo: '¿Extiendes el servicio?' }),
     );
-    expect(sendMessage).not.toHaveBeenCalled();
-  });
-
-  // Fase 5: aunque tenga Telegram vinculado, solo sale el push.
-  it('con Telegram vinculado sale solo el push', async () => {
-    const { service, notificar, sendMessage } = armar([
-      porTerminar({
-        empleada: { usuarioId: 'user-emp', usuario: { telegramChatId: '555' } },
-      }),
-    ]);
-
-    await service.checkActiveServicesForExtension();
-
-    expect(notificar).toHaveBeenCalledTimes(1);
-    expect(sendMessage).not.toHaveBeenCalled();
   });
 
   it('no avisa de uno al que todavia le sobra tiempo', async () => {

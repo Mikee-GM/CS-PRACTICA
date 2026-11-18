@@ -23,15 +23,6 @@ describe('ServicesService transport settlement', () => {
     emitToClient: jest.fn(),
     emitToEmployee: jest.fn(),
   };
-  const bot = {
-    telegram: {
-      sendMessage: jest.fn(),
-      sendPhoto: jest.fn(),
-      getFileLink: jest.fn(),
-      editMessageText: jest.fn(),
-      deleteForumTopic: jest.fn(),
-    },
-  };
   const loyalty = { awardForFinalizedService: jest.fn() };
   const aiMessageService = {
     generate: jest.fn().mockResolvedValue('Mensaje IA'),
@@ -42,7 +33,6 @@ describe('ServicesService transport settlement', () => {
   };
   const uploadService = {
     uploadEvidence: jest.fn(),
-    uploadEvidenceFromUrl: jest.fn(),
   };
   const serviceOperations = {
     currentState: jest.fn(
@@ -73,17 +63,14 @@ describe('ServicesService transport settlement', () => {
     bankAccountsRepository: {},
     paymentReceiptValidationsRepository: {},
     realtimeEventsService: realtime,
-    bot,
     aiMessageService,
     loyaltyService: loyalty,
     liquidationSync,
     configService: { get: jest.fn() },
     disciplineService: {},
     uploadService,
-    // empleadas, clientes y sesiones: solo los usa el cierre por la empleada.
+    // empleadas: solo las usa el cierre por la empleada.
     empleadasRepository: { findOne: jest.fn() },
-    clientesRepository: {},
-    telegramSessionRepository: {},
     // catalogo de extras, extras cobrados y participantes: solo los usa
     // agregar un extra. Ninguna de las dos cosas se ejercita aqui.
     extrasCatalogoRepository: {},
@@ -122,8 +109,7 @@ describe('ServicesService transport settlement', () => {
   });
 
   /*
-   * Fase 5: la captura ya no exige que la modelo tenga Telegram ni se le
-   * reenvia por ahi. Queda en R2 y ella la ve en su portal tras el push.
+   * La captura queda en R2 y ella la ve en su portal tras el push.
    */
   it('almacena en R2 y avisa por push una captura cargada desde el panel', async () => {
     viajesRepository.findOne.mockResolvedValue({
@@ -164,7 +150,6 @@ describe('ServicesService transport settlement', () => {
           'https://media.example.com/evidencias/uber/trip/image.jpg',
       }),
     );
-    expect(bot.telegram.sendPhoto).not.toHaveBeenCalled();
     expect(
       (service as any).notificationsService.notificar,
     ).toHaveBeenCalledWith(
@@ -183,7 +168,7 @@ describe('ServicesService transport settlement', () => {
       proveedorTransporte: 'uber',
       servicio: {
         jefeId: 'boss',
-        empleada: { usuario: { telegramChatId: '123' } },
+        empleada: { usuario: {} },
       },
     });
     usuariosRepository.findOneBy.mockResolvedValue({ id: 'boss', rol: 'jefe' });
@@ -196,8 +181,6 @@ describe('ServicesService transport settlement', () => {
         originalname: 'uber.jpg',
       }),
     ).rejects.toThrow('R2 unavailable');
-
-    expect(bot.telegram.sendPhoto).not.toHaveBeenCalled();
     expect(viajesRepository.update).not.toHaveBeenCalled();
   });
 
@@ -207,7 +190,6 @@ describe('ServicesService transport settlement', () => {
       tipo: 'regreso',
       servicioId: 'service',
       proveedorTransporte: 'uber',
-      telegramUberFileId: 'photo',
       servicio: { jefeId: 'boss', empleada: { usuario: {} } },
     });
     usuariosRepository.findOneBy.mockResolvedValue({ id: 'boss', rol: 'jefe' });
@@ -272,8 +254,7 @@ describe('ServicesService transport settlement', () => {
     expect(viajesRepository.update).toHaveBeenCalledWith('trip', {
       estado: 'llegado',
     });
-    // La modelo se entera en su portal y por push aunque no tenga Telegram.
-    expect(bot.telegram.sendMessage).not.toHaveBeenCalled();
+    // La modelo se entera en su portal y por push.
     expect(realtime.emitToEmployee).toHaveBeenCalledWith(
       'employee',
       expect.objectContaining({ type: 'uber_arrived' }),
@@ -413,7 +394,7 @@ describe('ServicesService transport settlement', () => {
       transaction: jest.fn((callback) => callback(manager)),
     };
     (service as any).empleadasRepository.findOne = jest.fn().mockResolvedValue({
-      usuario: { telegramChatId: null },
+      usuario: {},
     });
 
     await service.assignExternalTransport('service', 'boss', {
@@ -514,7 +495,7 @@ describe('ServicesService transport settlement', () => {
       transaction: jest.fn((callback) => callback(manager)),
     };
     (service as any).empleadasRepository.findOne = jest.fn().mockResolvedValue({
-      usuario: { telegramChatId: null },
+      usuario: {},
     });
 
     const result = await service.assignExternalTransport('service', 'boss', {
@@ -683,8 +664,8 @@ describe('ServicesService transport settlement', () => {
     expect(liquidationSync.syncOfficeRecord).toHaveBeenCalledWith('service');
   });
 
-  // El grupo del jefe con temas no se porta: el jefe lo ve por el evento.
-  it('no escribe en el tema del grupo cuando la empleada sube al Uber', async () => {
+  // El jefe se entera por el evento del panel.
+  it('avisa al jefe por el evento cuando la empleada sube al Uber', async () => {
     viajesRepository.findOne.mockResolvedValue({
       id: 'trip',
       servicioId: 'service',
@@ -696,8 +677,6 @@ describe('ServicesService transport settlement', () => {
         jefeId: 'boss',
         clienteId: 'client',
         empleadaId: 'employee',
-        telegramThreadId: '77',
-        jefe: { grupoTelegramId: '-100123' },
         empleada: {
           nombreArtistico: 'Andrea',
           usuarioId: 'employee-user',
@@ -716,11 +695,6 @@ describe('ServicesService transport settlement', () => {
       'employee_en_route',
     );
 
-    expect(bot.telegram.sendMessage).not.toHaveBeenCalledWith(
-      '-100123',
-      expect.anything(),
-      expect.anything(),
-    );
     expect(realtime.emitToBoss).toHaveBeenCalledWith(
       'boss',
       expect.objectContaining({
@@ -728,38 +702,6 @@ describe('ServicesService transport settlement', () => {
         data: expect.objectContaining({ action: 'employee_en_route' }),
       }),
     );
-  });
-
-  it('no escribe en el tema del grupo cuando termina el regreso en Uber', async () => {
-    viajesRepository.findOne.mockResolvedValue({
-      id: 'trip',
-      servicioId: 'service',
-      tipo: 'regreso',
-      estado: 'en_curso',
-      proveedorTransporte: 'uber',
-      servicio: {
-        id: 'service',
-        jefeId: 'boss',
-        clienteId: 'client',
-        empleadaId: 'employee',
-        telegramThreadId: '88',
-        jefe: { grupoTelegramId: '-100456' },
-        empleada: {
-          nombreArtistico: 'Andrea',
-          usuarioId: 'employee-user',
-          usuario: {},
-        },
-      },
-    });
-    usuariosRepository.findOneBy.mockResolvedValue({
-      id: 'employee-user',
-      rol: 'empleada',
-    });
-
-    await service.updateUberStatus('trip', 'employee-user', 'employee_arrived');
-
-    expect(bot.telegram.sendMessage).not.toHaveBeenCalled();
-    expect(bot.telegram.deleteForumTopic).not.toHaveBeenCalled();
   });
 
   it('cambia un viaje pendiente de chofer a Uber', async () => {
@@ -771,7 +713,6 @@ describe('ServicesService transport settlement', () => {
       proveedorTransporte: 'interno',
       choferId: null,
       choferesNotificados: [],
-      telegramChoferMsgOfertaId: null,
     };
     const manager = {
       findOne: jest.fn().mockResolvedValue(trip),
@@ -932,17 +873,14 @@ describe('ServicesService transport settlement', () => {
       servicio: {
         id: 'service',
         jefeId: 'boss',
-        telegramThreadId: '99',
-        jefe: { grupoTelegramId: '-100999' },
         empleada: { ubicacionLat: null, ubicacionLng: null },
       },
       passengers: [],
     });
-    bot.telegram.sendMessage.mockResolvedValue({});
 
     await service.dispatchViaje('trip');
 
-    // El motivo viaja en el evento del panel; el tema del grupo ya no se usa.
+    // El motivo viaja en el evento del panel.
     expect(realtime.emitToBoss).toHaveBeenCalledWith(
       'boss',
       expect.objectContaining({
@@ -952,7 +890,6 @@ describe('ServicesService transport settlement', () => {
         }),
       }),
     );
-    expect(bot.telegram.sendMessage).not.toHaveBeenCalled();
   });
 
   it('avisa al jefe cuando falta la ubicación del cliente para despachar el viaje de regreso', async () => {
@@ -964,14 +901,11 @@ describe('ServicesService transport settlement', () => {
       servicio: {
         id: 'service',
         jefeId: 'boss',
-        telegramThreadId: '99',
-        jefe: { grupoTelegramId: '-100999' },
         ubicacionClienteLat: null,
         ubicacionClienteLng: null,
       },
       passengers: [],
     });
-    bot.telegram.sendMessage.mockResolvedValue({});
 
     await service.dispatchViaje('trip');
 
@@ -984,6 +918,5 @@ describe('ServicesService transport settlement', () => {
         }),
       }),
     );
-    expect(bot.telegram.sendMessage).not.toHaveBeenCalled();
   });
 });

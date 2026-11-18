@@ -20,12 +20,6 @@ describe('ServicesService: la modelo avisa que ya esta lista', () => {
   const usuariosRepository = { findOneBy: jest.fn() };
   const realtime = { emitToBoss: jest.fn() };
   const notifications = { notificar: jest.fn().mockResolvedValue(1) };
-  const bot = {
-    telegram: {
-      sendMessage: jest.fn().mockResolvedValue({ message_id: 9 }),
-      editMessageReplyMarkup: jest.fn().mockResolvedValue(true),
-    },
-  };
 
   const service = Object.create(ServicesService.prototype) as ServicesService;
   Object.assign(service, {
@@ -35,7 +29,6 @@ describe('ServicesService: la modelo avisa que ya esta lista', () => {
     usuariosRepository,
     realtimeEventsService: realtime,
     notificationsService: notifications,
-    bot,
   });
 
   /** El UPDATE condicionado que hace de cerrojo. */
@@ -56,7 +49,6 @@ describe('ServicesService: la modelo avisa que ya esta lista', () => {
     estado: 'en_curso',
     transporteAgendado: 'uber',
     empleadaListaAt: null,
-    telegramEmpleadaMensajeId: '77',
     ubicacionClienteLat: 20.6,
     ubicacionClienteLng: -100.4,
     empleada: {
@@ -65,7 +57,7 @@ describe('ServicesService: la modelo avisa que ya esta lista', () => {
       nombreArtistico: 'Ana',
       ubicacionLat: 20.59,
       ubicacionLng: -100.39,
-      usuario: { telegramChatId: '555' },
+      usuario: {},
     },
     ...extra,
   });
@@ -73,10 +65,7 @@ describe('ServicesService: la modelo avisa que ya esta lista', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     viajesRepository.findOne.mockResolvedValue({ id: 'viaje-1' });
-    usuariosRepository.findOneBy.mockResolvedValue({
-      id: 'jefe-1',
-      telegramChatId: '111',
-    });
+    usuariosRepository.findOneBy.mockResolvedValue({ id: 'jefe-1' });
   });
 
   it('solo la puede marcar la modelo asignada', async () => {
@@ -119,19 +108,8 @@ describe('ServicesService: la modelo avisa que ya esta lista', () => {
     );
   });
 
-  // Fase 5: ni el jefe ni la modelo reciben ya nada por Telegram.
-  it('no manda ni edita mensajes de Telegram', async () => {
-    serviciosRepository.findOne.mockResolvedValue(servicioEnUber());
-    marcaQueGana(1);
-
-    await service.marcarEmpleadaLista('srv-1', 'user-emp');
-
-    expect(bot.telegram.sendMessage).not.toHaveBeenCalled();
-    expect(bot.telegram.editMessageReplyMarkup).not.toHaveBeenCalled();
-  });
-
   /*
-   * Dos toques seguidos --o el boton del chat y el del portal a la vez-- no
+   * Dos toques seguidos --o dos dispositivos a la vez-- no
    * pueden avisar dos veces al jefe: el segundo encuentra la marca ya puesta.
    */
   it('avisa una sola vez aunque se toque dos veces', async () => {

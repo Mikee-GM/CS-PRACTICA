@@ -149,9 +149,7 @@ export class ServiceHistoryService {
       folio: this.folio(service.id),
       employeeName: service.empleada?.nombreArtistico ?? 'Sin empleada',
       clientName:
-        service.cliente?.nombreTelegram ??
-        service.clienteNombreLibre ??
-        'Sin cliente',
+        service.cliente?.nombre ?? service.clienteNombreLibre ?? 'Sin cliente',
       serviceDate: this.serviceDate(service).toISOString(),
       previousStatus: service.previousStatus,
       previousOperationalState: service.previousOperationalState,

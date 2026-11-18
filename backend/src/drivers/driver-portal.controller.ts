@@ -40,9 +40,8 @@ export class DriverPortalController {
   /**
    * Donde esta ahora mismo.
    *
-   * Hasta ahora la unica via era compartir ubicacion en vivo desde Telegram, y
-   * dependia de acordarse de hacerlo. El portal la manda solo mientras esta
-   * abierto, que es justo cuando la persona esta trabajando.
+   * El portal la manda solo mientras esta abierto, que es justo cuando la
+   * persona esta trabajando.
    *
    * La espera entre escrituras la aplica el servicio, asi que un navegador que
    * mande de mas no castiga a la base.
@@ -114,11 +113,6 @@ export class DriverPortalController {
 
   /**
    * Marca que ya llego al punto de recogida.
-   *
-   * Hasta ahora esto solo existia en el chat del bot, donde el chofer tenia
-   * que encontrar el mensaje correcto entre todo lo demas justo cuando va
-   * conduciendo. Los botones del chat siguen valiendo: los dos caminos llaman
-   * al mismo servicio, asi que no pueden divergir.
    */
   @Post('trips/:tripId/arrived')
   @HttpCode(200)

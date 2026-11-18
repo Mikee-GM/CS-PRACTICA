@@ -4,8 +4,7 @@ import { explicarFaltaDeChoferes } from './diagnostico-de-reparto';
 
 /**
  * El diagnostico tiene que contar exactamente los mismos escalones que aplica
- * el reparto. Si cuenta uno que el reparto ya no exige --como el chat de
- * Telegram--, culpa de la lista vacia a algo que no tiene nada que ver.
+ * el reparto. Si cuenta uno que el reparto no exige, culpa de la lista vacia a algo que no tiene nada que ver.
  */
 describe('El diagnostico de falta de choferes', () => {
   const conteoBase = {
@@ -27,16 +26,6 @@ describe('El diagnostico de falta de choferes', () => {
     const logger = { warn } as unknown as Logger;
     return { db, logger, warn };
   }
-
-  it('ya no exige Telegram vinculado', async () => {
-    const { db, logger, warn } = preparar(conteoBase);
-
-    await explicarFaltaDeChoferes(db, logger);
-
-    const [sql] = db.query.mock.calls[0];
-    expect(sql).not.toContain('telegram_chat_id');
-    expect(warn.mock.calls[0][0]).not.toContain('Telegram');
-  });
 
   it('cuenta aparte a los que tienen ubicacion pero vieja', async () => {
     const { db, logger, warn } = preparar(conteoBase);

@@ -18,7 +18,6 @@ describe('ServicesService.activatePanic', () => {
       ultimaUbicacionAt: new Date('2026-10-05T12:00:00.000Z'),
       usuario: {},
     },
-    jefe: { telegramChatId: null, grupoTelegramId: null },
     ...overrides,
   });
 
@@ -39,9 +38,6 @@ describe('ServicesService.activatePanic', () => {
       },
       realtimeEventsService: realtime,
       notificationsService: notifications,
-      bot: {
-        telegram: { sendMessage: jest.fn().mockResolvedValue(undefined) },
-      },
     });
     return { service, recordEvent, realtime, notifications };
   }

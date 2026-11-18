@@ -265,7 +265,7 @@ describe('AdminServiceLifecycleService', () => {
     const executedSql = manager.query.mock.calls
       .map(([sql]: [string]) => sql)
       .join('\n');
-    expect(executedSql).toContain('UPDATE conversaciones_telegram');
+    expect(executedSql).not.toContain('conversaciones_telegram');
     expect(executedSql).toContain('UPDATE liquidation_records');
     expect(executedSql).toContain('UPDATE interaction_ratings');
     expect(executedSql).toContain('UPDATE customer_booking_sessions');

@@ -70,11 +70,6 @@ export async function explicarFaltaDeChoferes(
       WHERE ds.subject_type = 'driver' AND ds.subject_id = c.id
         AND ds.status = 'active' AND ds.starts_at <= now()
         AND (ds.type = 'permanent_ban' OR ds.ends_at > now()))`;
-    /*
-     * Telegram ya no es escalon: el reparto dejo de exigirlo y el diagnostico
-     * lo seguia contando, asi que culpaba a un chat sin vincular de una lista
-     * vacia que no tenia nada que ver.
-     */
     const conUbicacion = `u.activo AND u.en_jornada AND c.disponible
                   AND c.ubicacion_lat IS NOT NULL AND c.ubicacion_lng IS NOT NULL`;
     const base = `${conUbicacion} AND ${sqlUbicacionFresca('c')}`;

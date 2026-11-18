@@ -6,9 +6,7 @@ import { ServicesService } from './services.service';
  * retraso y el cliente ya esta esperando.
  *
  * Lo que importa aqui no es contar prorrogas --de eso se encarga
- * `ExtensionsService`, con la fila bloqueada-- sino los tres efectos que hasta
- * hace poco vivian dentro del handler de Telegram y por eso el portal no podia
- * provocar: quien tiene permiso, que el reloj de espera vuelva a empezar y que
+ * `ExtensionsService`, con la fila bloqueada-- sino los tres efectos: quien tiene permiso, que el reloj de espera vuelva a empezar y que
  * el chofer que espera abajo se entere.
  */
 describe('ServicesService solicitarProrroga', () => {
@@ -18,7 +16,6 @@ describe('ServicesService solicitarProrroga', () => {
     const requestServiceExtension = jest
       .fn()
       .mockResolvedValue({ extensionNumber: 1, minutes: 10 });
-    const sendMessage = jest.fn().mockResolvedValue(undefined);
     const notificar = jest.fn().mockResolvedValue(1);
     const startWaitTimeout = jest.fn();
 
@@ -40,7 +37,6 @@ describe('ServicesService solicitarProrroga', () => {
         findOne: jest.fn().mockResolvedValue(participante),
       },
       extensionsService: { requestServiceExtension },
-      bot: { telegram: { sendMessage } },
       notificationsService: { notificar },
       startWaitTimeout,
     });
@@ -48,7 +44,6 @@ describe('ServicesService solicitarProrroga', () => {
     return {
       service,
       requestServiceExtension,
-      sendMessage,
       notificar,
       startWaitTimeout,
     };
@@ -58,7 +53,7 @@ describe('ServicesService solicitarProrroga', () => {
     tipo: 'ida',
     chofer: {
       usuarioId: 'usuario-chofer',
-      usuario: { telegramChatId: '555' },
+      usuario: {},
     },
   };
 
@@ -84,7 +79,7 @@ describe('ServicesService solicitarProrroga', () => {
   });
 
   it('avisa al chofer, que es el unico al que la espera le cambia el plan', async () => {
-    const { service, sendMessage, notificar } = armar({
+    const { service, notificar } = armar({
       id: 'servicio-1',
       serviceType: 'individual',
       empleada: { usuarioId: 'usuario-modelo', nombreArtistico: 'Ana' },
@@ -93,8 +88,6 @@ describe('ServicesService solicitarProrroga', () => {
 
     await service.solicitarProrroga('servicio-1', 'usuario-modelo');
 
-    // Solo por push: el mensaje de Telegram al chofer ya no sale (Fase 5).
-    expect(sendMessage).not.toHaveBeenCalled();
     expect(notificar).toHaveBeenCalledWith(
       'usuario-chofer',
       expect.objectContaining({

@@ -2,24 +2,19 @@ import { ServicesService } from './services.service';
 import { AVISO_SANCION } from '../notifications/avisos-catalogo';
 
 /**
- * Fase 5: el personal ya no recibe nada por Telegram.
- *
- * Cada envio que salia al chat de un jefe, una modelo o un chofer tiene ahora
- * su gemelo por push, con clave de dedupe para que un reintento o dos replicas
- * no lo dupliquen. Aqui se prueban los que no existian antes por ningun otro
+ * Avisos push al personal, con clave de dedupe para que un reintento o dos
+ * replicas no lo dupliquen. Aqui se prueban los que no existian antes por ningun otro
  * canal: el rechazo de ofertas, el regreso pendiente y el servicio encadenado.
  */
-describe('ServicesService avisos al personal sin Telegram', () => {
+describe('ServicesService avisos al personal', () => {
   function armar(extra: Record<string, unknown> = {}) {
     const notificar = jest.fn().mockResolvedValue(1);
-    const sendMessage = jest.fn();
     const service = Object.create(ServicesService.prototype) as ServicesService;
     Object.assign(service, {
       logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
       waitTimeouts: new Map(),
       dispatchTimeouts: new Map(),
       notificationsService: { notificar },
-      bot: { telegram: { sendMessage } },
       realtimeEventsService: {
         emitToBoss: jest.fn(),
         emitToJefes: jest.fn(),
@@ -27,7 +22,7 @@ describe('ServicesService avisos al personal sin Telegram', () => {
       },
       ...extra,
     });
-    return { service, notificar, sendMessage };
+    return { service, notificar };
   }
 
   describe('rechazo de ofertas del chofer', () => {
@@ -61,7 +56,7 @@ describe('ServicesService avisos al personal sin Telegram', () => {
     }
 
     it('le avisa la racha por push, silenciable como sancion', async () => {
-      const { registrar, notificar, sendMessage } = conChofer(0);
+      const { registrar, notificar } = conChofer(0);
 
       await registrar('chofer-1', 'viaje-1');
 
@@ -74,7 +69,6 @@ describe('ServicesService avisos al personal sin Telegram', () => {
           dedupeKey: 'driver:offer_rejected:viaje-1:chofer-1',
         }),
       );
-      expect(sendMessage).not.toHaveBeenCalled();
     });
 
     it('al tercero aplica la multa y la avisa con la clave de la sancion', async () => {
@@ -102,8 +96,8 @@ describe('ServicesService avisos al personal sin Telegram', () => {
       empleada: { jefeId: 'jefe-1', jefeSecundarioId: 'jefe-2' },
     };
 
-    it('avisa a cada jefe de la modelo una sola vez, sin pasar por Telegram', async () => {
-      const { service, notificar, sendMessage } = armar({
+    it('avisa a cada jefe de la modelo una sola vez, por push', async () => {
+      const { service, notificar } = armar({
         serviciosRepository: {
           findOne: jest.fn().mockResolvedValue(servicio),
           update: jest.fn().mockResolvedValue(undefined),
@@ -124,7 +118,6 @@ describe('ServicesService avisos al personal sin Telegram', () => {
           dedupeKey: 'boss:return_transport_requested:srv-1:finalizado',
         }),
       );
-      expect(sendMessage).not.toHaveBeenCalled();
     });
 
     it('cada recordatorio lleva su numero en la clave', async () => {
@@ -154,13 +147,13 @@ describe('ServicesService avisos al personal sin Telegram', () => {
   });
 
   it('el servicio encadenado en el mismo sitio se le avisa a la modelo por push', async () => {
-    const { service, notificar, sendMessage } = armar({
+    const { service, notificar } = armar({
       serviciosRepository: {
         findOne: jest.fn().mockResolvedValue({
           id: 'srv-2',
           notasJefe: 'nota privada',
           empleada: { usuarioId: 'usuario-modelo' },
-          cliente: { nombreTelegram: 'Andres' },
+          cliente: { nombre: 'Andres' },
         }),
       },
     });
@@ -181,6 +174,5 @@ describe('ServicesService avisos al personal sin Telegram', () => {
       { titulo: string; cuerpo: string },
     ];
     expect(`${aviso.titulo} ${aviso.cuerpo}`).not.toMatch(/Andres|nota/);
-    expect(sendMessage).not.toHaveBeenCalled();
   });
 });

@@ -96,9 +96,8 @@ export type PedidoGrupalDelChat = {
 };
 
 /**
- * Un mensaje de la conversacion web con la forma de los mensajes de Telegram
- * que ya pinta el panel de grupos (`ConversationMessage` del frontend), para
- * que la misma vista sirva para los dos canales.
+ * Un mensaje de la conversacion web con la forma que ya pinta el panel de grupos
+ * (`ConversationMessage` del frontend).
  */
 export type MensajeDelGrupo = {
   id: string;
@@ -193,16 +192,16 @@ function dinero(centavos: number): string {
 
 /**
  * El canal web del servicio grupal: la solicitud nace de una conversacion del
- * chat y todo lo que Telegram le mandaba al cliente por su chat (mensajes del
- * jefe, peticion de ubicacion, cotizacion, saldo, rechazo del comprobante)
- * aqui queda en esa conversacion.
+ * chat y todo lo que se le dice al cliente (mensajes del jefe, peticion de
+ * ubicacion, cotizacion, saldo, rechazo del comprobante) queda en esa
+ * conversacion.
  *
  * Decision 6 de la Fase 5: el cliente no elige del catalogo; las modelos las
  * elige el jefe en `/jefe/grupos`. Por eso aqui no hay catalogo con botones.
  *
  * Solo depende de la base y del notificador (`ConversationNotifierModule`), no
- * de `ConversationsModule`: este importa `ServicesModule`, y Telegram los
- * importa a los dos, asi que depender de el cerraria un ciclo de modulos.
+ * de `ConversationsModule`: este importa `ServicesModule`, que a su vez
+ * importa este modulo, asi que depender de el cerraria un ciclo de modulos.
  */
 @Injectable()
 export class GrupoEnChatWebService {

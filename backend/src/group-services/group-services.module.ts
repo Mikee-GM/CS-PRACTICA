@@ -13,7 +13,6 @@ import { ServiceGroupAudit } from './entities/service-group-audit.entity';
 import { ServiceParticipant } from './entities/service-participant.entity';
 import { ServicePayment } from './entities/service-payment.entity';
 import { TripPassenger } from './entities/trip-passenger.entity';
-import { TelegramModule } from '../telegram/telegram.module';
 import { LiquidationsModule } from '../liquidations/liquidations.module';
 import { ServicesModule } from '../services/services.module';
 import { GroupBossAssignmentService } from './group-boss-assignment.service';
@@ -35,11 +34,10 @@ import { ConversationNotifierModule } from '../conversations/conversation-notifi
     ]),
     DisciplineModule,
     NotificationsModule,
-    forwardRef(() => TelegramModule),
     LiquidationsModule,
     forwardRef(() => ServicesModule),
     // El chat web del grupo escribe con el notificador, que solo depende de la
-    // base: importar `ConversationsModule` cerraria un ciclo con Telegram.
+    // base: importar `ConversationsModule` cerraria un ciclo con ServicesModule.
     ConversationNotifierModule,
   ],
   controllers: [GroupServicesController],

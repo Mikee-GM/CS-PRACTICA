@@ -102,9 +102,4 @@ export class CreateServiceDto {
   @IsOptional()
   @IsUUID()
   presetLocationId?: string;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  clienteTelegramId?: string;
 }

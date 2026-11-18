@@ -15,8 +15,7 @@ import {
  * Los avisos del chat web no dicen nada de lo que el prompt web le veta a la
  * IA: ni "la empleada", ni "la agencia", ni "el jefe", ni emojis.
  *
- * Los textos de Telegram no cambian; lo que se prueba es lo que sale hacia la
- * web a partir de ellos.
+ * Lo que se prueba es lo que sale hacia la web a partir del texto base.
  */
 
 const EMOJI = /\p{Extended_Pictographic}/u;
@@ -28,8 +27,8 @@ function expectTextoWebLimpio(texto: string): void {
 }
 
 /*
- * El texto base de cada sitio que avisa al chat web, tal como lo escribe para
- * Telegram (o la IA, en su respaldo), con su respaldo cuando lo lleva. Si se
+ * El texto base de cada sitio que avisa al chat web, tal como lo escribe
+ * el servicio (o la IA, en su respaldo), con su respaldo cuando lo lleva. Si se
  * anade un aviso nuevo, va aqui.
  */
 function textosDeLosSitios(nombre: string | null) {

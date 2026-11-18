@@ -8,7 +8,6 @@ import {
   OneToMany,
 } from 'typeorm';
 import { AlertasClientes } from '../../client-alerts/entities/client-alert.entity';
-import { ConversacionesTelegram } from '../../telegram-conversations/entities/telegram-conversation.entity';
 import { ExtensionesServicio } from '../../service-extensions/entities/service-extension.entity';
 import { ExtrasServicio } from '../../service-extras/entities/service-extra.entity';
 import { Prorrogas } from '../../extensions/entities/extension.entity';
@@ -329,13 +328,6 @@ export class Servicios {
     enum: ['transporte_pendiente', 'cerrada'],
   })
   estadoLiquidacion: 'transporte_pendiente' | 'cerrada';
-
-  @Column('varchar', {
-    name: 'telegram_resumen_definitivo_id',
-    nullable: true,
-  })
-  @ApiPropertyOptional({ description: 'Mensaje definitivo del cliente' })
-  telegramResumenDefinitivoId: string | null;
 
   @Column('smallint', { name: 'recordatorios_regreso', default: () => '0' })
   @ApiProperty({ description: 'Recordatorios de transporte de regreso' })
@@ -710,37 +702,9 @@ export class Servicios {
   @Column('text', { name: 'notas_jefe', nullable: true })
   notasJefe: string | null;
 
-  @Column('varchar', { name: 'telegram_cliente_mensaje_id', nullable: true })
-  @ApiPropertyOptional({
-    description: 'Telegram Cliente Mensaje Id',
-    example: '00000000-0000-4000-8000-000000000000',
-  })
-  telegramClienteMensajeId: string | null;
-
-  @Column('varchar', { name: 'telegram_empleada_mensaje_id', nullable: true })
-  @ApiPropertyOptional({
-    description: 'Telegram Empleada Mensaje Id',
-    example: '00000000-0000-4000-8000-000000000000',
-  })
-  telegramEmpleadaMensajeId: string | null;
-
-  @Column('bigint', { name: 'cliente_telegram_id', nullable: true })
-  @ApiPropertyOptional({
-    description: 'Cliente Telegram Id',
-    example: '00000000-0000-4000-8000-000000000000',
-  })
-  clienteTelegramId: string | null;
-
   @Column('boolean', { name: 'ia_activa', default: true })
   @ApiProperty({ description: 'Ia Activa', example: true })
   iaActiva: boolean;
-
-  @Column('bigint', { name: 'telegram_thread_id', nullable: true })
-  @ApiPropertyOptional({
-    description: 'Telegram Thread Id',
-    example: '00000000-0000-4000-8000-000000000000',
-  })
-  telegramThreadId: string | null;
 
   @Column('integer', { name: 'calificacion', nullable: true })
   @ApiPropertyOptional({ description: 'Calificacion', example: 1 })
@@ -794,17 +758,6 @@ export class Servicios {
     example: [],
   })
   alertasClientes: AlertasClientes[];
-
-  @OneToMany(
-    () => ConversacionesTelegram,
-    (conversacionesTelegram) => conversacionesTelegram.servicio,
-  )
-  @ApiProperty({
-    description: 'Conversaciones Telegrams',
-    type: () => [ConversacionesTelegram],
-    example: [],
-  })
-  conversacionesTelegrams: ConversacionesTelegram[];
 
   @OneToMany(
     () => ExtensionesServicio,

@@ -14,7 +14,7 @@ describe('ServicesService evidence listing', () => {
       servicioId: 'service-1',
       monto: 500,
       observaciones: null,
-      servicio: { cliente: { nombreTelegram: 'Cliente' } },
+      servicio: { cliente: { nombre: 'Cliente' } },
     },
     {
       id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
@@ -24,7 +24,7 @@ describe('ServicesService evidence listing', () => {
       servicioId: 'service-2',
       monto: 400,
       observaciones: 'Monto incorrecto',
-      servicio: { cliente: { nombreTelegram: 'Otro cliente' } },
+      servicio: { cliente: { nombre: 'Otro cliente' } },
     },
   ];
   const queryBuilder: any = {

@@ -20,8 +20,6 @@ import {
   Repository,
   SelectQueryBuilder,
 } from 'typeorm';
-import { InjectBot } from 'nestjs-telegraf';
-import { Telegraf, Context, Markup } from 'telegraf';
 import { Servicios } from './entities/service.entity';
 import { Viajes } from '../trips/entities/trip.entity';
 import { RealtimeEventsService } from '../realtime/realtime.service';
@@ -35,7 +33,6 @@ import { LoyaltyService } from '../loyalty/loyalty.service';
 import { OfficeLiquidationSyncService } from '../liquidations/office-liquidation-sync.service';
 import { EmployeeCashObligation } from '../transport-operations/entities/employee-cash-obligation.entity';
 import { ConfigService } from '@nestjs/config';
-import { ConversacionesTelegram } from '../telegram-conversations/entities/telegram-conversation.entity';
 import {
   estimateServiceEnd,
   estimateTravelMinutes,
@@ -51,14 +48,11 @@ import { CancelServiceDto } from './dto/cancel-service.dto';
 import { UpdateServiceDto } from './dto/update-service.dto';
 import { ChangeServiceLocationDto } from './dto/change-service-location.dto';
 import { UploadService } from '../upload/upload.service';
-import { parseSessionKey } from '../telegram/telegram-session.key';
 import { PaymentReceiptValidations } from './entities/payment-receipt-validation.entity';
 import { describeError } from '../common/errors/error-message';
-import { Clientes } from '../clients/entities/client.entity';
 import { ExtrasCatalogo } from '../catalog-extras/entities/catalog-extra.entity';
 import { ExtrasServicio } from '../service-extras/entities/service-extra.entity';
 import { ServiceParticipant } from '../group-services/entities/service-participant.entity';
-import { TelegramSession } from '../telegram/entities/telegram-session.entity';
 import { formatServiceDuration, roundOpenEndedHours } from './service-duration';
 import { APP_TIME_ZONE, APP_LOCALE } from '../common/locale';
 import { kilometrosEntre } from '../common/geo';
@@ -109,7 +103,6 @@ const DRIVER_REJECTION_FINE = 100;
 
 const SERVICES_DEFAULT_PAGE_SIZE = 200;
 const SERVICES_MAX_PAGE_SIZE = 500;
-const TELEGRAM_MESSAGE_RETENTION_MS = 24 * 60 * 60 * 1000;
 
 export type EvidenceItem = {
   id: string;
@@ -144,7 +137,6 @@ export type EvidenceItem = {
 export interface FinishByEmployeeResult {
   servicio: Servicios;
   clienteNombre: string | null;
-  clienteChatId: string | null;
   duracionFormatted: string;
   /** Horas cobradas si la duracion era abierta; null si estaba pactada. */
   horasFacturadas: number | null;
@@ -190,18 +182,11 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     private readonly choferesRepository: Repository<Choferes>,
     @InjectRepository(Usuarios)
     private readonly usuariosRepository: Repository<Usuarios>,
-    @InjectRepository(ConversacionesTelegram)
-    private readonly conversationsRepository: Repository<ConversacionesTelegram>,
     @InjectRepository(AuthorizedBankAccounts)
     private readonly bankAccountsRepository: Repository<AuthorizedBankAccounts>,
     @InjectRepository(PaymentReceiptValidations)
     private readonly paymentReceiptValidationsRepository: Repository<PaymentReceiptValidations>,
     private readonly realtimeEventsService: RealtimeEventsService,
-    /*
-     * Solo para los avisos al cliente que todavia reserva por Telegram: el
-     * personal ya no recibe nada por ahi (Fase 5). Se va en la Fase 6.
-     */
-    @InjectBot() private readonly bot: Telegraf<Context>,
     private readonly extensionsService: ExtensionsService,
     private readonly aiMessageService: AiMessageService,
     private readonly loyaltyService: LoyaltyService,
@@ -210,17 +195,12 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     private readonly disciplineService: DisciplineService,
     private readonly uploadService: UploadService,
     /*
-     * Los tres ultimos entran para el cierre de un servicio por la empleada:
-     * liberarla del catalogo, avisar a quien la estaba esperando y dejar el
-     * registro de la cuenta final. Van al final del constructor a proposito,
+     * Los ultimos entran para el cierre de un servicio por la empleada:
+     * liberarla del catalogo y dejar el registro de la cuenta final. Van al final del constructor a proposito,
      * para no correr las posiciones de los que ya estaban.
      */
     @InjectRepository(Empleadas)
     private readonly empleadasRepository: Repository<Empleadas>,
-    @InjectRepository(Clientes)
-    private readonly clientesRepository: Repository<Clientes>,
-    @InjectRepository(TelegramSession)
-    private readonly telegramSessionRepository: Repository<TelegramSession>,
     // Los extras de un servicio en curso: el catalogo de la modelo, lo ya
     // cobrado y, en un grupal, a que participante se le imputa.
     @InjectRepository(ExtrasCatalogo)
@@ -229,8 +209,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     private readonly extrasServicioRepository: Repository<ExtrasServicio>,
     @InjectRepository(ServiceParticipant)
     private readonly serviceParticipantsRepository: Repository<ServiceParticipant>,
-    // Los avisos push, que salen aparte de los de Telegram porque el problema
-    // que resuelven es justo que el de Telegram llega y nadie lo ve.
+    // Los avisos push, para quien no tiene la pantalla abierta.
     private readonly notificationsService: NotificationsService,
     /*
      * Los moteles de la casa, la tarifa de transporte externo y el area que se
@@ -285,9 +264,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * El mismo aviso que el cliente recibe por Telegram, en su chat web. Va
-   * aparte del de Telegram, que no cambia, y no lo sustituye: un cliente con
-   * los dos canales lo recibe una vez en cada uno.
+   * Aviso al cliente en su chat web.
    */
   private avisarClienteWeb(
     servicio: Servicios,
@@ -306,10 +283,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
   /**
    * Aviso push a la modelo de que ya tiene un servicio autorizado.
    *
-   * Va aparte del mensaje de Telegram de arriba y en su propio try/catch: son
-   * dos canales independientes y el fallo de uno no dice nada del otro. El
-   * push existe porque el de Telegram llega a un chat que puede estar
-   * silenciado, que es justo el problema que se venia arrastrando.
+   * Va en su propio try/catch, aparte del aviso al chat web: son dos canales
+   * independientes y el fallo de uno no dice nada del otro.
    *
    * El texto no lleva nombre de cliente ni lugar: se lee en la pantalla de
    * bloqueo, a la vista de quien este al lado. El detalle vive detras del
@@ -340,99 +315,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Única comunicación de cierre al cliente.
-   *
-   * El bloqueo pesimista vuelve idempotente el efecto aun si dos caminos de
-   * cierre convergen al mismo tiempo. El mismo punto programa el borrado físico
-   * de los mensajes de esa contratación sin tocar el historial persistido.
-   */
-  private async sendPostServiceSurvey(servicioId: string): Promise<void> {
-    await this.serviciosRepository.manager.transaction(async (manager) => {
-      const services = manager.getRepository(Servicios);
-      const conversations = manager.getRepository(ConversacionesTelegram);
-      const servicio = await services.findOne({
-        where: { id: servicioId },
-        relations: { cliente: true },
-        lock: { mode: 'pessimistic_write' },
-      });
-      if (!servicio || servicio.estado !== 'finalizado') return;
-
-      const finishedAt = servicio.horaFinServicio
-        ? new Date(servicio.horaFinServicio)
-        : new Date();
-      const deleteAt = new Date(
-        finishedAt.getTime() + TELEGRAM_MESSAGE_RETENTION_MS,
-      );
-      const scope = servicio.bookingSessionId
-        ? 'servicio_id = :serviceId OR booking_session_id = :bookingSessionId'
-        : 'servicio_id = :serviceId';
-      await conversations
-        .createQueryBuilder('conversation')
-        .update(ConversacionesTelegram)
-        .set({ deleteAt, deleteStatus: 'PENDING' })
-        .where('telegram_message_id IS NOT NULL')
-        .andWhere('telegram_chat_id IS NOT NULL')
-        .andWhere('delete_status IS NULL')
-        .andWhere(`(${scope})`, {
-          serviceId: servicio.id,
-          bookingSessionId: servicio.bookingSessionId,
-        })
-        .execute();
-
-      const chatId = servicio.cliente?.telegramChatId;
-      if (!chatId || servicio.telegramResumenDefinitivoId) return;
-
-      const keyboard = Markup.inlineKeyboard([
-        [1, 2, 3].map((rating) =>
-          Markup.button.callback(
-            `${'⭐'.repeat(rating)}`,
-            `calificar_servicio:${servicio.id}:${rating}`,
-          ),
-        ),
-        [4, 5].map((rating) =>
-          Markup.button.callback(
-            `${'⭐'.repeat(rating)}`,
-            `calificar_servicio:${servicio.id}:${rating}`,
-          ),
-        ),
-        [
-          Markup.button.callback(
-            'VOLVER A CONTRATAR',
-            `rehire_service:${servicio.id}`,
-          ),
-          Markup.button.callback('VER CATÁLOGO', 'post_service_catalog'),
-        ],
-      ]);
-      const text = 'Gracias por tu confianza 💕\n¿Cómo estuvo tu experiencia?';
-      const message = await this.bot.telegram.sendMessage(chatId, text, {
-        disable_notification: true,
-        ...keyboard,
-      });
-
-      servicio.telegramResumenDefinitivoId = message.message_id.toString();
-      await services.save(servicio);
-      await conversations.save(
-        conversations.create({
-          clienteId: servicio.clienteId!,
-          servicioId: servicio.id,
-          bookingSessionId: servicio.bookingSessionId,
-          intendedEmployeeId: servicio.empleadaId,
-          emisor: 'sistema',
-          mensaje: text,
-          iaActiva: false,
-          telegramMessageId: message.message_id.toString(),
-          telegramChatId: String(chatId),
-          deleteAt,
-          deleteStatus: 'PENDING',
-          deleteAttempts: 0,
-          lastDeleteError: null,
-          deletedFromTelegramAt: null,
-        }),
-      );
-    });
-  }
-
-  /**
    * Da por cobrado el importe final de un servicio de duracion abierta.
    *
    * Lo escribia a mano el manejador que valida el comprobante de transferencia,
@@ -450,25 +332,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       { cobroFinalPendiente: false },
     );
     return resultado.affected === 1;
-  }
-
-  private async recordAgencyMessage(
-    service: Servicios,
-    message: string,
-  ): Promise<void> {
-    // Un servicio registrado a mano puede no tener cliente identificado, y sin
-    // el no hay hilo de conversacion al que pertenezca el mensaje.
-    if (!service.clienteId) return;
-    await this.conversationsRepository.save(
-      this.conversationsRepository.create({
-        clienteId: service.clienteId,
-        servicioId: service.id,
-        bookingSessionId: null,
-        emisor: 'ia',
-        mensaje: message,
-        iaActiva: false,
-      }),
-    );
   }
 
   private travelMinutes(from: Servicios, to: Servicios): number {
@@ -672,9 +535,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
     /*
      * El aviso push al jefe vive aqui y no en `create`, que es por donde entra
-     * solo el panel. La reserva que hace un cliente desde el bot llama directa
+     * solo el panel. La reserva que hace un cliente desde la web llama directa
      * a este metodo, asi que el camino principal --el normal, el que mas
-     * ocurre-- se quedaba sin aviso: solo llegaba el de prueba.
+     * ocurre-- se quedaria sin aviso.
      *
      * En su propio try/catch: un aviso que falla no puede deshacer una reserva
      * que ya esta hecha.
@@ -815,8 +678,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     }
 
     // El aviso push al jefe sale de `reserveNext`, que es por donde pasan tanto
-    // esta via como la reserva que hace el cliente. Ya no hay copia por
-    // Telegram: el jefe autoriza desde el panel.
+    // esta via como la reserva que hace el cliente. El jefe autoriza desde el
+    // panel.
     return servicioGuardado;
   }
 
@@ -1007,9 +870,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           createdAt: receipt.createdAt.toISOString(),
           serviceId: receipt.servicioId ?? null,
           clientName:
-            receipt.servicio?.cliente?.nombreTelegram ??
-            receipt.clienteTelegram ??
-            null,
+            receipt.servicio?.cliente?.nombre ?? receipt.clienteNombre ?? null,
           amount: receipt.monto == null ? null : Number(receipt.monto),
           expectedAmount:
             receipt.montoEsperado == null
@@ -1063,7 +924,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           serviceId: trip.servicioId,
           tripId: trip.id,
           tripType: trip.tipo,
-          clientName: trip.servicio?.cliente?.nombreTelegram ?? null,
+          clientName: trip.servicio?.cliente?.nombre ?? null,
         })),
       );
     }
@@ -1340,32 +1201,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       .join('\n\n');
   }
 
-  async changePaymentMethodByClient(
-    serviceId: string,
-    clientTelegramId: string,
-    paymentMethod: 'efectivo' | 'tarjeta' | 'transferencia',
-  ): Promise<Servicios> {
-    const service = await this.serviciosRepository.findOne({
-      where: { id: serviceId },
-      relations: { cliente: true },
-    });
-    if (!service || service.cliente?.telegramChatId !== clientTelegramId) {
-      throw new NotFoundException('Servicio activo no encontrado');
-    }
-    if (!['pendiente', 'agendado', 'en_curso'].includes(service.estado)) {
-      throw new ConflictException(
-        'El método de pago ya no puede cambiarse en este servicio',
-      );
-    }
-    service.metodoPago = paymentMethod;
-    await this.serviciosRepository.save(service);
-    this.realtimeEventsService.emitToBoss(service.jefeId, {
-      type: 'service_payment_method_changed',
-      data: { serviceId: service.id, paymentMethod },
-    });
-    return service;
-  }
-
   private assertActorCanManageService(
     service: Servicios,
     actor: Usuarios,
@@ -1511,7 +1346,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
    * Cuenta el cambio de hora a quien tiene que presentarse a ella.
    *
    * Ningun aviso puede tumbar la reprogramacion: el cambio ya esta guardado, y
-   * que Telegram falle no lo deshace. Por eso cada uno va en su propio `try`.
+   * que un aviso falle no lo deshace. Por eso cada uno va en su propio `try`.
    */
   private async avisarDeLaReprogramacion(
     service: Servicios,
@@ -1562,18 +1397,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
      */
     const nombre = service.empleada?.nombreArtistico ?? 'tu cita';
     const texto = `Amor, te confirmo el cambio de horario: nuestra cita con ${nombre} queda para el ${nueva}. Cualquier cosa me dices por aquí.`;
-
-    const chatId = service.cliente?.telegramChatId;
-    if (chatId) {
-      try {
-        await this.bot.telegram.sendMessage(chatId, texto);
-      } catch (error) {
-        this.logger.error(
-          'No se pudo avisar al cliente de la reprogramación:',
-          error,
-        );
-      }
-    }
 
     await this.avisarClienteWeb(service, texto);
   }
@@ -1896,82 +1719,12 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     await this.liquidationSync.syncCancelledRecord(service.id);
 
     await this.notifyServiceCancelled(service, estadoPrevio, viajesActivos);
-    // La conversacion del cliente con esa modelo se acaba aqui: si no, el bot
-    // le sigue contestando en nombre de ella.
-    await this.cerrarConversacionDelCliente(service);
 
     this.realtimeEventsService.emitToBoss(service.jefeId, {
       type: 'service_cancelled',
       data: { id: service.id },
     });
     return { cancelled: true };
-  }
-
-  /**
-   * Cierra en la sesion del cliente la conversacion del servicio cancelado.
-   *
-   * La cancelacion cambiaba estados y avisaba, pero no tocaba la sesion de
-   * Telegram del cliente: seguia con su `step` de conversacion puesto y
-   * apuntando a la misma modelo. El efecto era que el bot le contestaba en
-   * nombre de ella como si el servicio siguiera vivo, y al pedir otra desde el
-   * catalogo --si la nueva no estaba disponible y solo se le ofrecia la lista--
-   * se quedaba atrapado hablando con la primera.
-   *
-   * Solo se limpia si la sesion sigue apuntando a esa modelo. Si el cliente ya
-   * esta negociando con otra, lo suyo es mas nuevo que esta cancelacion y no se
-   * toca.
-   *
-   * La escritura es condicional por `version`, el mismo protocolo que usa el
-   * almacen de sesiones: si alguien escribio entre la lectura y esto, se deja
-   * estar. Nunca lanza; la cancelacion ya ocurrio y no puede deshacerse porque
-   * una sesion no se pudiera limpiar.
-   */
-  private async cerrarConversacionDelCliente(
-    service: Servicios,
-  ): Promise<void> {
-    const chatId =
-      service.cliente?.telegramChatId ?? service.clienteTelegramId ?? null;
-    if (!chatId || !service.empleadaId) return;
-
-    /*
-     * En un chat privado el emisor y el chat son el mismo id, y ese es el unico
-     * sitio donde un cliente habla con el bot, asi que la clave se arma con el
-     * id repetido. Las claves de tres partes son de la epoca de los bots por
-     * modelo y ya no se crean.
-     */
-    const key = `${chatId}:${chatId}`;
-
-    try {
-      const fila = await this.telegramSessionRepository.findOne({
-        where: { key },
-      });
-      if (!fila?.data) return;
-      if (fila.data.empleadaId !== service.empleadaId) return;
-
-      /*
-       * Se conserva lo que describe al cliente y no a la contratacion: borrar
-       * `rechazoAvisadoServicioId` haria que la explicacion del rechazo se le
-       * repitiera en cada mensaje.
-       */
-      const limpia = fila.data.rechazoAvisadoServicioId
-        ? { rechazoAvisadoServicioId: fila.data.rechazoAvisadoServicioId }
-        : {};
-
-      await this.telegramSessionRepository
-        .createQueryBuilder()
-        .update(TelegramSession)
-        .set({ data: limpia, version: () => 'version + 1' })
-        .where('key = :key AND version = :version', {
-          key,
-          version: fila.version,
-        })
-        .execute();
-    } catch (error) {
-      this.logger.error(
-        `No se pudo cerrar la conversacion del cliente del servicio ${service.id}:`,
-        error,
-      );
-    }
   }
 
   /**
@@ -2032,19 +1785,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       ),
     );
 
-    if (service.cliente?.telegramChatId || service.clienteTelegramId) {
-      const chatId =
-        service.cliente?.telegramChatId ?? service.clienteTelegramId!;
-      try {
-        const mensaje = await redactarCancelacion();
-        await this.bot.telegram.sendMessage(chatId, mensaje);
-      } catch (err) {
-        this.logger.error(
-          'Error al notificar al cliente de la cancelación:',
-          err,
-        );
-      }
-    }
     await this.avisarClienteWeb(service, redactarCancelacion, {
       respaldo: respaldoCancelacion,
     });
@@ -2053,8 +1793,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       try {
         /*
          * Nivel 1, y de los que mas urgen: si no se entera a tiempo sale de
-         * casa hacia un servicio que ya no existe. Es el unico aviso que le
-         * llega: el mensaje de Telegram que lo duplicaba ya no sale.
+         * casa hacia un servicio que ya no existe.
          */
         await this.avisar(service.empleada?.usuarioId, {
           titulo: 'Cancelaron el servicio',
@@ -2717,28 +2456,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         respaldoAceptacion,
       ),
     );
-    // Notificar al cliente por Telegram si tiene telegramChatId
-    if (servicio.cliente?.telegramChatId) {
-      try {
-        const clientMessage = await redactarAceptacion();
-        await this.bot.telegram.sendMessage(
-          servicio.cliente.telegramChatId,
-          clientMessage,
-        );
-        // El cliente recibe este aviso por Telegram, pero tambien debe quedar
-        // en el historial que ve el jefe. Sin este registro la conversacion
-        // parecia saltarse directamente de la autorizacion al siguiente
-        // evento.
-        await this.recordAgencyMessage(servicio, clientMessage);
-      } catch (telegramErr) {
-        this.logger.error(
-          `Error al enviar notificación de aceptación al cliente (chatId: ${servicio.cliente.telegramChatId}):`,
-          describeError(telegramErr),
-        );
-      }
-    }
-    // Sin `recordAgencyMessage`: en la web el aviso ya queda en el historial
-    // del chat, que es lo que ve el jefe.
+    // En la web el aviso ya queda en el historial del chat, que es lo que ve
+    // el jefe.
     await this.avisarClienteWeb(servicio, redactarAceptacion, {
       respaldo: respaldoAceptacion,
     });
@@ -2959,10 +2678,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
   /**
    * La modelo pide diez minutos mas de margen mientras el cliente espera.
    *
-   * Es la prorroga que hasta ahora solo existia dentro del handler de Telegram:
-   * los tres efectos que importan --anotar la prorroga, reiniciar el reloj de
-   * espera y avisar al chofer que esta esperando abajo-- vivian pegados al
-   * boton del chat, asi que desde el portal no habia forma de pedirla.
+   * Reune los tres efectos que importan --anotar la prorroga, reiniciar el
+   * reloj de espera y avisar al chofer que esta esperando abajo--.
    *
    * La validacion del estado y del tope de tres la hace
    * `requestServiceExtension`, que ademas bloquea la fila: dos toques seguidos
@@ -3455,18 +3172,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       dedupeKey: `boss:service_extended:${servicio.id}:event`,
     });
     const textoExtension = `La extensión de ${horas} hora${horas === 1 ? '' : 's'} quedó registrada.`;
-    if (servicio.cliente?.telegramChatId) {
-      try {
-        await this.bot.telegram.sendMessage(
-          servicio.cliente.telegramChatId,
-          textoExtension,
-        );
-      } catch (error) {
-        this.logger.warn(
-          `No se pudo avisar al cliente de la extensión: ${describeError(error)}`,
-        );
-      }
-    }
     await this.avisarClienteWeb(servicio, textoExtension);
 
     // Se relee porque los totales los recalcula un trigger de la base.
@@ -3544,73 +3249,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     return { eventId: event.id, registeredAt };
   }
 
-  async dispatchScheduledTrip(
-    servicioId: string,
-    tipoTransporte: 'chofer' | 'uber' = 'chofer',
-  ): Promise<{ uberLink?: string; viajeId?: string }> {
-    const servicio = await this.serviciosRepository.findOne({
-      where: { id: servicioId },
-      relations: { cliente: true, empleada: { usuario: true } },
-    });
-    if (!servicio) throw new NotFoundException('Servicio no encontrado');
-    if (servicio.estado !== 'agendado') {
-      throw new ConflictException('El servicio no está en estado agendado');
-    }
-
-    servicio.estado = 'en_curso';
-    if (!servicio.horaInicioServicio) {
-      servicio.horaInicioServicio = new Date();
-    }
-    servicio.transporteAgendado = tipoTransporte;
-    await this.serviciosRepository.save(servicio);
-
-    if (servicio.empleadaId) {
-      await this.serviciosRepository.manager
-        .getRepository(Empleadas)
-        .update(servicio.empleadaId, { disponible: false });
-    }
-
-    const nuevoViaje = this.viajesRepository.create({
-      servicioId: servicio.id,
-      choferId: null,
-      tipo: 'ida',
-      zona: 'domicilio',
-      tarifa: tipoTransporte === 'uber' ? 0 : this.driverPayoutFor(servicio),
-      driverPayout:
-        tipoTransporte === 'uber' ? 0 : this.driverPayoutFor(servicio),
-      estado: tipoTransporte === 'uber' ? 'aceptado' : 'notificado',
-      proveedorTransporte: tipoTransporte,
-    });
-    const viajeGuardado = await this.viajesRepository.save(nuevoViaje);
-
-    this.realtimeEventsService.emitToBoss(servicio.jefeId, {
-      type: 'service_accepted',
-      data: { id: servicio.id, viajeId: viajeGuardado.id },
-    });
-
-    this.realtimeEventsService.emitToEmployee(servicio.empleadaId, {
-      type: 'new_service',
-      data: servicio,
-    });
-
-    let uberLink: string | undefined;
-    if (tipoTransporte === 'uber') {
-      uberLink = this.buildUberLinkForTrip(servicio, 'ida');
-    } else {
-      try {
-        await this.dispatchViaje(viajeGuardado.id);
-      } catch (dispatchErr) {
-        this.logger.error(
-          'Error al iniciar despacho de choferes para cita programada:',
-          dispatchErr,
-        );
-      }
-    }
-
-    // La modelo se entera por el push que el puente deriva de `new_service`.
-    return { uberLink, viajeId: viajeGuardado.id };
-  }
-
   async rechazar(id: string, jefeId: string): Promise<Servicios> {
     const servicio = await this.serviciosRepository.findOne({
       where: { id },
@@ -3682,7 +3320,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       data: { id: servicio.id },
     });
 
-    // 3. Notificar al cliente (Telegram mientras exista ese canal, y su chat web)
+    // 3. Notificar al cliente en su chat web
     const respaldoRechazo = 'Qué pena contigo, esta vez no voy a poder ir';
     const redactarRechazo = unaVez(() =>
       this.aiMessageService.generate(
@@ -3691,17 +3329,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         respaldoRechazo,
       ),
     );
-    if (servicio.clienteTelegramId) {
-      try {
-        const clientMessage = await redactarRechazo();
-        await this.bot.telegram.sendMessage(
-          servicio.clienteTelegramId,
-          clientMessage,
-        );
-      } catch (err) {
-        this.logger.error('Error notifying client of rejected service:', err);
-      }
-    }
     await this.avisarClienteWeb(servicio, redactarRechazo, {
       respaldo: respaldoRechazo,
     });
@@ -3745,15 +3372,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         respaldoEta,
       ),
     );
-    if (next.cliente?.telegramChatId) {
-      const message = await redactarEta();
-      // Va al cliente, asi que sale por el bot de la modelo como el resto de
-      // los avisos suyos; el central solo sirve de respaldo.
-      await this.bot.telegram
-        .sendMessage(next.cliente.telegramChatId, message)
-        .catch(() => undefined);
-      await this.recordAgencyMessage(next, message);
-    }
     // Lo redacta la IA como agencia: el respaldo fijo, adaptado, es lo que
     // queda si su texto dice algo que en la web no se dice.
     await this.avisarClienteWeb(next, redactarEta, { respaldo: respaldoEta });
@@ -3792,14 +3410,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           respaldoDisponible,
         ),
       );
-      if (next.cliente?.telegramChatId) {
-        const message = await redactarDisponible();
-        await this.bot.telegram.sendMessage(
-          next.cliente.telegramChatId,
-          message,
-        );
-        await this.recordAgencyMessage(next, message);
-      }
       await this.avisarClienteWeb(next, redactarDisponible, {
         respaldo: respaldoDisponible,
       });
@@ -3862,14 +3472,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           respaldoEnCamino,
         ),
       );
-      if (next.cliente?.telegramChatId) {
-        const message = await redactarEnCamino();
-        await this.bot.telegram.sendMessage(
-          next.cliente.telegramChatId,
-          message,
-        );
-        await this.recordAgencyMessage(next, message);
-      }
       await this.avisarClienteWeb(next, redactarEnCamino, {
         respaldo: respaldoEnCamino,
       });
@@ -3958,11 +3560,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         continue;
       }
       /*
-       * Solo hace falta saber cuando empezo. Antes tambien se exigia chat de
-       * Telegram, y desde que se puede entrar al portal con correo y
-       * contrasena eso dejaba a las modelos sin Telegram sin este aviso: el
-       * `continue` ocurria antes de mandar el push, asi que no les llegaba por
-       * ningun sitio.
+       * Solo hace falta saber cuando empezo.
        */
       if (!service.horaInicioServicio) {
         continue;
@@ -4077,8 +3675,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       // Quien cerro su jornada no vuelve a estar libre en un rato: no se le
       // ofrecen viajes hasta que la reabra.
       .andWhere('usuario.enJornada = :enJornada', { enJornada: true })
-      // El panel es el canal operativo principal; Telegram solo duplica el
-      // aviso y por eso no puede ser requisito para recibir una oferta.
       .andWhere('chofer.ubicacionLat IS NOT NULL')
       .andWhere('chofer.ubicacionLng IS NOT NULL')
       // Una posicion vieja ordena mal por cercania: se le ofreceria el viaje
@@ -4127,7 +3723,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         'chofer.telefono',
         'chofer.ubicacionLat',
         'chofer.ubicacionLng',
-        'usuario.telegramChatId',
       ])
       .addSelect(
         'calcular_distancia_haversine(:lat, :lng, CAST(chofer.ubicacion_lat AS double precision), CAST(chofer.ubicacion_lng AS double precision))',
@@ -4220,8 +3815,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
      *
      * Es el aviso que mas cuesta perderse de todo el sistema: la oferta caduca
      * sola, y un chofer que no la ve a tiempo deja el viaje sin cubrir. Es el
-     * unico aviso de la oferta: el mensaje de Telegram que la duplicaba ya no
-     * sale.
+     * unico aviso de la oferta.
      *
      * En su propio try/catch: el viaje ya esta ofrecido; que falle el push no
      * puede deshacer eso.
@@ -4328,7 +3922,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
        * figurando como suya-- pero es el mismo fallo. */
       await this.viajesRepository.update(viajeId, {
         choferId: null,
-        telegramChoferMsgOfertaId: null,
         ofertaExpiraEn: null,
       });
       /* Para que la tarjeta se vaya de su portal sin recargar. */
@@ -4403,7 +3996,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
        */
       await this.viajesRepository.update(viajeId, {
         choferId: null,
-        telegramChoferMsgOfertaId: null,
         ofertaExpiraEn: null,
       });
       /* Para que la tarjeta se vaya de su portal sin recargar. */
@@ -4724,18 +4316,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       ]);
       const textoFinProximo =
         'El servicio termina en aproximadamente 15 minutos. Si deseas extenderlo, indícaselo a la empleada.';
-      if (service.cliente?.telegramChatId) {
-        try {
-          await this.bot.telegram.sendMessage(
-            service.cliente.telegramChatId,
-            textoFinProximo,
-          );
-        } catch (error) {
-          this.logger.warn(
-            `No se pudo avisar al cliente del fin próximo: ${describeError(error)}`,
-          );
-        }
-      }
       await this.avisarClienteWeb(service, textoFinProximo);
     }
   }
@@ -4835,92 +4415,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       dedupeKey: `employee:service_cancelled_delay:${servicio.id}`,
     });
 
-    /*
-     * Aqui abajo se le ofrecen otras modelos, asi que la conversacion con esta
-     * tiene que quedar cerrada antes: si no, lo que escriba despues lo sigue
-     * contestando ella, la que acaba de no llegar.
-     */
-    await this.cerrarConversacionDelCliente(servicio);
-
-    if (servicio.cliente?.telegramChatId) {
-      try {
-        await this.bot.telegram.sendMessage(
-          servicio.cliente.telegramChatId,
-          `❌ *Servicio Cancelado:*\nLamentamos informarte que la empleada *${servicio.empleada.nombreArtistico}* no pudo estar disponible a tiempo y el servicio ha sido cancelado.\n\n` +
-            `Te recomendamos ver otras opciones de empleadas disponibles ahora mismo:`,
-          { parse_mode: 'Markdown' },
-        );
-
-        const candidatePool = await this.serviciosRepository.manager
-          .getRepository(Empleadas)
-          .find({
-            where: { disponible: true, catalogoActivo: true },
-            take: 15,
-          });
-        const confirmedRows: Array<{ subject_id: string; confirmed: number }> =
-          candidatePool.length === 0
-            ? []
-            : await this.serviciosRepository.manager.query(
-                `SELECT subject_id, COUNT(*)::int AS confirmed
-                 FROM conduct_reports
-                 WHERE subject_type = 'employee' AND outcome = 'confirmado'
-                   AND created_at >= now() - interval '90 days'
-                   AND subject_id = ANY($1::uuid[])
-                 GROUP BY subject_id`,
-                [candidatePool.map((emp) => emp.id)],
-              );
-        const confirmedByEmployee = new Map(
-          confirmedRows.map((row) => [row.subject_id, row.confirmed]),
-        );
-        // Se ofrecen primero las empleadas con mejor score (calificación − reportes
-        // confirmados), no en orden arbitrario de base de datos.
-        const disponibles = candidatePool
-          .map((emp) => {
-            const rating =
-              emp.promedioCalificacion != null
-                ? Number(emp.promedioCalificacion)
-                : 2.5;
-            const confirmed = confirmedByEmployee.get(emp.id) ?? 0;
-            const score = Math.max(
-              0,
-              Math.round((rating / 5) * 100 - confirmed * 8),
-            );
-            return { emp, score };
-          })
-          .sort((a, b) => b.score - a.score)
-          .slice(0, 3)
-          .map((entry) => entry.emp);
-
-        if (disponibles.length > 0) {
-          for (const emp of disponibles) {
-            await this.bot.telegram.sendMessage(
-              servicio.cliente.telegramChatId,
-              `👩‍🍳 *${emp.nombreArtistico}*\n` +
-                `• Tarifa: $${emp.precioBaseHora}/hr\n` +
-                `• Descripción: ${emp.descripcion || 'Sin descripción'}`,
-              {
-                parse_mode: 'Markdown',
-                ...Markup.inlineKeyboard([
-                  [
-                    Markup.button.callback(
-                      '🤝 Contratar a ella',
-                      `contratar_empleada:${emp.id}`,
-                    ),
-                  ],
-                ]),
-              },
-            );
-          }
-        } else {
-          await this.bot.telegram.sendMessage(
-            servicio.cliente.telegramChatId,
-            `Lo sentimos, no hay otras empleadas disponibles en este momento. Por favor, intenta de nuevo más tarde.`,
-          );
-        }
-      } catch (err) {
-        this.logger.error('Error al notificar al cliente de cancelación:', err);
-      }
-    }
     await this.avisarClienteWeb(
       servicio,
       textoAvisoCancelacionPorDemora(servicio.empleada?.nombreArtistico),
@@ -4936,7 +4430,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
    * catalogo de esa misma persona: si no, una participante podria cobrarle al
    * cliente un extra de otra.
    *
-   * Se resuelve por id de usuario y no por chat de Telegram --como hace
+   * Se resuelve por id de usuario --como hace
    * `GroupServicesService.participantAccess`-- porque el portal no tiene chat.
    */
   private async resolveExtrasActor(
@@ -5009,11 +4503,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
   /**
    * Agrega un extra a un servicio en curso.
    *
-   * Estaba repartido en los tres pasos del menu de Telegram --elegir extra,
-   * elegir metodo de pago, guardar-- con las mismas cuatro comprobaciones
-   * copiadas en cada uno y el estado a medias viviendo en la sesion del chat.
-   * Aqui es una sola operacion: el paso a paso es cosa de la interfaz, no del
-   * negocio, y el portal no tiene sesion de Telegram donde guardar nada.
+   * Es una sola operacion: el paso a paso es cosa de la interfaz, no del
+   * negocio, y el portal no tiene sesion donde guardar nada.
    *
    * El total del servicio no se toca desde aqui: lo recalcula un trigger de la
    * base al insertar el extra, y por eso el servicio se relee al final.
@@ -5176,9 +4667,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
    * con un extra suyo llamado "Extra" acabaria viendo sus montos libres
    * mezclados con el.
    *
-   * Vivia dentro del manejador de Telegram, asi que desde el portal no habia
-   * forma de cobrar un monto libre; y copiarlo habria dejado a las dos vias
-   * creando comodines distintos para la misma modelo.
+   * Vive aqui para que todas las vias de cobro de un monto libre creen el
+   * mismo comodin para la misma modelo.
    */
   private async resolverExtraComodin(
     empleadaId: string,
@@ -5211,11 +4701,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
   /**
    * Cierra un servicio individual a peticion de la empleada asignada.
    *
-   * Vivia dentro del handler `conf_fin_serv` de Telegram, que era el unico sitio
-   * desde el que se podia finalizar. Al abrirse el portal de la modelo hacian
-   * falta las dos vias, y duplicar doscientas lineas de cierre --duracion,
-   * redondeo de las horas abiertas, liquidacion, servicio encadenado,
-   * disponibilidad-- habria garantizado que una de las dos se quedara atras.
+   * Reune todo el cierre --duracion, redondeo de las horas abiertas,
+   * liquidacion, servicio encadenado, disponibilidad-- para que cada via que
+   * finaliza use el mismo.
    *
    * Aqui queda todo lo que cambia el estado del negocio y todo lo que hay que
    * avisar, pase por donde pase el cierre. Fuera queda solo la presentacion: el
@@ -5369,14 +4857,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     servicio.proximoRecordatorioRegresoAt = new Date(Date.now() + 5 * 60_000);
     await this.serviciosRepository.save(servicio);
 
-    // La encuesta nace del cierre común (empleada u oficina), no de un viaje
-    // posterior. Es best-effort: Telegram nunca puede revertir el servicio.
-    await this.sendPostServiceSurvey(servicio.id).catch((error) =>
-      this.logger.warn(
-        `El servicio ${servicio.id} cerró, pero no se pudo enviar o programar su encuesta: ${describeError(error)}`,
-      ),
-    );
-
     // El cierre del trabajo no cierra todavía el flujo operativo: primero hay
     // que resolver y completar el regreso. Las filas históricas sin estado
     // explícito ya se interpretan como `preparando_regreso` por compatibilidad.
@@ -5440,18 +4920,16 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           error,
         );
       }
-      await this.notifyClientsWaitingForEmployee(servicio.empleadaId);
     }
 
     if (horasFacturadas) {
       await this.requestOpenEndedFinalPayment(
         // El total viene de la relectura, pero el cliente y la modelo (para el
-        // chat web y su telegramChatId) solo estan en el servicio original.
+        // chat web) solo estan en el servicio original.
         Object.assign(servicioConTotal, {
           cliente: servicio.cliente,
           empleada: servicio.empleada,
         }),
-        servicio.cliente?.telegramChatId ?? null,
         horasFacturadas,
         duracionFormatted,
       );
@@ -5473,7 +4951,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
      *
      * Se pide aqui y no en un manejador de canal: asi cerrar desde cualquier
      * via la recoge igual. Califica en su portal (`ratings/pending-clients`);
-     * los botones de Telegram que lo duplicaban ya no salen. Va sin `tipo`
+     * Va sin `tipo`
      * --no se puede apagar-- porque es el unico momento en el que se acuerda de
      * como fue, y sin nota el expediente del cliente llega vacio a quien decide
      * si se le vuelve a atender.
@@ -5491,96 +4969,11 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
     return {
       servicio: servicioConTotal,
-      clienteNombre: servicio.cliente?.nombreTelegram ?? null,
-      clienteChatId: servicio.cliente?.telegramChatId ?? null,
+      clienteNombre: servicio.cliente?.nombre ?? null,
       duracionFormatted,
       horasFacturadas,
       hasSuccessor: successor.hasSuccessor,
     };
-  }
-
-  /**
-   * Avisa a los clientes que decidieron esperar a esta modelo.
-   *
-   * Estaba en el handler de Telegram y por eso solo corria cuando el servicio se
-   * cerraba desde el chat: al finalizar desde el portal, quien estaba esperando
-   * no se enteraba nunca de que ya habia quedado libre.
-   */
-  private async notifyClientsWaitingForEmployee(
-    empleadaId: string,
-  ): Promise<void> {
-    let waiting: TelegramSession[];
-    try {
-      /*
-       * Filtrado en SQL, apoyado en el indice de expresion de la migracion
-       * `IndexTelegramSessionLookups`. Antes se traia la tabla entera para
-       * quedarse con las pocas filas que esperan a esta empleada, y cada fila
-       * carga su historial de conversacion en JSONB: son megabytes por cierre
-       * de servicio.
-       */
-      waiting = await this.telegramSessionRepository
-        .createQueryBuilder('sesion')
-        .where("sesion.data->>'esperandoEmpleadaId' = :empleadaId", {
-          empleadaId,
-        })
-        .getMany();
-    } catch (error) {
-      this.logger.error(
-        'No se pudieron revisar las sesiones en espera de la empleada:',
-        error,
-      );
-      return;
-    }
-
-    if (!waiting.length) return;
-
-    const empleada = await this.empleadasRepository.findOne({
-      where: { id: empleadaId },
-    });
-    const nombre = empleada?.nombreArtistico || 'ella';
-
-    for (const item of waiting) {
-      /*
-       * La clave se descompone con `parseSessionKey`, no a mano. Leer
-       * `key.split(':')[0]` daba el id de la EMPLEADA en las sesiones que
-       * guardo un bot dedicado, asi que el aviso salia hacia un destinatario
-       * inexistente y quien se habia quedado esperando no se enteraba nunca.
-       */
-      const clientTelegramId = parseSessionKey(item.key)?.fromId;
-      if (!clientTelegramId) continue;
-
-      const mensaje = `¡Ya quedé libre mi amor! Aquí sigo, dime cómo la armamos 😘`;
-      try {
-        await this.bot.telegram.sendMessage(clientTelegramId, mensaje);
-
-        item.data.esperandoEmpleadaId = undefined;
-        item.data.selectedEmployeeBusy = false;
-        item.data.waitingForBusyChoice = false;
-        await this.telegramSessionRepository.save(item);
-
-        const client = await this.clientesRepository.findOne({
-          where: { telegramChatId: clientTelegramId },
-        });
-        if (client && item.data.bookingSessionId) {
-          await this.conversationsRepository.save(
-            this.conversationsRepository.create({
-              clienteId: client.id,
-              servicioId: null,
-              bookingSessionId: item.data.bookingSessionId,
-              intendedEmployeeId: item.data.empleadaId ?? empleadaId,
-              emisor: 'ia',
-              mensaje,
-              iaActiva: true,
-            }),
-          );
-        }
-      } catch (error) {
-        this.logger.warn(
-          `No se pudo avisar al cliente ${clientTelegramId} que ${nombre} quedó libre:`,
-          error,
-        );
-      }
-    }
   }
 
   /**
@@ -5593,12 +4986,11 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
    */
   private async requestOpenEndedFinalPayment(
     servicio: Servicios,
-    clienteChatId: string | null,
     horasFacturadas: number,
     duracionFormatted: string,
   ): Promise<void> {
-    // Ni Telegram ni cuenta web: no hay a quien pasarle la cuenta.
-    if (!clienteChatId && !servicio.cliente?.usuarioId) return;
+    // Sin cuenta web no hay a quien pasarle la cuenta.
+    if (!servicio.cliente?.usuarioId) return;
 
     const formatoMoneda = new Intl.NumberFormat(APP_LOCALE, {
       style: 'currency',
@@ -5632,9 +5024,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
       /*
        * La marca es del servicio, no del canal: es la que hace que el chat web
-       * admita la subida del comprobante (`servicioEsperaComprobante`) y la que
-       * lee Telegram. Va antes de avisar para que el boton ya este disponible
-       * cuando el cliente lea el mensaje.
+       * admita la subida del comprobante (`servicioEsperaComprobante`). Va
+       * antes de avisar para que el boton ya este disponible cuando el cliente
+       * lea el mensaje.
        */
       try {
         await this.serviciosRepository.update(servicio.id, {
@@ -5650,21 +5042,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       respaldoWeb = cuenta;
     }
 
-    if (clienteChatId) {
-      try {
-        await this.bot.telegram.sendMessage(clienteChatId, mensaje, {
-          parse_mode: 'Markdown',
-        });
-        await this.recordAgencyMessage(servicio, mensaje);
-      } catch (error) {
-        this.logger.error(
-          'No se pudo enviar la cuenta final al cliente:',
-          error,
-        );
-      }
-    }
-
-    // Gemelo web: no depende de Telegram ni de que el envio de arriba haya ido.
     await this.avisarClienteWeb(servicio, mensaje, { respaldo: respaldoWeb });
   }
 
@@ -5750,9 +5127,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
   /**
    * Pide a los jefes de la modelo que elijan el transporte de regreso.
    *
-   * Antes salia al tema del servicio y a los grupos de Telegram de cada jefe,
-   * con un boton de chofer interno; el grupo con temas no se porta y el regreso
-   * se elige en el panel. Va a los tres jefes posibles --el del servicio, el
+   * El regreso se elige en el panel. Va a los tres jefes posibles --el del servicio, el
    * principal y el secundario de la modelo-- porque cualquiera puede
    * resolverlo y no se sabe quien esta mirando. Sin `tipo`: un regreso sin
    * resolver deja a la modelo en la puerta.
@@ -5998,8 +5373,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         trip.proveedorTransporte = provider;
         trip.choferId = null;
         trip.choferesNotificados = [];
-        trip.telegramChoferMsgOfertaId = null;
-        trip.telegramUberFileId = null;
         trip.uberScreenshotUrl = null;
         trip.uberScreenshotUploadedAt = null;
         trip.horaNotificacion = new Date();
@@ -6106,8 +5479,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
    * Avisa a la modelo de que ya tiene la captura de su Uber.
    *
    * Con transporte externo, esa captura es lo unico que le dice en que coche se
-   * sube: sin ella no sabe ni la placa. Salia solo por Telegram, que es
-   * justamente el canal que puede estar silenciado.
+   * sube: sin ella no sabe ni la placa.
    *
    * El texto no dice mas de la cuenta: se lee en la pantalla de bloqueo y el
    * detalle esta detras del toque.
@@ -6133,35 +5505,13 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  async saveUberScreenshot(
-    tripId: string,
-    actorId: string,
-    fileId: string,
-  ): Promise<void> {
-    const trip = await this.getAuthorizedUberTrip(tripId, actorId);
-    const fileUrl = await this.bot.telegram.getFileLink(fileId);
-    const evidence = await this.uploadService.uploadEvidenceFromUrl({
-      sourceUrl: fileUrl.href,
-      folder: 'uber',
-      scopeId: trip.id,
-    });
-    await this.viajesRepository.update(trip.id, {
-      telegramUberFileId: fileId,
-      uberScreenshotUrl: evidence.url,
-      uberScreenshotUploadedAt: new Date(),
-    });
-    // Ella la ve en su portal; el reenvio de la foto por Telegram ya no sale.
-    await this.avisarCapturaDeUber(trip);
-  }
-
   async saveUberScreenshotFromDashboard(
     tripId: string,
     actorId: string,
     file: any,
   ): Promise<{ imageUrl: string }> {
     /*
-     * Ya no exige que la modelo tenga Telegram ni le reenvia la foto por ahi:
-     * la captura queda en el almacen y ella la ve en su portal tras el aviso.
+     * La captura queda en el almacen y ella la ve en su portal tras el aviso.
      */
     const trip = await this.getAuthorizedUberTrip(tripId, actorId);
 
@@ -6335,7 +5685,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         Object.assign(trip, {
           choferId: null,
           choferesNotificados: [],
-          telegramChoferMsgOfertaId: null,
           proveedorTransporte: 'interno',
           externalPlatform: null,
           externalSharedLink: null,
@@ -6490,7 +5839,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         Object.assign(trip, {
           choferId: null,
           choferesNotificados: [],
-          telegramChoferMsgOfertaId: null,
           proveedorTransporte: 'uber',
           externalPlatform: normalizedPlatform,
           externalSharedLink: sharedLink,
@@ -6658,9 +6006,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     if (!actor) throw new ConflictException('Usuario no autorizado');
 
     // Declarar que no costo nada no necesita comprobante; cobrar si.
-    const hasScreenshot = Boolean(
-      trip.uberScreenshotUrl || trip.telegramUberFileId,
-    );
+    const hasScreenshot = Boolean(trip.uberScreenshotUrl);
     const override = amount > 0 && !hasScreenshot;
     if (override && actor.rol !== 'admin') {
       throw new ConflictException(
@@ -6741,14 +6087,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       relations: { cliente: true, empleada: { usuario: true } },
     });
     if (!servicio || servicio.estado !== 'finalizado') return;
-    // Compatibilidad con los caminos que llegan aquí al cerrar el transporte:
-    // la encuesta ya debió salir al finalizar el servicio y este llamado solo
-    // la recupera si Telegram falló en aquel instante. Nunca la edita ni repite.
-    await this.sendPostServiceSurvey(servicio.id).catch((error) =>
-      this.logger.warn(
-        `No se pudo recuperar la encuesta del servicio ${servicio.id}: ${describeError(error)}`,
-      ),
-    );
 
     /*
      * El monto definitivo lo lee en su portal. El importe no viaja en el aviso:
@@ -6918,8 +6256,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
     /*
      * Lo que marca el jefe sobre el Uber se le cuenta a la modelo. El evento en
-     * vivo dependia de que ella tuviera Telegram, asi que el portal no se
-     * enteraba sin recargar; ahora sale siempre, con su push. Lo que marca ella
+     * vivo y su push salen siempre, para que el portal se entere sin
+     * recargar. Lo que marca ella
      * misma no se le confirma: ya lo ve en la pantalla donde lo marco.
      */
     if (bossAction && trip.proveedorTransporte === 'uber') {
@@ -6958,13 +6296,6 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             respaldoTrayecto,
           ),
         );
-        if (trip.servicio.cliente?.telegramChatId) {
-          const clientMessage = await redactarTrayecto();
-          await this.bot.telegram.sendMessage(
-            trip.servicio.cliente.telegramChatId,
-            clientMessage,
-          );
-        }
         await this.avisarClienteWeb(trip.servicio, redactarTrayecto, {
           respaldo: respaldoTrayecto,
         });

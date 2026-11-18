@@ -4,7 +4,6 @@ import { DriverTripsService } from './driver-trips.service';
 import { Viajes } from '../trips/entities/trip.entity';
 import { Choferes } from './entities/driver.entity';
 import { ServicesService } from '../services/services.service';
-import { TelegramService } from '../telegram/telegram.service';
 import { Servicios } from '../services/entities/service.entity';
 import { RealtimeEventsService } from '../realtime/realtime.service';
 import { SettlementsService } from '../transport-operations/settlements.service';
@@ -26,15 +25,14 @@ function viaje(overrides: Partial<Viajes> = {}): Viajes {
       // Los dos ids por los que se enrutan los avisos en vivo a sus canales.
       empleadaId: 'empleada-1',
       jefeId: 'jefe-1',
-      telegramThreadId: null,
-      jefe: { grupoTelegramId: '-100', telegramChatId: '55' },
+      jefe: null,
       empleada: {
         nombreArtistico: 'Valentina',
         usuarioId: 'usuario-modelo',
-        usuario: { telegramChatId: '77' },
+        usuario: {},
         jefe: null,
       },
-      cliente: { nombreTelegram: 'Andrés' },
+      cliente: { nombre: 'Andrés' },
     },
     ...overrides,
   } as unknown as Viajes;
@@ -43,11 +41,6 @@ function viaje(overrides: Partial<Viajes> = {}): Viajes {
 function montar(trip: Viajes | null, afectadas = 1) {
   const update = jest.fn(() => Promise.resolve({ affected: 1 }));
   const viajesFind = jest.fn<Promise<Viajes[]>, []>(() => Promise.resolve([]));
-  const borrados: Array<{ chatId: string; messageId: number }> = [];
-  const deleteMessage = jest.fn((chatId: string, messageId: number) => {
-    borrados.push({ chatId, messageId });
-    return Promise.resolve();
-  });
   const clearWaitTimeout = jest.fn();
   const serviciosUpdate = jest.fn(() => Promise.resolve({ affected: 1 }));
   const syncDriverSettlement = jest.fn(() => Promise.resolve());
@@ -69,11 +62,6 @@ function montar(trip: Viajes | null, afectadas = 1) {
         }),
       ),
   } as unknown as DataSource;
-  const enviados: Array<{ chatId: string; texto: string }> = [];
-  const sendMessage = jest.fn((chatId: string, texto: string) => {
-    enviados.push({ chatId, texto });
-    return Promise.resolve({ message_id: 4321 });
-  });
   const startWaitTimeout = jest.fn();
   const markTransportAssigned = jest.fn(() => Promise.resolve());
   const markEmployeeTripProgress = jest.fn(() => Promise.resolve());
@@ -118,7 +106,6 @@ function montar(trip: Viajes | null, afectadas = 1) {
     settlements: { syncDriverSettlement },
     notifications: { notificar: jest.fn(() => Promise.resolve(0)) },
     aiMessages: { generate: jest.fn(() => Promise.resolve('Ya llegué')) },
-    telegram: { sendMessage, deleteMessage, deleteForumTopic: jest.fn() },
     servicesService: {
       startWaitTimeout,
       clearWaitTimeout,
@@ -141,11 +128,8 @@ function montar(trip: Viajes | null, afectadas = 1) {
     realtime: dependencias.realtime as Record<string, jest.Mock>,
     update,
     viajesFind,
-    enviados,
-    borrados,
     startWaitTimeout,
     clearWaitTimeout,
-    sendMessage,
     notificar: (dependencias.notifications as { notificar: jest.Mock })
       .notificar,
     serviciosUpdate,
@@ -159,18 +143,16 @@ function montar(trip: Viajes | null, afectadas = 1) {
 
 describe('DriverTripsService.marcarLlegada', () => {
   /*
-   * Fase 5: al personal ya no le sale nada por Telegram. La modelo se entera
+   * Al personal le llega todo por la plataforma: la modelo se entera
    * por push y el jefe por el evento del panel (y su push, via el puente).
    */
-  it('deja el viaje en llegado y avisa a la modelo por push, no por Telegram', async () => {
-    const { service, update, enviados, notificar, startWaitTimeout } =
-      montar(viaje());
+  it('deja el viaje en llegado y avisa a la modelo por push', async () => {
+    const { service, update, notificar, startWaitTimeout } = montar(viaje());
 
     const resultado = await service.marcarLlegada('viaje-1', CHOFER);
 
     expect(resultado.estado).toBe('llegado');
     expect(update).toHaveBeenCalledWith('viaje-1', { estado: 'llegado' });
-    expect(enviados).toEqual([]);
     expect(notificar).toHaveBeenCalledWith(
       'usuario-modelo',
       expect.objectContaining({
@@ -282,22 +264,6 @@ describe('DriverTripsService.marcarRecogida', () => {
     // La espera deja de contar en cuanto sube al coche: si no, se le seguiria
     // cobrando al cliente un tiempo que ya no espera nadie.
     expect(clearWaitTimeout).toHaveBeenCalledWith('servicio-1');
-  });
-
-  // Ya no se le mandan mensajes por Telegram, asi que no hay nada que retirar.
-  it('no toca el chat de Telegram de la modelo ni el del jefe', async () => {
-    const { service, borrados, enviados } = montar(
-      viaje({
-        estado: 'llegado',
-        telegramEmpleadaMsgChoferCaminoId: '11',
-        telegramEmpleadaMsgChoferLlegadoId: '22',
-      }),
-    );
-
-    await service.marcarRecogida('viaje-1', CHOFER);
-
-    expect(borrados).toEqual([]);
-    expect(enviados).toEqual([]);
   });
 
   it('admite recoger sin haber marcado la llegada', async () => {
@@ -424,8 +390,8 @@ describe('DriverTripsService.finalizarViaje', () => {
 });
 
 describe('DriverTripsService.finalizarViaje pide las calificaciones por push', () => {
-  it('a la modelo y al chofer, cada uno a su portal y sin Telegram', async () => {
-    const { service, notificar, enviados } = montar(
+  it('a la modelo y al chofer, cada uno a su portal', async () => {
+    const { service, notificar } = montar(
       viaje({ estado: 'en_curso', tipo: 'regreso' }),
     );
 
@@ -445,12 +411,10 @@ describe('DriverTripsService.finalizarViaje pide las calificaciones por push', (
         dedupeKey: 'driver:rate_employee:viaje-1',
       }),
     );
-    // El cliente de esta prueba no tiene Telegram: nada sale por ahi.
-    expect(enviados).toEqual([]);
   });
 
   it('en la ida le dice a la modelo que ya llego, por push', async () => {
-    const { service, notificar, enviados } = montar(
+    const { service, notificar } = montar(
       viaje({ estado: 'en_curso', tipo: 'ida' }),
     );
 
@@ -463,7 +427,6 @@ describe('DriverTripsService.finalizarViaje pide las calificaciones por push', (
         dedupeKey: 'employee:trip_finished:viaje-1',
       }),
     );
-    expect(enviados).toEqual([]);
   });
 });
 

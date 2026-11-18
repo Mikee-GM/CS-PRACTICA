@@ -7,7 +7,7 @@ import {
 } from './aviso-al-cliente-web';
 
 describe('textoParaChatWeb', () => {
-  it('quita emojis y el Markdown de Telegram', () => {
+  it('quita emojis y el Markdown', () => {
     expect(
       textoParaChatWeb(
         '*Cuenta final del servicio*\n\nMándame una *FOTO* del comprobante \u{1F618}',

@@ -30,7 +30,6 @@ describe('ServicesService rechazarOfertaManual', () => {
     viajesRepository,
     choferesRepository,
     serviciosRepository: {},
-    bot: { telegram: { editMessageText: jest.fn() } },
     realtimeEventsService: { emitToJefes: jest.fn(), emitToDriver: jest.fn() },
   });
 
@@ -46,10 +45,7 @@ describe('ServicesService rechazarOfertaManual', () => {
     id: 'viaje-1',
     estado: 'notificado',
     choferId,
-    telegramChoferMsgOfertaId: null,
-    chofer: choferId
-      ? { id: choferId, usuario: { telegramChatId: null } }
-      : null,
+    chofer: choferId ? { id: choferId, usuario: {} } : null,
   });
 
   beforeEach(() => jest.clearAllMocks());
@@ -62,7 +58,6 @@ describe('ServicesService rechazarOfertaManual', () => {
     expect(rechazado).toBe(true);
     expect(viajesRepository.update).toHaveBeenCalledWith('viaje-1', {
       choferId: null,
-      telegramChoferMsgOfertaId: null,
       ofertaExpiraEn: null,
     });
     // `save` volveria a escribir el chofer que trae la relacion cargada.

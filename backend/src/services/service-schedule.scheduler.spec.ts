@@ -1,15 +1,12 @@
 import { ServiceScheduleScheduler } from './service-schedule.scheduler';
 
 /**
- * Lo que se protege aqui es que el recordatorio de cita no dependa de Telegram.
- *
- * El ciclo entero se apagaba sin token del bot, y la modelo y el jefe solo se
- * enteraban por Telegram. Ahora el personal recibe push y el cliente web su
- * chat; Telegram solo queda para el cliente que aun lo usa.
+ * El recordatorio de cita llega por push a la modelo y al jefe, y por el chat
+ * web al cliente que tiene cuenta.
  */
 describe('ServiceScheduleScheduler.checkUpcomingScheduledServices', () => {
   const serviciosRepository = { find: jest.fn(), save: jest.fn() };
-  const bot = { telegram: { sendMessage: jest.fn() } };
+  const conversationNotifier = { notifyClient: jest.fn() };
   const aiMessageService = { generate: jest.fn() };
   const notifications = { notificar: jest.fn() };
 
@@ -26,20 +23,19 @@ describe('ServiceScheduleScheduler.checkUpcomingScheduledServices', () => {
     notificacionPreviaEnviada: false,
     fechaProgramada: new Date(Date.now() + 30 * 60_000),
     transporteAgendado: 'chofer',
-    cliente: { telegramChatId: null, usuarioId: null },
+    cliente: { usuarioId: null },
+    clienteId: 'cli-1',
     empleada: { usuarioId: 'user-emp', nombreArtistico: 'Modelo' },
     ...overrides,
   });
 
-  const preparar = (telegramEnabled: boolean) =>
+  const preparar = (conCanalWeb = false) =>
     Object.assign(scheduler, {
       logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
       serviciosRepository,
-      bot,
       aiMessageService,
       notifications,
-      conversationNotifier: undefined,
-      telegramEnabled,
+      conversationNotifier: conCanalWeb ? conversationNotifier : undefined,
     });
 
   beforeEach(() => {
@@ -49,10 +45,11 @@ describe('ServiceScheduleScheduler.checkUpcomingScheduledServices', () => {
       Promise.resolve(valor),
     );
     aiMessageService.generate.mockResolvedValue('Ya casi es la hora.');
+    conversationNotifier.notifyClient.mockResolvedValue(true);
   });
 
-  it('avisa por push a la modelo y al jefe aunque no haya bot', async () => {
-    preparar(false);
+  it('avisa por push a la modelo y al jefe aunque no haya canal web', async () => {
+    preparar();
     const servicio = cita();
     serviciosRepository.find.mockResolvedValue([servicio]);
 
@@ -65,39 +62,39 @@ describe('ServiceScheduleScheduler.checkUpcomingScheduledServices', () => {
     expect(avisoEmpleada.dedupeKey).toBe(
       'employee:appointment_reminder:srv-1:event',
     );
-    expect(bot.telegram.sendMessage).not.toHaveBeenCalled();
+    expect(conversationNotifier.notifyClient).not.toHaveBeenCalled();
   });
 
-  it('no manda nada al personal por Telegram', async () => {
+  it('al cliente con cuenta web le llega el recordatorio en su chat', async () => {
     preparar(true);
     serviciosRepository.find.mockResolvedValue([
-      cita({
-        empleada: {
-          usuarioId: 'user-emp',
-          usuario: { telegramChatId: '555' },
-        },
+      cita({ cliente: { usuarioId: 'usr-cliente' } }),
+    ]);
+
+    await scheduler.checkUpcomingScheduledServices();
+
+    expect(conversationNotifier.notifyClient).toHaveBeenCalledTimes(1);
+    expect(conversationNotifier.notifyClient).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clienteId: 'cli-1',
+        serviceId: 'srv-1',
+        employeeId: 'emp-1',
+        texto: 'Ya casi es la hora.',
       }),
-    ]);
-
-    await scheduler.checkUpcomingScheduledServices();
-
-    expect(bot.telegram.sendMessage).not.toHaveBeenCalled();
+    );
   });
 
-  it('al cliente de Telegram le sigue llegando si el bot esta activo', async () => {
+  it('al cliente sin cuenta web no le sale nada por el chat', async () => {
     preparar(true);
-    serviciosRepository.find.mockResolvedValue([
-      cita({ cliente: { telegramChatId: '777', usuarioId: null } }),
-    ]);
+    serviciosRepository.find.mockResolvedValue([cita()]);
 
     await scheduler.checkUpcomingScheduledServices();
 
-    expect(bot.telegram.sendMessage).toHaveBeenCalledTimes(1);
-    expect(bot.telegram.sendMessage.mock.calls[0][0]).toBe('777');
+    expect(conversationNotifier.notifyClient).not.toHaveBeenCalled();
   });
 
   it('no recuerda una cita que todavia esta lejos', async () => {
-    preparar(false);
+    preparar();
     serviciosRepository.find.mockResolvedValue([
       cita({ fechaProgramada: new Date(Date.now() + 3 * 3_600_000) }),
     ]);

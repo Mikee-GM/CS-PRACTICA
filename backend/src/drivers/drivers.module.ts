@@ -11,7 +11,6 @@ import { Servicios } from '../services/entities/service.entity';
 import { DisciplineModule } from '../discipline/discipline.module';
 import { AuthModule } from '../auth/auth.module';
 import { DriverTripsService } from './driver-trips.service';
-import { TelegramModule } from '../telegram/telegram.module';
 import { ServicesModule } from '../services/services.module';
 import { TransportOperationsModule } from '../transport-operations/transport-operations.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -24,10 +23,8 @@ import { ConversationNotifierModule } from '../conversations/conversation-notifi
     DisciplineModule,
     TypeOrmModule.forFeature([Choferes, Usuarios, Viajes, Servicios]),
     AuthModule,
-    // Ambos con forwardRef: el avance de un viaje avisa por Telegram y arranca
-    // el margen de espera del servicio, y esos dos modulos ya se referencian
-    // entre si.
-    forwardRef(() => TelegramModule),
+    // Con forwardRef: el avance de un viaje arranca el margen de espera del
+    // servicio, y los dos modulos ya se referencian entre si.
     forwardRef(() => ServicesModule),
     TransportOperationsModule,
     NotificationsModule,

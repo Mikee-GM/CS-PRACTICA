@@ -4,9 +4,7 @@ import { operationStateFromLegacy } from './operations/service-operation-state';
 /**
  * Cierre de un servicio por la empleada.
  *
- * Esta logica vivia dentro del handler de Telegram y no tenia pruebas: era el
- * unico camino y se validaba a mano. Ahora la comparten el chat y el portal, y
- * lo que no puede fallar es el dinero -- el redondeo de las horas abiertas -- y
+ * Lo que no puede fallar es el dinero -- el redondeo de las horas abiertas -- y
  * el estado en el que queda la operacion: quien cierra la liquidacion, cuando
  * se libera la modelo y cuando se pide el regreso.
  */
@@ -17,9 +15,7 @@ describe('ServicesService.finishByEmployee', () => {
   let serviciosRepository: any;
   let empleadasRepository: any;
   let realtime: any;
-  let bot: any;
-  let telegramSessionRepository: any;
-  let sesionesEnEspera: any[];
+  let conversationNotifier: any;
   let extrasCatalogoRepository: any;
   let extrasServicioRepository: any;
   let service: ServicesService;
@@ -51,7 +47,8 @@ describe('ServicesService.finishByEmployee', () => {
     totalBase: 5000,
     horaInicioServicio: new Date(Date.now() - 2 * 3_600_000),
     empleada: { usuarioId: USUARIO, nombreArtistico: 'Modelo' },
-    cliente: { nombreTelegram: 'Cliente', telegramChatId: '999' },
+    clienteId: 'cli-1',
+    cliente: { nombre: 'Cliente', usuarioId: 'usr-cliente' },
     ...overrides,
   });
 
@@ -71,22 +68,7 @@ describe('ServicesService.finishByEmployee', () => {
       findOne: jest.fn().mockResolvedValue({ nombreArtistico: 'Modelo' }),
     };
     realtime = { emitToJefes: jest.fn(), emitToBoss: jest.fn() };
-    bot = { telegram: { sendMessage: jest.fn().mockResolvedValue(undefined) } };
-    /*
-     * Las sesiones en espera se filtran en SQL, no en memoria, asi que el mock
-     * imita el query builder. Traer la tabla entera cargaba megabytes de
-     * historial JSONB en cada cierre de servicio.
-     */
-    sesionesEnEspera = [];
-    telegramSessionRepository = {
-      createQueryBuilder: jest.fn(() => ({
-        where: jest.fn().mockReturnThis(),
-        andWhere: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockReturnThis(),
-        getMany: jest.fn().mockResolvedValue(sesionesEnEspera),
-      })),
-      save: jest.fn(),
-    };
+    conversationNotifier = { notifyClient: jest.fn().mockResolvedValue(true) };
     extrasCatalogoRepository = { find: jest.fn(), findOne: jest.fn() };
     extrasServicioRepository = {
       create: jest.fn((v) => v),
@@ -112,11 +94,9 @@ describe('ServicesService.finishByEmployee', () => {
       viajesRepository: { find: jest.fn().mockResolvedValue([]) },
       choferesRepository: {},
       usuariosRepository: {},
-      conversationsRepository: { save: jest.fn(), create: jest.fn((v) => v) },
       bankAccountsRepository: {},
       paymentReceiptValidationsRepository: {},
       realtimeEventsService: realtime,
-      bot,
       aiMessageService: {},
       loyaltyService: {},
       liquidationSync: { syncOfficeRecord: jest.fn().mockResolvedValue(null) },
@@ -124,8 +104,7 @@ describe('ServicesService.finishByEmployee', () => {
       disciplineService: {},
       uploadService: {},
       empleadasRepository,
-      clientesRepository: { findOne: jest.fn().mockResolvedValue(null) },
-      telegramSessionRepository,
+      conversationNotifier,
       extrasCatalogoRepository,
       extrasServicioRepository,
       serviceParticipantsRepository: {
@@ -160,9 +139,6 @@ describe('ServicesService.finishByEmployee', () => {
   it('cierra el servicio, libera a la modelo y pide el regreso', async () => {
     const servicio = enCurso();
     serviciosRepository.findOne.mockResolvedValue(servicio);
-    const sendPostServiceSurvey = jest
-      .spyOn(service as any, 'sendPostServiceSurvey')
-      .mockResolvedValue(undefined);
 
     const resultado = await service.finishByEmployee('srv-1', USUARIO);
 
@@ -177,8 +153,6 @@ describe('ServicesService.finishByEmployee', () => {
     );
     expect(resultado.horasFacturadas).toBeNull();
     expect(resultado.duracionFormatted).toContain('hora');
-    expect(sendPostServiceSurvey).toHaveBeenCalledTimes(1);
-    expect(sendPostServiceSurvey).toHaveBeenCalledWith('srv-1');
   });
 
   it('deja el corte abierto a la espera del transporte de regreso', async () => {
@@ -249,10 +223,10 @@ describe('ServicesService.finishByEmployee', () => {
 
     await service.finishByEmployee('srv-1', USUARIO);
 
-    const [chatId, mensaje] = bot.telegram.sendMessage.mock.calls[0];
-    expect(chatId).toBe('999');
-    expect(mensaje).toContain('Cuenta final del servicio');
-    expect(mensaje).toContain('Banco de prueba');
+    const [aviso] = conversationNotifier.notifyClient.mock.calls[0];
+    expect(aviso.clienteId).toBe('cli-1');
+    expect(aviso.texto).toContain('Cuenta final del servicio');
+    expect(aviso.texto).toContain('Banco de prueba');
     expect(serviciosRepository.update).toHaveBeenCalledWith('srv-1', {
       cobroFinalPendiente: true,
     });
@@ -263,25 +237,7 @@ describe('ServicesService.finishByEmployee', () => {
 
     await service.finishByEmployee('srv-1', USUARIO);
 
-    expect(bot.telegram.sendMessage).not.toHaveBeenCalled();
-  });
-
-  it('avisa a los clientes que se quedaron esperando a la modelo', async () => {
-    serviciosRepository.findOne.mockResolvedValue(enCurso());
-    sesionesEnEspera.push({
-      key: '777:abc',
-      data: { esperandoEmpleadaId: EMPLEADA },
-    });
-
-    await service.finishByEmployee('srv-1', USUARIO);
-
-    const [chatId] = bot.telegram.sendMessage.mock.calls[0];
-    expect(chatId).toBe('777');
-    expect(telegramSessionRepository.save).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ esperandoEmpleadaId: undefined }),
-      }),
-    );
+    expect(conversationNotifier.notifyClient).not.toHaveBeenCalled();
   });
 
   it('rechaza a quien no es la empleada asignada', async () => {
@@ -317,7 +273,7 @@ describe('ServicesService.finishByEmployee', () => {
 
   it('no tumba el cierre si falla el aviso del regreso', async () => {
     serviciosRepository.findOne.mockResolvedValue(enCurso());
-    pedirRegreso.mockRejectedValue(new Error('Telegram caido'));
+    pedirRegreso.mockRejectedValue(new Error('aviso caido'));
 
     const resultado = await service.finishByEmployee('srv-1', USUARIO);
 

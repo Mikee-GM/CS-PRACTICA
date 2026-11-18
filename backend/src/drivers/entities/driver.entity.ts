@@ -63,19 +63,6 @@ export class Choferes {
   disponible: boolean;
 
   /**
-   * Heredado de la etapa de Telegram: con todos los choferes en false el viaje
-   * pasaba solo a Uber. Desde la Fase 5 el reparto ya no lo lee, porque todos
-   * reciben la oferta en la plataforma. La columna sigue hasta la limpieza de
-   * la Fase 6.
-   */
-  @Column('boolean', { name: 'modo_bot', default: () => 'true' })
-  @ApiProperty({
-    description: 'Sin efecto desde la Fase 5; se conserva hasta la Fase 6.',
-    example: true,
-  })
-  modoBot: boolean;
-
-  /**
    * Ofertas rechazadas seguidas. Aceptar una vuelve a poner el contador en
    * cero: lo que se vigila es la racha actual, no el total historico.
    */

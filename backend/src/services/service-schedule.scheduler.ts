@@ -5,15 +5,12 @@ import {
   OnModuleInit,
   Optional,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import {
   ADVISORY_LOCKS,
   withAdvisoryLock,
 } from '../common/scheduling/advisory-lock';
-import { InjectBot } from 'nestjs-telegraf';
-import { Telegraf } from 'telegraf';
 import { Servicios } from './entities/service.entity';
 import { AiMessageService } from '../ai/ai-message.service';
 import { describeError } from '../common/errors/error-message';
@@ -32,14 +29,10 @@ export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
   private timer: ReturnType<typeof setInterval> | null = null;
   private initialTimer: ReturnType<typeof setTimeout> | null = null;
   private running = false;
-  private telegramEnabled = true;
 
   constructor(
     @InjectRepository(Servicios)
     private readonly serviciosRepository: Repository<Servicios>,
-    @InjectBot()
-    private readonly bot: Telegraf<any>,
-    private readonly configService: ConfigService,
     private readonly aiMessageService: AiMessageService,
     private readonly dataSource: DataSource,
     private readonly servicesService: ServicesService,
@@ -50,20 +43,6 @@ export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
-    const token = this.configService.get<string>('TELEGRAM_BOT_TOKEN', '');
-    if (
-      !token ||
-      token.includes('dummy') ||
-      token.includes('fake') ||
-      token.startsWith('123456789')
-    ) {
-      // Solo se apaga el envio al cliente de Telegram: el recordatorio al
-      // personal sale por push y al cliente web por su chat.
-      this.logger.log(
-        'Bot de Telegram deshabilitado en local; el recordatorio de citas no saldra por Telegram.',
-      );
-      this.telegramEnabled = false;
-    }
     // Check every 60 seconds
     this.timer = setInterval(() => void this.runCycle(), 60 * 1000);
     if (typeof this.timer?.unref === 'function') this.timer.unref();
@@ -165,11 +144,9 @@ export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
         );
 
         /*
-         * 1 y 2. Empleada y jefe, por push. Antes iban por Telegram: un mensaje
-         * directo a la modelo y otro al grupo del jefe con botones para elegir
-         * transporte. El grupo con temas no se porta (Fase 5); el jefe elige el
-         * transporte desde su panel. El texto no lleva nombres ni hora: el aviso
-         * se ve en la pantalla de bloqueo y el detalle vive tras el toque.
+         * 1 y 2. Empleada y jefe, por push; el jefe elige el transporte desde
+         * su panel. El texto no lleva nombres ni hora: el aviso se ve en la
+         * pantalla de bloqueo y el detalle vive tras el toque.
          */
         await this.avisar(service.empleada?.usuarioId, {
           titulo: 'Tu cita es en 45 minutos',
@@ -204,22 +181,6 @@ export class ServiceScheduleScheduler implements OnModuleInit, OnModuleDestroy {
             respaldoRecordatorio,
           ),
         );
-        // El cliente de Telegram sigue hasta la Fase 6; la Fase 5 es del personal.
-        if (this.telegramEnabled && service.cliente?.telegramChatId) {
-          try {
-            const clientMsg = await redactarRecordatorio();
-            await this.bot.telegram.sendMessage(
-              service.cliente.telegramChatId,
-              clientMsg,
-              { parse_mode: 'Markdown' },
-            );
-          } catch (err) {
-            this.logger.error(
-              `Error notificando recordatorio al cliente de servicio ${service.id}:`,
-              err,
-            );
-          }
-        }
         await avisarAlChatWeb(
           this.conversationNotifier,
           this.logger,

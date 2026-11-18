@@ -5,20 +5,13 @@ import { Viajes } from '../trips/entities/trip.entity';
  * La llegada con chofer propio y el cierre del regreso llegan tambien al chat
  * web del cliente.
  *
- * Solo salian si el cliente tenia `telegramChatId`, asi que quien reservo por
- * la web no se enteraba de que ella habia llegado ni de que el servicio habia
- * terminado. Telegram sigue igual; la web se intenta si la ficha tiene
- * `usuarioId`.
+ * El aviso se intenta solo si la ficha del cliente tiene `usuarioId`; sin
+ * cuenta web no sale nada y el viaje se cierra igual.
  */
 const CHOFER = 'chofer-1';
 
-const clienteWeb = { id: 'cli-web', usuarioId: 'usr-1', telegramChatId: null };
-const clienteTelegram = {
-  id: 'cli-tg',
-  usuarioId: null,
-  telegramChatId: '555',
-};
-const clienteAmbos = { id: 'cli-2', usuarioId: 'usr-2', telegramChatId: '556' };
+const clienteWeb = { id: 'cli-web', usuarioId: 'usr-1' };
+const clienteSinCuenta = { id: 'cli-sin', usuarioId: null };
 
 function viaje(
   cliente: Record<string, unknown>,
@@ -37,11 +30,10 @@ function viaje(
       empleadaId: 'empleada-1',
       jefeId: 'jefe-1',
       cobroFinalPendiente: false,
-      telegramThreadId: null,
       jefe: null,
       empleada: {
         nombreArtistico: 'Valentina',
-        usuario: { telegramChatId: null },
+        usuario: {},
         jefe: null,
       },
     },
@@ -49,7 +41,6 @@ function viaje(
 }
 
 function montar(trip: Viajes) {
-  const sendMessage = jest.fn(() => Promise.resolve({ message_id: 1 }));
   const notifyClient = jest.fn(() => Promise.resolve(true));
   const generate = jest.fn(() => Promise.resolve('Ya llegué \u{1F618}'));
   const dependencias: Record<string, unknown> = {
@@ -73,7 +64,6 @@ function montar(trip: Viajes) {
     settlements: { syncDriverSettlement: jest.fn(() => Promise.resolve()) },
     notifications: { notificar: jest.fn(() => Promise.resolve(0)) },
     aiMessages: { generate },
-    telegram: { sendMessage, deleteForumTopic: jest.fn() },
     servicesService: {
       sendFinalReceiptAndAward: jest.fn(() => Promise.resolve()),
       markEmployeeTripProgress: jest.fn(() => Promise.resolve()),
@@ -84,19 +74,19 @@ function montar(trip: Viajes) {
     DriverTripsService.prototype,
   ) as DriverTripsService;
   Object.assign(service, dependencias);
-  return { service, sendMessage, notifyClient, generate };
+  return { service, notifyClient, generate };
 }
 
 describe('DriverTripsService: avisos al chat web del cliente', () => {
   describe('llegada con chofer propio', () => {
     it('el cliente web recibe la llegada sin emojis', async () => {
-      const { service, sendMessage, notifyClient } = montar(
+      const { service, notifyClient, generate } = montar(
         viaje(clienteWeb, 'ida'),
       );
 
       await service.finalizarViaje('viaje-1', CHOFER);
 
-      expect(sendMessage).not.toHaveBeenCalled();
+      expect(generate).toHaveBeenCalledTimes(1);
       expect(notifyClient).toHaveBeenCalledWith({
         clienteId: 'cli-web',
         serviceId: 'servicio-1',
@@ -105,27 +95,13 @@ describe('DriverTripsService: avisos al chat web del cliente', () => {
       });
     });
 
-    it('el cliente de Telegram la sigue recibiendo igual y no pasa por la web', async () => {
-      const { service, sendMessage, notifyClient } = montar(
-        viaje(clienteTelegram, 'ida'),
-      );
+    it('sin cuenta web no se avisa a nadie y el viaje termina igual', async () => {
+      const { service, notifyClient } = montar(viaje(clienteSinCuenta, 'ida'));
 
-      await service.finalizarViaje('viaje-1', CHOFER);
-
-      expect(sendMessage).toHaveBeenCalledWith('555', 'Ya llegué \u{1F618}');
+      await expect(
+        service.finalizarViaje('viaje-1', CHOFER),
+      ).resolves.toMatchObject({ estado: 'finalizado' });
       expect(notifyClient).not.toHaveBeenCalled();
-    });
-
-    it('con los dos canales redacta una vez y avisa en cada uno', async () => {
-      const { service, sendMessage, notifyClient, generate } = montar(
-        viaje(clienteAmbos, 'ida'),
-      );
-
-      await service.finalizarViaje('viaje-1', CHOFER);
-
-      expect(generate).toHaveBeenCalledTimes(1);
-      expect(sendMessage).toHaveBeenCalledWith('556', 'Ya llegué \u{1F618}');
-      expect(notifyClient).toHaveBeenCalledTimes(1);
     });
 
     it('un fallo del chat web no deshace el fin del viaje', async () => {
@@ -151,20 +127,6 @@ describe('DriverTripsService: avisos al chat web del cliente', () => {
           texto: 'El servicio quedó completado: Valentina llegó a su destino.',
         }),
       );
-    });
-
-    it('el cliente de Telegram recibe el mismo texto de siempre', async () => {
-      const { service, sendMessage, notifyClient } = montar(
-        viaje(clienteTelegram, 'regreso'),
-      );
-
-      await service.finalizarViaje('viaje-1', CHOFER);
-
-      expect(sendMessage).toHaveBeenCalledWith(
-        '555',
-        'El servicio quedó completado: la empleada llegó a su destino.',
-      );
-      expect(notifyClient).not.toHaveBeenCalled();
     });
   });
 });

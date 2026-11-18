@@ -33,7 +33,7 @@ describe('ServicesService.aceptar (concurrencia)', () => {
     presetLocationId: null,
     customerTransportCharge: 0,
     empleada: { id: 'emp-1', nombreArtistico: 'Ana', usuario: null },
-    cliente: { nombreTelegram: 'Cliente' },
+    cliente: { nombre: 'Cliente' },
   });
 
   beforeEach(() => {
@@ -98,7 +98,6 @@ describe('ServicesService.aceptar (concurrencia)', () => {
       // de despachar. Si volviera a consultarlos, estas pruebas reventarian.
       choferesRepository: {},
       usuariosRepository: {},
-      conversationsRepository: {},
       bankAccountsRepository: {},
       paymentReceiptValidationsRepository: {},
       realtimeEventsService: {
@@ -106,7 +105,6 @@ describe('ServicesService.aceptar (concurrencia)', () => {
         emitToEmployee: jest.fn(),
         emitToJefes: jest.fn(),
       },
-      bot: { telegram: { sendMessage: jest.fn() } },
       aiMessageService: { generate: jest.fn().mockResolvedValue('mensaje') },
       loyaltyService: {},
       liquidationSync: {},
@@ -116,8 +114,6 @@ describe('ServicesService.aceptar (concurrencia)', () => {
       },
       uploadService: {},
       empleadasRepository,
-      clientesRepository: {},
-      telegramSessionRepository: {},
       extrasCatalogoRepository: {},
       extrasServicioRepository: {},
       serviceParticipantsRepository: {},
@@ -271,11 +267,9 @@ describe('ServicesService.extendByEmployee', () => {
       viajesRepository: {},
       choferesRepository: {},
       usuariosRepository: {},
-      conversationsRepository: {},
       bankAccountsRepository: {},
       paymentReceiptValidationsRepository: {},
       realtimeEventsService: { emitToJefes: jest.fn(), emitToBoss: jest.fn() },
-      bot: { telegram: { sendMessage: jest.fn() } },
       aiMessageService: {},
       loyaltyService: {},
       liquidationSync: {},
@@ -283,8 +277,6 @@ describe('ServicesService.extendByEmployee', () => {
       disciplineService: {},
       uploadService: {},
       empleadasRepository: {},
-      clientesRepository: {},
-      telegramSessionRepository: {},
       extrasCatalogoRepository: {},
       extrasServicioRepository: {},
       serviceParticipantsRepository: {},

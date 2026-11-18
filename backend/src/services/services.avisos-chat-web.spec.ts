@@ -4,14 +4,10 @@ import { ServicesService } from './services.service';
 /**
  * Los avisos del ciclo de vida del servicio llegan tambien al chat web.
  *
- * Solo salian si el cliente tenia `telegramChatId`, asi que quien reservo
- * desde la web se quedaba sin saber si su servicio se acepto, se rechazo o
- * cambio de hora. El camino de Telegram no cambia: estas pruebas comprueban
- * las dos cosas, que el cliente web recibe el aviso y que el de Telegram lo
- * sigue recibiendo igual.
+ * Quien reservo desde la web tiene que saber si su servicio se acepto, se
+ * rechazo o cambio de hora.
  */
 describe('ServicesService: avisos al chat web del cliente', () => {
-  const bot = { telegram: { sendMessage: jest.fn() } };
   const conversationNotifier = { notifyClient: jest.fn() };
   const aiMessageService = {
     generate: jest.fn(),
@@ -19,10 +15,6 @@ describe('ServicesService: avisos al chat web del cliente', () => {
   };
   const notificationsService = { notificar: jest.fn() };
   const realtime = { emitToBoss: jest.fn() };
-  const conversationsRepository = {
-    create: jest.fn((datos: unknown) => datos),
-    save: jest.fn(),
-  };
   const usuariosRepository = { findOne: jest.fn() };
   const serviciosRepository = {
     update: jest.fn(),
@@ -35,35 +27,23 @@ describe('ServicesService: avisos al chat web del cliente', () => {
   const service = Object.create(ServicesService.prototype) as ServicesService;
   Object.assign(service, {
     logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
-    bot,
     conversationNotifier,
     aiMessageService,
     notificationsService,
     realtimeEventsService: realtime,
-    conversationsRepository,
     usuariosRepository,
     serviciosRepository,
     choferesRepository: { findOne: jest.fn() },
     configService: { get: jest.fn() },
   });
 
-  const clienteWeb = {
-    id: 'cli-web',
-    usuarioId: 'usr-cliente',
-    telegramChatId: null,
-  };
-  const clienteTelegram = {
-    id: 'cli-tg',
-    usuarioId: null,
-    telegramChatId: '555',
-  };
+  const clienteWeb = { id: 'cli-web', usuarioId: 'usr-cliente' };
 
   function servicio(cliente: Record<string, unknown>, extra = {}): any {
     return {
       id: 'svc-1',
       clienteId: cliente.id,
       cliente,
-      clienteTelegramId: cliente.telegramChatId,
       empleadaId: 'emp-1',
       empleada: { nombreArtistico: 'Valentina', usuarioId: null },
       jefeId: 'jefe-1',
@@ -74,7 +54,6 @@ describe('ServicesService: avisos al chat web del cliente', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    bot.telegram.sendMessage.mockResolvedValue({ message_id: 1 });
     conversationNotifier.notifyClient.mockResolvedValue(true);
     aiMessageService.generate.mockResolvedValue('Qué pena contigo \u{1F614}');
     aiMessageService.generateAgencyMessage.mockResolvedValue(
@@ -84,14 +63,13 @@ describe('ServicesService: avisos al chat web del cliente', () => {
   });
 
   describe('reprogramacion', () => {
-    it('un cliente sin Telegram recibe el cambio de hora en el chat web', async () => {
+    it('el cliente web recibe el cambio de hora en el chat web', async () => {
       await (service as any).avisarDeLaReprogramacion(
         servicio(clienteWeb),
         null,
         true,
       );
 
-      expect(bot.telegram.sendMessage).not.toHaveBeenCalled();
       expect(conversationNotifier.notifyClient).toHaveBeenCalledWith(
         expect.objectContaining({
           clienteId: 'cli-web',
@@ -100,23 +78,6 @@ describe('ServicesService: avisos al chat web del cliente', () => {
           texto: expect.stringContaining('nuestra cita con Valentina'),
         }),
       );
-    });
-
-    it('un cliente de Telegram lo sigue recibiendo igual y no pasa por la web', async () => {
-      await (service as any).avisarDeLaReprogramacion(
-        servicio(clienteTelegram),
-        null,
-        true,
-      );
-
-      expect(bot.telegram.sendMessage).toHaveBeenCalledTimes(1);
-      expect(bot.telegram.sendMessage).toHaveBeenCalledWith(
-        '555',
-        expect.stringContaining(
-          'Amor, te confirmo el cambio de horario: nuestra cita con Valentina',
-        ),
-      );
-      expect(conversationNotifier.notifyClient).not.toHaveBeenCalled();
     });
 
     it('si el jefe pide no avisar, tampoco avisa por la web', async () => {
@@ -138,25 +99,9 @@ describe('ServicesService: avisos al chat web del cliente', () => {
         [],
       );
 
-      expect(bot.telegram.sendMessage).not.toHaveBeenCalled();
       expect(conversationNotifier.notifyClient).toHaveBeenCalledWith(
         expect.objectContaining({ texto: 'Qué pena contigo' }),
       );
-    });
-
-    it('con los dos canales redacta una sola vez y avisa en cada uno', async () => {
-      await (service as any).notifyServiceCancelled(
-        servicio({ ...clienteTelegram, usuarioId: 'usr-cliente' }),
-        'pendiente',
-        [],
-      );
-
-      expect(aiMessageService.generate).toHaveBeenCalledTimes(1);
-      expect(bot.telegram.sendMessage).toHaveBeenCalledWith(
-        '555',
-        'Qué pena contigo \u{1F614}',
-      );
-      expect(conversationNotifier.notifyClient).toHaveBeenCalledTimes(1);
     });
 
     it('un fallo del chat web no rompe la cancelacion', async () => {
@@ -195,29 +140,12 @@ describe('ServicesService: avisos al chat web del cliente', () => {
 
       await service.rechazar('svc-1', 'jefe-1');
 
-      expect(bot.telegram.sendMessage).not.toHaveBeenCalled();
       expect(conversationNotifier.notifyClient).toHaveBeenCalledWith(
         expect.objectContaining({
           clienteId: 'cli-web',
           texto: 'Qué pena contigo',
         }),
       );
-    });
-
-    it('el cliente de Telegram lo sigue recibiendo por Telegram', async () => {
-      serviciosRepository.findOne
-        .mockResolvedValueOnce(
-          servicio(clienteTelegram, { estado: 'pendiente' }),
-        )
-        .mockResolvedValueOnce(null);
-
-      await service.rechazar('svc-1', 'jefe-1');
-
-      expect(bot.telegram.sendMessage).toHaveBeenCalledWith(
-        '555',
-        'Qué pena contigo \u{1F614}',
-      );
-      expect(conversationNotifier.notifyClient).not.toHaveBeenCalled();
     });
   });
 
@@ -236,26 +164,11 @@ describe('ServicesService: avisos al chat web del cliente', () => {
 
       await service.recalculateScheduledSuccessor('svc-0');
 
-      expect(bot.telegram.sendMessage).not.toHaveBeenCalled();
-      expect(conversationsRepository.save).not.toHaveBeenCalled();
       expect(conversationNotifier.notifyClient).toHaveBeenCalledWith(
         expect.objectContaining({
           texto: 'La nueva hora de llegada es 9:30.',
         }),
       );
-    });
-
-    it('el cliente de Telegram lo recibe y queda en su historial como antes', async () => {
-      encadenado(clienteTelegram);
-
-      await service.recalculateScheduledSuccessor('svc-0');
-
-      expect(bot.telegram.sendMessage).toHaveBeenCalledWith(
-        '555',
-        'La nueva hora de llegada es 9:30.',
-      );
-      expect(conversationsRepository.save).toHaveBeenCalledTimes(1);
-      expect(conversationNotifier.notifyClient).not.toHaveBeenCalled();
     });
   });
 
@@ -271,7 +184,6 @@ describe('ServicesService: avisos al chat web del cliente', () => {
     const pedir = (cliente: Record<string, unknown>, extra = {}) =>
       (service as any).requestOpenEndedFinalPayment(
         servicio(cliente, { totalFinal: 1500, ...extra }),
-        (cliente.telegramChatId as string | null) ?? null,
         3,
         '2 h 40 min',
       );
@@ -279,7 +191,6 @@ describe('ServicesService: avisos al chat web del cliente', () => {
     it('el cliente web recibe el total y las cuentas, sin formato ni emojis', async () => {
       await pedir(clienteWeb, { metodoPago: 'transferencia' });
 
-      expect(bot.telegram.sendMessage).not.toHaveBeenCalled();
       const { texto } = conversationNotifier.notifyClient.mock.calls[0][0];
       expect(texto).toContain('Total a pagar: $1,500.00');
       expect(texto).toContain('Horas cobradas: 3 horas');
@@ -289,7 +200,7 @@ describe('ServicesService: avisos al chat web del cliente', () => {
       expect(palabrasVetadasEn(texto)).toEqual([]);
     });
 
-    it('deja marcado el cobro pendiente aunque no haya Telegram', async () => {
+    it('deja marcado el cobro pendiente', async () => {
       await pedir(clienteWeb, { metodoPago: 'transferencia' });
 
       expect(serviciosRepository.update).toHaveBeenCalledWith('svc-1', {
@@ -306,28 +217,6 @@ describe('ServicesService: avisos al chat web del cliente', () => {
       expect(serviciosRepository.update).not.toHaveBeenCalled();
     });
 
-    it('un cliente de Telegram sin cuenta web lo recibe igual y no pasa por la web', async () => {
-      await pedir(clienteTelegram, { metodoPago: 'transferencia' });
-
-      expect(bot.telegram.sendMessage).toHaveBeenCalledWith(
-        '555',
-        expect.stringContaining('*Total a pagar:*'),
-        { parse_mode: 'Markdown' },
-      );
-      expect(conversationNotifier.notifyClient).not.toHaveBeenCalled();
-    });
-
-    it('si Telegram falla, el chat web igual recibe la cuenta', async () => {
-      bot.telegram.sendMessage.mockRejectedValueOnce(new Error('caido'));
-
-      await pedir(
-        { ...clienteWeb, telegramChatId: '777' },
-        { metodoPago: 'transferencia' },
-      );
-
-      expect(conversationNotifier.notifyClient).toHaveBeenCalledTimes(1);
-    });
-
     it('si una cuenta trae una palabra vetada, la web cae al texto sin cuentas', async () => {
       (service as any).bankTransferDetails.mockResolvedValue(
         'Titular: Agencia Uno CLABE 0123',
@@ -341,9 +230,9 @@ describe('ServicesService: avisos al chat web del cliente', () => {
       expect(palabrasVetadasEn(texto)).toEqual([]);
     });
 
-    it('sin Telegram ni cuenta web no hace nada', async () => {
+    it('sin cuenta web no hace nada', async () => {
       await pedir(
-        { id: 'cli-x', usuarioId: null, telegramChatId: null },
+        { id: 'cli-x', usuarioId: null },
         { metodoPago: 'transferencia' },
       );
 

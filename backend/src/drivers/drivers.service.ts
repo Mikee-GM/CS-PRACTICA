@@ -42,7 +42,7 @@ export interface DriverPortalTripItem {
  * De donde a donde va un viaje.
  *
  * El portal solo decia la zona --"montecarlo"-- y el chofer tenia que buscar el
- * mensaje del bot para encontrar el enlace al mapa, justo cuando va
+ * enlace al mapa, justo cuando va
  * conduciendo. Las coordenadas ya estaban en el servicio; lo unico que faltaba
  * era traerlas hasta aqui.
  *
@@ -143,7 +143,6 @@ export class DriversService {
     const {
       email,
       password,
-      telegramChatId,
       nombre,
       telefono,
       disponible,
@@ -176,7 +175,6 @@ export class DriversService {
         email,
         passwordHash,
         rol: 'chofer',
-        telegramChatId: telegramChatId || null,
         // La contraseña la tecleo el admin: es temporal y se cambia al entrar.
         debeCambiarPassword: true,
       });
@@ -317,13 +315,12 @@ export class DriversService {
   /**
    * Un chofer vive repartido en dos tablas, y la edicion no lo sabia.
    *
-   * `email`, `password` y `telegramChatId` son de `usuarios`; el nombre, el
+   * `email` y `password` son de `usuarios`; el nombre, el
    * telefono, la disponibilidad, la ubicacion y el vehiculo son de `choferes`.
    * El DTO los trae todos juntos --es un `PartialType` del de creacion, que si
    * escribe en las dos-- y aqui se metia el objeto entero en
    * `choferesRepository.update`. Cambiar la contraseña reventaba con un 500,
-   * porque `password` no es una columna de `choferes`; el correo y el chat de
-   * Telegram, lo mismo.
+   * porque `password` no es una columna de `choferes`; el correo, lo mismo.
    *
    * La contraseña, ademas, nunca se guarda tal cual: se hashea igual que al
    * crear el chofer.
@@ -334,8 +331,7 @@ export class DriversService {
   ): Promise<Choferes> {
     const chofer = await this.findOne(id);
 
-    const { email, password, telegramChatId, ...camposDelChofer } =
-      updateDriverDto;
+    const { email, password, ...camposDelChofer } = updateDriverDto;
 
     const datosDelChofer: Record<string, unknown> = { ...camposDelChofer };
     if (updateDriverDto.ubicacionLat !== undefined) {
@@ -369,9 +365,6 @@ export class DriversService {
     if (password !== undefined && password.trim()) {
       const salt = await bcrypt.genSalt(10);
       datosDelUsuario.passwordHash = await bcrypt.hash(password, salt);
-    }
-    if (telegramChatId !== undefined) {
-      datosDelUsuario.telegramChatId = telegramChatId || null;
     }
 
     // Las dos tablas se tocan juntas: si el correo falla no puede quedarse el
@@ -418,8 +411,8 @@ export class DriversService {
       .andWhere('usuario.activo = :usuarioActivo', { usuarioActivo: true })
       // Fuera de jornada no entra al reparto, aunque siga marcado disponible.
       .andWhere('usuario.enJornada = :enJornada', { enJornada: true })
-      // Mismas condiciones que el reparto: Telegram ya no se exige y la
-      // posicion tiene que ser reciente.
+      // Mismas condiciones que el reparto: la posicion tiene que ser
+      // reciente.
       .andWhere('chofer.ubicacionLat IS NOT NULL')
       .andWhere('chofer.ubicacionLng IS NOT NULL')
       .andWhere(sqlUbicacionFresca('chofer'))
@@ -429,7 +422,6 @@ export class DriversService {
         'chofer.telefono',
         'chofer.ubicacionLat',
         'chofer.ubicacionLng',
-        'usuario.telegramChatId',
       ])
       .addSelect(
         'calcular_distancia_haversine(:lat, :lng, CAST(chofer.ubicacion_lat AS double precision), CAST(chofer.ubicacion_lng AS double precision))',
@@ -734,7 +726,7 @@ export class DriversService {
      *
      * `notificado` es el estado en el que el reparto deja un viaje mientras
      * espera respuesta. No llegaban al portal, asi que aceptar dependia por
-     * completo de ver el mensaje del bot a tiempo: si no lo veia, el viaje se
+     * completo de ver la oferta a tiempo: si no lo veia, el viaje se
      * quedaba sin chofer. Se descartan las ya vencidas, que el barrido
      * periodico retira poco despues.
      */

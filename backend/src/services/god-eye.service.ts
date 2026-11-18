@@ -201,7 +201,6 @@ export class GodEyeService {
               'tarifa', v.tarifa,
               'proveedorTransporte', v.proveedor_transporte,
               'uberScreenshotUrl', v.uber_screenshot_url,
-              'telegramUberFileId', v.telegram_uber_file_id,
               'fareConfirmedAt', v.fare_confirmed_at,
               'choferNombre', ch.nombre
             ))
@@ -244,10 +243,8 @@ export class GodEyeService {
           e.jefe_secundario_id AS "jefeSecundarioId",
           e.apartment_id AS "apartmentId",
           u.email AS "jefeEmail",
-          u.telegram_chat_id AS "jefeTelegram",
           u2.email AS "jefeSecundarioEmail",
           usr.telefono AS "telefono",
-          usr.telegram_chat_id AS "telegramChatId",
           usr.activo AS "usuarioActivo",
           apt.nombre AS "apartmentNombre",
           apt.direccion AS "apartmentDireccion"
@@ -369,8 +366,6 @@ export class GodEyeService {
               s.created_at AS "createdAt",
               c.id AS "clienteId",
               c.nombre_telegram AS "clienteNombre",
-              c.telegram_chat_id::text AS "clienteTelegramChatId",
-              c.telegram_chat_id::text AS "clienteTelefono",
               j.email AS "jefeEmail",
               COALESCE(
                 (
@@ -381,7 +376,6 @@ export class GodEyeService {
                     'tarifa', v.tarifa,
                     'proveedorTransporte', v.proveedor_transporte,
                     'uberScreenshotUrl', v.uber_screenshot_url,
-                    'telegramUberFileId', v.telegram_uber_file_id,
                     'fareConfirmedAt', v.fare_confirmed_at,
                     'choferNombre', ch.nombre,
                     'choferTelefono', ch.telefono,
@@ -641,7 +635,6 @@ export class GodEyeService {
           d.ubicacion_lat AS "latitud",
           d.ubicacion_lng AS "longitud",
           d.created_at AS "createdAt",
-          u.telegram_chat_id AS "telegramChatId",
           u.activo AS "usuarioActivo"
         FROM choferes d
         LEFT JOIN usuarios u ON u.id = d.usuario_id
@@ -735,8 +728,6 @@ export class GodEyeService {
           u.email,
           u.rol,
           u.activo,
-          u.telegram_chat_id AS "telegramChatId",
-          u.grupo_telegram_id AS "grupoTelegramId",
           u.created_at AS "createdAt"
         FROM usuarios u
         WHERE u.id = $1 AND u.rol IN ('jefe', 'admin')`,
@@ -907,14 +898,15 @@ export class GodEyeService {
       ),
       this.dataSource.query(
         `SELECT
-          id,
-          emisor,
-          mensaje,
-          ia_activa AS "iaActiva",
-          enviado_at AS "enviadoAt"
-        FROM conversaciones_telegram
-        WHERE servicio_id = $1
-        ORDER BY enviado_at ASC
+          m.id,
+          m.sender AS emisor,
+          m.body AS mensaje,
+          false AS "iaActiva",
+          m.created_at AS "enviadoAt"
+        FROM messages m
+        JOIN conversations cv ON cv.id = m.conversation_id
+        WHERE cv.service_id = $1
+        ORDER BY m.created_at ASC
         LIMIT 50`,
         [serviceId],
       ),

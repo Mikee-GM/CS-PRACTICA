@@ -6,12 +6,10 @@ const JEFE = { id: 'jefe-1', rol: 'jefe' } as const;
 
 /**
  * Servicio grupal del chat web (Fase 5, decision 6): la solicitud nace de una
- * conversacion y lo que Telegram le mandaba al cliente sale por ese chat. El
- * bot no debe tocarse en ningun camino web.
+ * conversacion y todo lo que se le dice al cliente sale por ese chat.
  */
 describe('GroupServicesService en el chat web', () => {
   let service: any;
-  let bot: { telegram: { sendMessage: jest.Mock } };
   let grupoWeb: Record<string, jest.Mock>;
   let requests: Record<string, jest.Mock>;
   let realtime: { emitToBoss: jest.Mock; emitToEmployee: jest.Mock };
@@ -25,11 +23,9 @@ describe('GroupServicesService en el chat web', () => {
     conversationId: CONVERSACION,
     status: 'esperando_jefe',
     locationReference: null,
-    client: { telegramChatId: null },
   };
 
   beforeEach(() => {
-    bot = { telegram: { sendMessage: jest.fn() } };
     grupoWeb = {
       conversacionParaGrupo: jest.fn().mockResolvedValue({
         id: CONVERSACION,
@@ -60,7 +56,6 @@ describe('GroupServicesService en el chat web', () => {
 
     service = Object.create(GroupServicesService.prototype);
     Object.assign(service, {
-      bot,
       grupoWeb,
       requests,
       realtime,
@@ -80,7 +75,6 @@ describe('GroupServicesService en el chat web', () => {
           id: 'solicitud-1',
           client: {
             id: 'cliente-1',
-            nombreTelegram: null,
             usuario: { nombre: 'Carlos' },
           },
         },
@@ -165,7 +159,7 @@ describe('GroupServicesService en el chat web', () => {
     );
   });
 
-  it('el mensaje del jefe va al chat web y no a Telegram', async () => {
+  it('el mensaje del jefe va al chat web ', async () => {
     const enviado = await service.sendRequestMessage(
       'solicitud-1',
       'Hola',
@@ -179,7 +173,6 @@ describe('GroupServicesService en el chat web', () => {
       type: 'group_chat_message',
       data: enviado,
     });
-    expect(bot.telegram.sendMessage).not.toHaveBeenCalled();
   });
 
   it('pide la ubicacion por el chat web', async () => {
@@ -187,15 +180,41 @@ describe('GroupServicesService en el chat web', () => {
       service.requestClientLocation('solicitud-1', JEFE),
     ).resolves.toEqual({ sent: true });
     expect(grupoWeb.pedirUbicacion).toHaveBeenCalled();
-    expect(bot.telegram.sendMessage).not.toHaveBeenCalled();
   });
 
   it('no abre catalogo con botones para una solicitud web', async () => {
     await expect(service.openCatalog('solicitud-1', JEFE)).rejects.toThrow(
-      /el jefe elige a las modelos/,
+      /jefe elige a las modelos/,
     );
     expect(requests.save).not.toHaveBeenCalled();
-    expect(bot.telegram.sendMessage).not.toHaveBeenCalled();
+  });
+
+  describe('solicitud sin conversacion web', () => {
+    beforeEach(() => {
+      service.findOne = jest
+        .fn()
+        .mockResolvedValue({ ...solicitudWeb, conversationId: null });
+    });
+
+    it('responde 409 al leer mensajes', async () => {
+      await expect(
+        service.requestMessages('solicitud-1', JEFE),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('responde 409 al enviar un mensaje', async () => {
+      await expect(
+        service.sendRequestMessage('solicitud-1', 'Hola', JEFE),
+      ).rejects.toThrow(ConflictException);
+      expect(grupoWeb.escribirDelJefe).not.toHaveBeenCalled();
+    });
+
+    it('responde 409 al pedir la ubicacion', async () => {
+      await expect(
+        service.requestClientLocation('solicitud-1', JEFE),
+      ).rejects.toThrow(ConflictException);
+      expect(grupoWeb.pedirUbicacion).not.toHaveBeenCalled();
+    });
   });
 
   describe('useChatLocation', () => {
@@ -238,7 +257,6 @@ describe('GroupServicesService en el chat web', () => {
       id: 'servicio-1',
       metodoPago: 'transferencia',
       pendingBalance: 500,
-      cliente: { telegramChatId: null },
     };
     await service.notifyPendingTransfer(servicio, { pagoRegistrado: true });
     expect(grupoWeb.avisarSaldo).toHaveBeenCalledWith(
@@ -246,14 +264,13 @@ describe('GroupServicesService en el chat web', () => {
       servicio,
       { pagoRegistrado: true },
     );
-    expect(bot.telegram.sendMessage).not.toHaveBeenCalled();
   });
 
-  it('al iniciar avisa a cada participante por push, sin Telegram', async () => {
+  it('al iniciar avisa a cada participante por push', async () => {
     await service.avisarInicioALaParticipante('servicio-1', {
       employeeId: 'empleada-1',
       role: 'responsable',
-      employee: { usuarioId: 'usuario-1', usuario: { telegramChatId: '99' } },
+      employee: { usuarioId: 'usuario-1' },
     });
     expect(notifications.notificar).toHaveBeenCalledWith(
       'usuario-1',
@@ -262,7 +279,6 @@ describe('GroupServicesService en el chat web', () => {
         dedupeKey: 'group_service_started:servicio-1:empleada-1',
       }),
     );
-    expect(bot.telegram.sendMessage).not.toHaveBeenCalled();
   });
 
   it('un push que falla no rompe el inicio', async () => {

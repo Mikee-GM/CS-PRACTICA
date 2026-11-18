@@ -1,9 +1,8 @@
 /**
  * Cuentas de duracion de un servicio.
  *
- * Viven aparte del handler de Telegram porque el cierre de un servicio ya no
- * ocurre solo desde el chat: el portal de la modelo lo hace tambien, y las dos
- * vias tienen que redondear y describir el tiempo exactamente igual.
+ * Viven aparte del cierre para que todas las vias que finalizan un servicio
+ * redondeen y describan el tiempo exactamente igual.
  */
 
 /**

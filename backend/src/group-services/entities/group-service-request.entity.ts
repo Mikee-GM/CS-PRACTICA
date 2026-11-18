@@ -51,7 +51,7 @@ export class GroupServiceRequest {
 
   /**
    * Conversacion web de la que nacio. Con ella, mensajes, cotizacion y
-   * comprobante van por el chat web y no por Telegram.
+   * comprobante van por el chat web.
    */
   @Index('idx_group_requests_conversation', {
     where: '"conversation_id" IS NOT NULL',
@@ -117,9 +117,6 @@ export class GroupServiceRequest {
 
   @Column('boolean', { name: 'ai_active', default: false })
   aiActive: boolean;
-
-  @Column('bigint', { name: 'telegram_thread_id', nullable: true })
-  telegramThreadId: string | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamp with time zone' })
   createdAt: Date;

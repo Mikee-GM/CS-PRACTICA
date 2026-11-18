@@ -3,9 +3,7 @@ import { ServicesService } from './services.service';
 /**
  * Extras de un servicio en curso.
  *
- * La logica estaba repartida en los tres pasos del menu de Telegram, con las
- * mismas comprobaciones copiadas en cada uno y sin ninguna prueba. Lo que se
- * protege aqui es a quien se le imputa el extra y de que catalogo puede salir:
+ * Lo que se protege aqui es a quien se le imputa el extra y de que catalogo puede salir:
  * en un servicio grupal, cobrarle al cliente un extra de otra participante le
  * desviaria el dinero a la persona equivocada en el corte.
  */
@@ -77,11 +75,9 @@ describe('ServicesService extras de servicio', () => {
       viajesRepository: {},
       choferesRepository: {},
       usuariosRepository,
-      conversationsRepository: {},
       bankAccountsRepository: {},
       paymentReceiptValidationsRepository: {},
       realtimeEventsService: { emitToJefes: jest.fn(), emitToBoss: jest.fn() },
-      bot: {},
       aiMessageService: {},
       loyaltyService: {},
       liquidationSync: {},
@@ -89,8 +85,6 @@ describe('ServicesService extras de servicio', () => {
       disciplineService: {},
       uploadService: {},
       empleadasRepository: {},
-      clientesRepository: {},
-      telegramSessionRepository: {},
       extrasCatalogoRepository,
       extrasServicioRepository,
       serviceParticipantsRepository: participantsRepository,
@@ -258,8 +252,7 @@ describe('ServicesService extras de servicio', () => {
      *
      * Es lo que se cobra cuando lo acordado no esta en su catalogo. El cobro se
      * cuelga del comodin de la modelo, que no es una oferta suya y por eso no
-     * se le enseña en la lista. Resolverlo vivia dentro del manejador de
-     * Telegram, asi que desde el portal no se podia cobrar nada libre.
+     * se le enseña en la lista.
      */
     it('cuelga del comodín un precio escrito a mano', async () => {
       serviciosRepository.findOne

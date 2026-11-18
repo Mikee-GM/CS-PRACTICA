@@ -270,13 +270,6 @@ export class AdminServiceLifecycleService {
       const tripIds = tripRows.map((trip) => trip.id);
 
       await manager.query(
-        `UPDATE conversaciones_telegram
-            SET historical_service_id = COALESCE(historical_service_id, servicio_id),
-                servicio_id = NULL
-          WHERE servicio_id = $1`,
-        [id],
-      );
-      await manager.query(
         `UPDATE liquidation_records
             SET historical_service_id = COALESCE(historical_service_id, service_id),
                 service_id = NULL, excluded_from_cut = true
@@ -328,7 +321,6 @@ export class AdminServiceLifecycleService {
         dependencies,
         result: {
           deleted: true,
-          conversationsPreserved: dependencies.conversations,
           ratingsPreserved: dependencies.ratings,
         },
       });
@@ -434,7 +426,6 @@ export class AdminServiceLifecycleService {
         (SELECT COUNT(*)::int FROM viajes WHERE servicio_id = $1) AS trips,
         (SELECT COUNT(*)::int FROM extras_servicio WHERE servicio_id = $1) AS extras,
         (SELECT COUNT(*)::int FROM extensiones_servicio WHERE servicio_id = $1) AS extensions,
-        (SELECT COUNT(*)::int FROM conversaciones_telegram WHERE servicio_id = $1) AS conversations,
         (SELECT COUNT(*)::int FROM interaction_ratings WHERE service_id = $1) AS ratings,
         (SELECT COUNT(*)::int FROM liquidation_records WHERE service_id = $1) AS liquidations,
         (SELECT COUNT(*)::int FROM employee_cash_obligations WHERE service_id = $1) AS cash_obligations`,
