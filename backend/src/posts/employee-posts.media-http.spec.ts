@@ -7,6 +7,7 @@ import {
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { HttpExceptionFilter } from '../common/filters/http-exception.filter';
 import { EmployeesService } from '../employees/employees.service';
 import { EmployeePostsController } from './employee-posts.controller';
 import { MAX_VIDEO_BYTES } from './post-estados';
@@ -51,6 +52,8 @@ describe('POST /employee-portal/posts/:id/media (HTTP)', () => {
       })
       .compile();
     app = modulo.createNestApplication();
+    // Igual que main.ts: los errores de Multer los traduce este filtro.
+    app.useGlobalFilters(new HttpExceptionFilter());
     app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,

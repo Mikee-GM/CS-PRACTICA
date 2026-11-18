@@ -9,6 +9,17 @@ import {
 import { Request, Response } from 'express';
 import { QueryFailedError } from 'typeorm';
 
+/** Multer no exporta su clase de forma estable: se reconoce por nombre y code. */
+function esErrorDeMulter(
+  exception: unknown,
+): exception is Error & { code: string } {
+  return (
+    exception instanceof Error &&
+    exception.name === 'MulterError' &&
+    typeof (exception as { code?: unknown }).code === 'string'
+  );
+}
+
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(HttpExceptionFilter.name);
@@ -40,6 +51,19 @@ export class HttpExceptionFilter implements ExceptionFilter {
         message = exceptionResponse;
         error = exception.name;
       }
+    } else if (esErrorDeMulter(exception)) {
+      // Nest traduce los errores de Multer comparando su mensaje con textos
+      // fijos, y Multer 2 los redacta distinto ("Unexpected file field"), asi
+      // que llegaban aqui como 500. Se resuelve por `code`, que es estable.
+      status =
+        exception.code === 'LIMIT_FILE_SIZE'
+          ? HttpStatus.PAYLOAD_TOO_LARGE
+          : HttpStatus.BAD_REQUEST;
+      error = status === 413 ? 'Payload Too Large' : 'Bad Request';
+      message =
+        status === 413
+          ? 'El archivo supera el tamano maximo permitido.'
+          : 'La subida de archivos no es valida: revisa los campos y la cantidad de archivos.';
     } else if (exception instanceof QueryFailedError) {
       // Safely catch database constraint violations without leaking raw query details to the client
       const dbError = exception as any;

@@ -139,6 +139,25 @@ describe('HttpExceptionFilter', () => {
     );
   });
 
+  it('traduce un MulterError a 400 y el de tamano a 413 en lugar de 500', () => {
+    const multer = (code: string) =>
+      Object.assign(new Error('mensaje interno de multer'), {
+        name: 'MulterError',
+        code,
+      });
+
+    for (const [code, estado] of [
+      ['LIMIT_UNEXPECTED_FILE', 400],
+      ['LIMIT_FILE_COUNT', 400],
+      ['LIMIT_FILE_SIZE', 413],
+    ] as const) {
+      mockResponse.status.mockClear();
+      filter.catch(multer(code), mockArgumentsHost);
+      expect(mockResponse.status).toHaveBeenCalledWith(estado);
+    }
+    expect(loggerErrorSpy).not.toHaveBeenCalled();
+  });
+
   it('deja subir la excepcion en contextos que no son HTTP', () => {
     // Un contexto que no es HTTP no trae respuesta: si el filtro intentara
     // escribirla, el error real quedaria tapado por un TypeError.
