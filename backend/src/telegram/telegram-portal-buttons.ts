@@ -2,23 +2,26 @@ import { Markup } from 'telegraf';
 import type { InlineKeyboardButton } from 'telegraf/types';
 
 /**
+ * Enlace normal a una ruta del panel web, sin ninguna credencial incrustada.
+ *
+ * Telegram guarda el historial y los mensajes se reenvian, asi que un enlace
+ * que entrara solo seria una llave en un sitio que no controlamos. Quien lo
+ * abre inicia sesion con su correo y contrasena como en cualquier navegador.
+ */
+export function enlaceDelPanel(webUrl: string, ruta: string): string {
+  return `${webUrl.replace(/\/+$/, '')}${ruta.startsWith('/') ? '' : '/'}${ruta}`;
+}
+
+/**
  * Botonera para abrir un portal desde Telegram.
  *
- * El boton de Mini App solo se ofrece cuando el enlace es https: Telegram
- * rechaza la peticion entera con un 400 si una Web App apunta a http, asi que
- * un origen mal configurado no tumbaba solo el boton, dejaba a la modelo sin
- * ningun mensaje. El boton de navegador si admite http, y con el al menos se
- * puede entrar mientras se corrige la configuracion.
+ * Solo boton de navegador (url): ya no se ofrece Mini App. Admite http para
+ * poder entrar mientras se corrige un origen mal configurado.
  */
 export function botonesDePortal(
   url: string,
-  /** Texto del boton. Se personaliza cuando el pase aterriza en una seccion concreta. */
+  /** Texto del boton. Se personaliza cuando el enlace aterriza en una seccion concreta. */
   etiqueta = 'Abrir mi portal',
 ): InlineKeyboardButton[][] {
-  const esSeguro = url.toLowerCase().startsWith('https://');
-
-  return [
-    ...(esSeguro ? [[Markup.button.webApp(etiqueta, url)]] : []),
-    [Markup.button.url('Abrir en el navegador', url)],
-  ];
+  return [[Markup.button.url(etiqueta, url)]];
 }

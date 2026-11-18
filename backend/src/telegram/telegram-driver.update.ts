@@ -25,8 +25,8 @@ import {
 import { DisciplineService } from '../discipline/discipline.service';
 import { SettlementsService } from '../transport-operations/settlements.service';
 import { AuthService } from '../auth/auth.service';
-import { PanelAccessService } from '../auth/panel-access.service';
-import { botonesDePortal } from './telegram-portal-buttons';
+import { ConfigService } from '@nestjs/config';
+import { botonesDePortal, enlaceDelPanel } from './telegram-portal-buttons';
 import { describeError } from '../common/errors/error-message';
 import { TelegramCallbackGuard } from './telegram-callback-guard';
 import { DriverTripsService } from '../drivers/driver-trips.service';
@@ -75,7 +75,7 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
     private readonly disciplineService: DisciplineService,
     private readonly settlementsService: SettlementsService,
     private readonly authService: AuthService,
-    private readonly panelAccessService: PanelAccessService,
+    private readonly configService: ConfigService,
     private readonly callbackGuard: TelegramCallbackGuard,
     @Inject(forwardRef(() => DriverTripsService))
     private readonly driverTripsService: DriverTripsService,
@@ -97,10 +97,8 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
   }
 
   /**
-   * Portal del chofer, con el mismo pase de un solo uso que el resto.
-   *
-   * El enlace ya no lleva un token de siete dias incrustado: en un chat que
-   * guarda historial y se reenvia, eso era una llave valida toda la semana.
+   * Portal del chofer: enlace normal a la web, sin credencial. Entra con su
+   * correo y contrasena.
    */
   @Hears(['🚚 Mi Portal', '/portal'])
   async onDriverPortal(@Ctx() ctx: Context) {
@@ -112,15 +110,9 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
     if (!user) return;
 
     try {
-      const { url, expiresAt } = await this.panelAccessService.issueLink(
-        user.id,
-        telegramId,
-        '/chofer/portal',
-      );
-      const minutos = Math.max(
-        1,
-        Math.round((expiresAt.getTime() - Date.now()) / 60_000),
-      );
+      const web = this.configService.get<string>('WEB_URL');
+      if (!web) throw new Error('WEB_URL no esta configurada');
+      const url = enlaceDelPanel(web, '/chofer/portal');
 
       await ctx.reply(
         [
@@ -129,7 +121,7 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
           'Adentro tienes tu posicion en el ranking, tus ganancias y viajes,',
           'tu historial y tu reputacion.',
           '',
-          `Este enlace entra sin pedirte contrasena, sirve una sola vez y caduca en ${minutos} minutos.`,
+          'Entra con tu correo y contrasena.',
         ].join('\n'),
         {
           parse_mode: 'Markdown',
@@ -137,7 +129,7 @@ export class TelegramDriverUpdate implements BeforeApplicationShutdown {
         },
       );
     } catch (error) {
-      this.logger.error('No se pudo emitir el pase del portal:', error);
+      this.logger.error('No se pudo armar el enlace del portal:', error);
       await ctx.reply(
         'No se pudo generar el acceso a tu portal. Intenta de nuevo en un momento.',
       );

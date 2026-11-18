@@ -97,8 +97,7 @@ import { TelegramTeamChannelUpdate } from './telegram-team-channel.update';
 import { GroupServicesService } from '../group-services/group-services.service';
 import { UploadService } from '../upload/upload.service';
 import type { InlineKeyboardButton } from 'telegraf/types';
-import { PanelAccessService } from '../auth/panel-access.service';
-import { botonesDePortal } from './telegram-portal-buttons';
+import { botonesDePortal, enlaceDelPanel } from './telegram-portal-buttons';
 import { TelegramSession } from './entities/telegram-session.entity';
 import { buildSessionKey, parseSessionKey } from './telegram-session.key';
 import {
@@ -685,7 +684,6 @@ export class TelegramBookingUpdate {
     private readonly groupServicesService: GroupServicesService,
     private readonly configService: ConfigService,
     private readonly uploadService: UploadService,
-    private readonly panelAccessService: PanelAccessService,
     private readonly locationsService: LocationsService,
     private readonly callbackGuard: TelegramCallbackGuard,
     private readonly manualServiceWizard: TelegramManualServiceWizard,
@@ -4278,10 +4276,7 @@ export class TelegramBookingUpdate {
             ],
           ]
         : []),
-      ...(await this.botonesDelPortal(
-        user.id,
-        ctx.from?.id.toString() ?? null,
-      )),
+      ...this.botonesDelPortal(),
     ];
 
     const desglose = extras.length
@@ -4318,25 +4313,21 @@ export class TelegramBookingUpdate {
    * suma para que desde el mismo aviso pueda entrar al portal, donde tiene el
    * servicio completo delante en vez de un mensaje suelto en el chat.
    *
-   * Devuelve un arreglo vacio si el pase no se puede emitir: un mensaje sin
+   * Devuelve un arreglo vacio si el enlace no se puede armar: un mensaje sin
    * atajo sigue sirviendo, uno que no se envia no.
    */
-  private async botonesDelPortal(
-    usuarioId: string,
-    chatId: string | null,
+  private botonesDelPortal(
     seccion: 'resumen' | 'servicios' | 'fotos' = 'servicios',
-  ): Promise<InlineKeyboardButton[][]> {
-    try {
-      const { url } = await this.panelAccessService.issueLink(
-        usuarioId,
-        chatId,
-        `/empleada/portal?seccion=${seccion}`,
-      );
-      return botonesDePortal(url, 'Abrir mi portal');
-    } catch (error) {
-      this.logger.warn('No se pudo emitir el pase al portal:', error);
+  ): InlineKeyboardButton[][] {
+    const web = this.configService.get<string>('WEB_URL');
+    if (!web) {
+      this.logger.warn('Sin WEB_URL: el aviso sale sin boton al portal.');
       return [];
     }
+    return botonesDePortal(
+      enlaceDelPanel(web, `/empleada/portal?seccion=${seccion}`),
+      'Abrir mi portal',
+    );
   }
 
   /**
@@ -4666,7 +4657,7 @@ export class TelegramBookingUpdate {
                   ),
                 ],
                 // El portal deja ver el servicio completo, no solo este mensaje.
-                ...(await this.botonesDelPortal(user.id, telegramId)),
+                ...this.botonesDelPortal(),
               ]),
             },
           );
@@ -5490,14 +5481,11 @@ export class TelegramBookingUpdate {
      * La peticion de calificacion ya no sale de aqui: la manda `finishByEmployee`
      * al cerrar, de modo que tambien la recibe quien cierra desde el portal, que
      * antes se quedaba sin ella. Aqui solo queda el atajo al portal.
-     * Solo se le muestra a la empleada, ya que en grupos de jefes el botón
-     * webApp de Telegram es inválido y no corresponde a su portal.
+     * Solo se le muestra a la empleada, ya que en grupos de jefes el enlace
+     * al portal de empleada no corresponde a un jefe.
      */
     if (telegramId === servicio.empleada.usuario?.telegramChatId) {
-      const atajos = await this.botonesDelPortal(
-        servicio.empleada.usuarioId,
-        telegramId,
-      );
+      const atajos = this.botonesDelPortal();
       if (atajos.length > 0) {
         await ctx.reply('Puedes revisar el detalle en tu portal.', {
           ...Markup.inlineKeyboard(atajos),
@@ -9012,24 +9000,18 @@ export class TelegramBookingUpdate {
         );
 
         /*
-         * Pase de un solo uso al panel, igual que el que ya recibe la
-         * empleada o el chofer. Sin esto, el jefe tenia que entrar por su
-         * cuenta y buscar la pestana de grupos a mano; con el aterriza
-         * directo en ella, lo que agiliza el registro justo cuando el
-         * cliente ya esta esperando del otro lado.
+         * Enlace al panel del jefe, ya en la pestana de grupos, para que no
+         * tenga que buscarla a mano con el cliente esperando. Sin credencial:
+         * entra con su correo y contrasena.
          */
-        const botonesMensaje = request.boss
-          ? await this.panelAccessService
-              .issueLink(request.boss.id, bossGroupId, '/jefe?tab=grupos')
-              .then(({ url }) => botonesDePortal(url, 'Organizar en el panel'))
-              .catch((err: unknown) => {
-                this.logger.error(
-                  'No se pudo emitir el pase de panel para el servicio grupal:',
-                  err,
-                );
-                return undefined;
-              })
-          : undefined;
+        const webUrl = this.configService.get<string>('WEB_URL');
+        const botonesMensaje =
+          request.boss && webUrl
+            ? botonesDePortal(
+                enlaceDelPanel(webUrl, '/jefe?tab=grupos'),
+                'Organizar en el panel',
+              )
+            : undefined;
 
         await this.bot.telegram.sendMessage(
           bossGroupId,

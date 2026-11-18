@@ -44,8 +44,8 @@ describe('TelegramAuthUpdate deep links', () => {
       // viajesRepository
       authService: {},
       // authService
-      panelAccessService: {},
-      // panelAccessService
+      configService: { get: () => 'https://web.test' },
+      // configService
       telegramService: {},
       // telegramService
       telegramBookingUpdate: bookingUpdate,

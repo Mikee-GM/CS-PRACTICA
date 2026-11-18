@@ -14,8 +14,8 @@ import { Context, Markup } from 'telegraf';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository, MoreThan } from 'typeorm';
 import { AuthService } from '../auth/auth.service';
-import { PanelAccessService } from '../auth/panel-access.service';
-import { botonesDePortal } from './telegram-portal-buttons';
+import { ConfigService } from '@nestjs/config';
+import { botonesDePortal, enlaceDelPanel } from './telegram-portal-buttons';
 import { Usuarios } from '../users/entities/user.entity';
 import { Clientes } from '../clients/entities/client.entity';
 import { Empleadas } from '../employees/entities/employee.entity';
@@ -52,7 +52,7 @@ export class TelegramAuthUpdate {
     @InjectRepository(Viajes)
     private readonly viajesRepository: Repository<Viajes>,
     private readonly authService: AuthService,
-    private readonly panelAccessService: PanelAccessService,
+    private readonly configService: ConfigService,
     @Inject(forwardRef(() => TelegramService))
     private readonly telegramService: TelegramService,
     @Inject(forwardRef(() => TelegramBookingUpdate))
@@ -837,30 +837,16 @@ export class TelegramAuthUpdate {
 
   @Hears(['👑 Mi Portal', '/portal'])
   /**
-   * Portal de la empleada, con el mismo pase de un solo uso que el panel.
-   *
-   * Antes el enlace llevaba incrustado un token de siete dias. Telegram guarda
-   * el historial del chat y los mensajes se reenvian, asi que ese enlace era
-   * una llave valida durante una semana en un sitio que no controlamos. El pase
-   * dura minutos, sirve una vez y queda atado al chat que lo pidio.
+   * Portal de la empleada: enlace normal a la web, sin credencial. Entra con
+   * su correo y contrasena.
    */
   @Command('portal')
   async onEmployeePortal(@Ctx() ctx: Context) {
     const employee = await this.getEmployeeFromContext(ctx);
     if (!employee || !employee.usuario) return;
 
-    const chatId = ctx.from?.id.toString() ?? null;
-
     try {
-      const { url, expiresAt } = await this.panelAccessService.issueLink(
-        employee.usuario.id,
-        chatId,
-        '/empleada/portal',
-      );
-      const minutos = Math.max(
-        1,
-        Math.round((expiresAt.getTime() - Date.now()) / 60_000),
-      );
+      const url = this.urlDelPanel('/empleada/portal');
 
       await ctx.reply(
         [
@@ -869,7 +855,7 @@ export class TelegramAuthUpdate {
           'Adentro tienes tu posicion en el ranking, tus ganancias netas y horas,',
           'tu historial de servicios y tus calificaciones.',
           '',
-          `Este enlace entra sin pedirte contrasena, sirve una sola vez y caduca en ${minutos} minutos.`,
+          'Entra con tu correo y contrasena.',
         ].join('\n'),
         {
           parse_mode: 'Markdown',
@@ -877,7 +863,7 @@ export class TelegramAuthUpdate {
         },
       );
     } catch (error) {
-      this.logger.error('No se pudo emitir el pase del portal:', error);
+      this.logger.error('No se pudo armar el enlace del portal:', error);
       await ctx.reply(
         'No se pudo generar el acceso a tu portal. Intenta de nuevo en un momento.',
       );
@@ -1024,13 +1010,8 @@ export class TelegramAuthUpdate {
   }
 
   /**
-   * Abre el panel web sin volver a teclear usuario y contrasena.
-   *
-   * Antes esto devolvia un token en crudo para pegar a mano. Operar desde
-   * Telegram es lento para un servicio manual o para corregir un dato, y la
-   * friccion del login remataba el problema. El chat ya esta vinculado a la
-   * cuenta, asi que el pase solo cambia una prueba de identidad por otra
-   * equivalente, con vida corta y un solo uso.
+   * Manda el enlace al panel web. Va sin credencial: se entra con correo y
+   * contrasena, igual que desde cualquier navegador.
    */
   @Command('panel')
   async onPanel(@Ctx() ctx: Context) {
@@ -1094,12 +1075,11 @@ export class TelegramAuthUpdate {
   }
 
   /**
-   * Mismo pase, pero aterrizando en la ficha del servicio del boton.
+   * Mismo enlace, pero aterrizando en la ficha del servicio del boton.
    *
    * El destino NO puede fijarse a `/admin/...`: este boton se manda al grupo
    * del jefe, y `/admin` es el area del administrador. Un jefe que lo pulsaba
-   * acababa dentro del panel de administracion, ya autenticado, sin haber hecho
-   * nada raro. Ahora el destino se decide con el rol de quien pulsa, y quien no
+   * acababa en el panel de administracion sin ser su area. Ahora el destino se decide con el rol de quien pulsa, y quien no
    * tiene ficha de servicio propia aterriza en su area.
    */
   @Action(/^panel_servicio:(.+)$/)
@@ -1142,22 +1122,15 @@ export class TelegramAuthUpdate {
     }
 
     try {
-      const { url, expiresAt } = await this.panelAccessService.issueLink(
-        user.id,
-        telegramId,
-        redirectPath,
-      );
-      const minutos = Math.max(
-        1,
-        Math.round((expiresAt.getTime() - Date.now()) / 60_000),
+      const url = this.urlDelPanel(
+        redirectPath ?? (user.rol === 'admin' ? '/admin' : '/jefe'),
       );
 
       await ctx.reply(
         [
           '*Tu panel, listo para entrar*',
           '',
-          'Este enlace abre la sesion sin pedirte usuario ni contrasena.',
-          `Sirve una sola vez y caduca en ${minutos} minutos.`,
+          'Entra con tu correo y contrasena.',
         ].join('\n'),
         {
           parse_mode: 'Markdown',
@@ -1167,7 +1140,7 @@ export class TelegramAuthUpdate {
         },
       );
     } catch (error) {
-      this.logger.error('No se pudo emitir el pase de panel:', error);
+      this.logger.error('No se pudo armar el enlace del panel:', error);
       await ctx.reply(
         'No se pudo generar el acceso al panel. Intenta de nuevo en un momento.',
       );
@@ -1213,21 +1186,20 @@ export class TelegramAuthUpdate {
        * En lugar de tragarse la foto en silencio se le explica y se le da el
        * atajo, porque la costumbre de mandarlas por aqui tardara en irse.
        */
-      await this.derivarFotosAlPortal(ctx, user.id, empleada.nombreArtistico);
+      await this.derivarFotosAlPortal(ctx, empleada.nombreArtistico);
     } else {
       await next();
     }
   }
 
   /**
-   * Responde a una foto suelta con el pase que abre el portal en su seccion.
+   * Responde a una foto suelta con el enlace al portal en su seccion.
    *
-   * Si el pase falla se responde igual, sin boton: dejar el mensaje sin
+   * Si el enlace no se puede armar se responde igual, sin boton: dejar el mensaje sin
    * contestar haria pensar a la modelo que su foto entro.
    */
   private async derivarFotosAlPortal(
     ctx: Context,
-    usuarioId: string,
     nombre: string,
   ): Promise<void> {
     const texto = [
@@ -1236,21 +1208,26 @@ export class TelegramAuthUpdate {
       `Hola ${nombre}. Ya no hace falta mandarlas por este chat.`,
       'Desde el portal puedes subir varias de una vez, ver cuales enviaste',
       'esta semana y en que quedo la revision de cada una.',
+      '',
+      'Entra con tu correo y contrasena.',
     ].join('\n');
 
     try {
-      const { url } = await this.panelAccessService.issueLink(
-        usuarioId,
-        ctx.from?.id.toString() ?? null,
-        '/empleada/portal?seccion=fotos',
-      );
+      const url = this.urlDelPanel('/empleada/portal?seccion=fotos');
       await ctx.reply(texto, {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard(botonesDePortal(url, 'Subir mis fotos')),
       });
     } catch (error) {
-      this.logger.error('No se pudo emitir el pase para subir fotos:', error);
+      this.logger.error('No se pudo armar el enlace para subir fotos:', error);
       await ctx.reply(texto, { parse_mode: 'Markdown' });
     }
+  }
+
+  /** Enlace sin credencial a una ruta de la web; falla si WEB_URL falta. */
+  private urlDelPanel(ruta: string): string {
+    const web = this.configService.get<string>('WEB_URL');
+    if (!web) throw new Error('WEB_URL no esta configurada');
+    return enlaceDelPanel(web, ruta);
   }
 }
