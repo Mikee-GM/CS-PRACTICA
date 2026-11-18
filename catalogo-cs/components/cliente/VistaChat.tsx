@@ -28,6 +28,7 @@ import Burbuja from "./Burbuja";
 import { ErrorDeFormulario } from "./Campo";
 import EncabezadoAsistente from "./EncabezadoAsistente";
 import SubirComprobante from "./SubirComprobante";
+import ValorarServicio from "./ValorarServicio";
 import { useCanalCliente, type EventoDelChat } from "./useCanalCliente";
 
 const ESTADOS: readonly EstadoConversacion[] = ["activa", "en_revision", "con_servicio", "cerrada"];
@@ -94,6 +95,8 @@ export default function VistaChat({
   const [comprobantePendiente, setComprobantePendiente] = useState(
     conversacion.comprobantePendiente,
   );
+  // Sube con cada aviso que puede traer un servicio recien terminado.
+  const [recargaValoracion, setRecargaValoracion] = useState(0);
 
   const mensajesRef = useRef(mensajes);
   mensajesRef.current = mensajes;
@@ -261,6 +264,7 @@ export default function VistaChat({
           break;
         }
         case "message_created":
+          setRecargaValoracion((n) => n + 1);
           void sincronizar();
           // Un aviso del sistema puede pedir (o dar por recibido) el comprobante.
           void releerResumen();
@@ -281,6 +285,7 @@ export default function VistaChat({
         case "conversation_status_changed": {
           const nuevo = evento.data?.status as EstadoConversacion | undefined;
           if (nuevo && ESTADOS.includes(nuevo)) setStatus(nuevo);
+          setRecargaValoracion((n) => n + 1);
           void releerResumen();
           break;
         }
@@ -477,6 +482,11 @@ export default function VistaChat({
           {mostrarComprobante ? (
             <SubirComprobante conversationId={conversationId} onEnviado={alEnviarComprobante} />
           ) : null}
+          {/* Tambien con el chat cerrado: se cierra al terminar el servicio. */}
+          <ValorarServicio
+            empleadaId={conversacion.employee.id}
+            recarga={recargaValoracion}
+          />
         </div>
         <BarraEscritura
           nombreModelo={nombre}
