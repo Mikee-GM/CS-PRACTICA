@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, In, Not } from 'typeorm';
+import { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity';
 import * as bcrypt from 'bcryptjs';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
@@ -690,7 +691,11 @@ export class EmployeesService {
           const salt = await bcrypt.genSalt(10);
           credenciales.passwordHash = await bcrypt.hash(password, salt);
         }
-        await manager.update(Usuarios, empleada.usuarioId, credenciales);
+        await manager.update(
+          Usuarios,
+          empleada.usuarioId,
+          credenciales as QueryDeepPartialEntity<Usuarios>,
+        );
       }
 
       // 2. Actualizar fotos extras si se especifican

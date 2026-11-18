@@ -10,6 +10,7 @@ import {
   Optional,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity';
 import {
   EntityManager,
   In,
@@ -736,7 +737,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     const resultado = await manager
       .createQueryBuilder()
       .update(Servicios)
-      .set({ estado: hasta, ...camposExtra })
+      .set({
+        estado: hasta,
+        ...camposExtra,
+      } as QueryDeepPartialEntity<Servicios>)
       .where('id = :servicioId AND estado = :desde', { servicioId, desde })
       .execute();
     return (resultado.affected ?? 0) > 0;
@@ -1649,7 +1653,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       };
     }
 
-    await this.serviciosRepository.update(id, cambios);
+    await this.serviciosRepository.update(
+      id,
+      cambios as QueryDeepPartialEntity<Servicios>,
+    );
     const actualizado = await this.findOne(id);
 
     this.realtimeEventsService.emitToBoss(actualizado.jefeId, {

@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Not, Repository } from 'typeorm';
+import { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity';
 import { Viajes } from '../trips/entities/trip.entity';
 import { Choferes } from './entities/driver.entity';
 import { Servicios } from '../services/entities/service.entity';
@@ -411,7 +412,12 @@ export class DriverTripsService {
           : 'cerrada';
       }
 
-      escrituras.push(this.servicios.update(trip.servicio.id, cambios));
+      escrituras.push(
+        this.servicios.update(
+          trip.servicio.id,
+          cambios as QueryDeepPartialEntity<Servicios>,
+        ),
+      );
     }
 
     await Promise.all(escrituras);
