@@ -5,8 +5,9 @@ import {
   ROUTE_ARGS_METADATA,
 } from '@nestjs/common/constants';
 import { RouteParamtypes } from '@nestjs/common/enums/route-paramtypes.enum';
-import { PortalAuthGuard } from '../auth/guards/portal-auth.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { ROLES_KEY } from '../auth/decorators/roles.decorator';
 import { EmployeePostsController } from './employee-posts.controller';
 
 const POST = '33333333-3333-4333-8333-333333333333';
@@ -14,7 +15,7 @@ const MEDIA = '44444444-4444-4444-8444-444444444444';
 
 /*
  * Todo el controlador es del portal de la modelo. Si alguien añade una ruta
- * que no pase por `PortalAuthGuard`, o un parametro de ruta sin
+ * que no pase por `JwtAuthGuard` y `RolesGuard`, o un parametro de ruta sin
  * `ParseUUIDPipe`, esta prueba lo detecta.
  */
 describe('EmployeePostsController', () => {
@@ -44,22 +45,15 @@ describe('EmployeePostsController', () => {
     );
   });
 
-  it('todas las rutas pasan por PortalAuthGuard y no por RolesGuard', () => {
+  it('todas las rutas pasan por sesion web y rol empleada', () => {
     const deClase = Reflect.getMetadata(
       GUARDS_METADATA,
       EmployeePostsController,
     ) as unknown[];
-    expect(deClase).toEqual([PortalAuthGuard]);
-    for (const nombre of rutas) {
-      const propios = (Reflect.getMetadata(
-        GUARDS_METADATA,
-        prototipo[nombre],
-      ) ?? []) as unknown[];
-      expect({ nombre, roles: propios.includes(RolesGuard) }).toEqual({
-        nombre,
-        roles: false,
-      });
-    }
+    expect(deClase).toEqual([JwtAuthGuard, RolesGuard]);
+    expect(Reflect.getMetadata(ROLES_KEY, EmployeePostsController)).toEqual([
+      'empleada',
+    ]);
   });
 
   it('todo parametro de ruta pasa por ParseUUIDPipe', () => {

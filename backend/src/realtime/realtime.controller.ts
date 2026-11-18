@@ -18,8 +18,6 @@ import {
   ApiSseTokenDocs,
 } from '../common/swagger/api-docs.decorators';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { PortalAuthGuard } from '../auth/guards/portal-auth.guard';
-import { PortalUser } from '../auth/decorators/portal-user.decorator';
 import { Usuarios } from '../users/entities/user.entity';
 
 /**
@@ -32,17 +30,11 @@ import { Usuarios } from '../users/entities/user.entity';
  * sin comprobar el tipo de token ni la sesion, asi que un token de portal de 7
  * dias abria el canal.
  *
- * `sse/chofer` es distinto a proposito: el portal de chofer es una Mini App de
- * Telegram que nunca llega a tener esa sesion completa (ver PortalAuthGuard),
- * asi que usa el mismo guard que ya protege el resto del portal
- * (DriverPortalController) en vez de JwtAuthGuard. Ese guard si sabe aceptar
- * el token por query de forma segura, verificando tipo y firma.
- *
- * `sse/cliente` existio antes con un rol que no estaba en la enumeracion y se
- * elimino por inalcanzable. Vuelve con las cuentas de cliente del chat web:
- * usa JwtAuthGuard como jefes y empleadas y comprueba el rol a mano, porque
- * este controlador no pasa por RolesGuard. Por eso cada canal rechaza
- * cualquier rol que no sea el suyo, y un cliente no abre ninguno ajeno.
+ * `sse/chofer` y `sse/cliente` siguen el mismo esquema: el portal del chofer ya
+ * entra con sesion web, asi que no queda ningun canal con token por query.
+ * Todos comprueban el rol a mano, porque este controlador no pasa por
+ * RolesGuard. Por eso cada canal rechaza cualquier rol que no sea el suyo, y
+ * un cliente no abre ninguno ajeno.
  */
 @Controller('realtime')
 @ApiControllerDocs('realtime')
@@ -111,11 +103,17 @@ export class RealtimeController {
   }
 
   @Sse('sse/chofer')
-  @UseGuards(PortalAuthGuard)
+  @UseGuards(JwtAuthGuard)
   @ApiSseTokenDocs('Conectar canal SSE para chofer autenticado')
-  async sseChofer(@PortalUser() userId: string): Promise<Observable<any>> {
+  async sseChofer(
+    @Req() request: { user: Usuarios },
+  ): Promise<Observable<any>> {
+    const user = request.user;
+    if (user.rol !== 'chofer') {
+      throw new ForbiddenException('Solo choferes pueden conectar aquí');
+    }
     const chofer = await this.choferesRepository.findOne({
-      where: { usuarioId: userId },
+      where: { usuarioId: user.id },
       select: { id: true },
     });
     if (!chofer) {

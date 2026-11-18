@@ -25,9 +25,9 @@ import {
  * Las piezas de la valoracion que faltaban en los portales del personal.
  *
  * Viven aqui y no en `EmployeePortalController` / `DriverPortalController`
- * porque ya entran con la sesion web (`JwtAuthGuard` + rol) y no con
- * `PortalAuthGuard`, que es lo que la Etapa 3 retira de esos dos. Las rutas
- * conservan el prefijo de su portal para que el frontend no distinga.
+ * por orden historico: los portales ya entran con la sesion web
+ * (`JwtAuthGuard` + rol), igual que este. Las rutas conservan el prefijo de su
+ * portal para que el frontend no distinga.
  */
 @Controller()
 export class PortalServiceFeedbackController {

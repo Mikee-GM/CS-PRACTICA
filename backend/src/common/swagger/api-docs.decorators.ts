@@ -10,7 +10,6 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiParam,
-  ApiQuery,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -192,11 +191,6 @@ export const ApiActionDocs = (
 export const ApiSseTokenDocs = (summary: string): MethodDecorator =>
   applyDecorators(
     ApiOperation({ summary }),
-    ApiQuery({
-      name: 'token',
-      description: 'Token JWT usado para autenticar el canal SSE',
-      required: true,
-    }),
     ApiOkResponse({ description: 'Canal SSE conectado correctamente' }),
-    ApiUnauthorizedResponse({ description: 'Token invalido o sin permisos' }),
+    ApiUnauthorizedResponse({ description: 'Sesion invalida o sin permisos' }),
   );

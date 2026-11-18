@@ -17,8 +17,10 @@ import {
 } from '@nestjs/common';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
-import { PortalUser } from '../auth/decorators/portal-user.decorator';
-import { PortalAuthGuard } from '../auth/guards/portal-auth.guard';
+import { GetUser } from '../auth/decorators/get-user.decorator';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { ApiControllerDocs } from '../common/swagger/api-docs.decorators';
 import { EmployeesService } from '../employees/employees.service';
 import type { UploadedFilePayload } from '../upload/upload.service';
@@ -45,16 +47,15 @@ type ArchivosDeMedia = {
 /**
  * Posts del feed vistos por la propia modelo, desde su portal.
  *
- * Como el resto del portal, entra con `PortalAuthGuard` (token por query,
- * Bearer o cookie; CSRF solo cuando hay cookie) y no con `RolesGuard`: el
- * portal no lleva la sesion del panel. El guard no mira el rol, asi que la
- * barrera es `EmployeesService.findByUserId`, que responde 404 a cualquier
- * cuenta que no sea una empleada (un cliente con token incluido). Cada ruta
- * la resuelve y opera solo sobre los posts de esa empleada.
+ * Como el resto del portal, entra con la sesion web (`JwtAuthGuard` aplica
+ * tambien CSRF) y `RolesGuard` con rol `empleada`. `EmployeesService.findByUserId`
+ * sigue respondiendo 404 a una cuenta sin ficha de empleada. Cada ruta la
+ * resuelve y opera solo sobre los posts de esa empleada.
  */
 @Controller('employee-portal/posts')
 @ApiControllerDocs('employee-portal')
-@UseGuards(PortalAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('empleada')
 export class EmployeePostsController {
   constructor(
     private readonly postsService: PostsService,
@@ -63,7 +64,7 @@ export class EmployeePostsController {
 
   @Get()
   async listar(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Query() query: ListEmployeePostsDto,
   ): Promise<PaginaDePosts> {
     const employeeId = await this.modelo(userId);
@@ -74,7 +75,7 @@ export class EmployeePostsController {
   @Post()
   @HttpCode(201)
   async crear(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Body() dto: PostCaptionDto,
   ): Promise<PostDeLaModelo> {
     const employeeId = await this.modelo(userId);
@@ -89,7 +90,7 @@ export class EmployeePostsController {
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @Patch(':id')
   async editar(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: PostCaptionDto,
   ): Promise<PostDeLaModelo> {
@@ -109,7 +110,7 @@ export class EmployeePostsController {
     FileFieldsInterceptor(CAMPOS_DE_MEDIA, OPCIONES_DE_SUBIDA_DE_MEDIA),
   )
   async agregarMedia(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @UploadedFiles() archivos: ArchivosDeMedia | undefined,
     @Body() dto: AddPostMediaDto,
@@ -131,7 +132,7 @@ export class EmployeePostsController {
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @Delete(':id/media/:mediaId')
   async quitarMedia(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Param('mediaId', ParseUUIDPipe) mediaId: string,
   ): Promise<PostDeLaModelo> {
@@ -142,7 +143,7 @@ export class EmployeePostsController {
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @Put(':id/media/order')
   async reordenarMedia(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ReorderPostMediaDto,
   ): Promise<PostDeLaModelo> {
@@ -154,7 +155,7 @@ export class EmployeePostsController {
   @Post(':id/submit')
   @HttpCode(200)
   async enviar(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<PostDeLaModelo> {
     const employeeId = await this.modelo(userId);
@@ -164,7 +165,7 @@ export class EmployeePostsController {
   @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Delete(':id')
   async borrar(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<ResultadoDeBorrar> {
     const employeeId = await this.modelo(userId);

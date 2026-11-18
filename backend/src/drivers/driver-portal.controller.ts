@@ -17,15 +17,18 @@ import {
   CreateRatingDto,
   ReportStatementDto,
 } from '../discipline/dto/discipline.dto';
-import { PortalAuthGuard } from '../auth/guards/portal-auth.guard';
-import { PortalUser } from '../auth/decorators/portal-user.decorator';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { GetUser } from '../auth/decorators/get-user.decorator';
 import { LocationsService } from '../locations/locations.service';
 import { RegistrarUbicacionDto } from '../locations/dto/registrar-ubicacion.dto';
 import { ApiControllerDocs } from '../common/swagger/api-docs.decorators';
 
 @Controller('driver-portal')
 @ApiControllerDocs('driver-portal')
-@UseGuards(PortalAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('chofer')
 export class DriverPortalController {
   constructor(
     private readonly driversService: DriversService,
@@ -47,14 +50,14 @@ export class DriverPortalController {
   @Post('location')
   @HttpCode(200)
   async registrarUbicacion(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Body() dto: RegistrarUbicacionDto,
   ) {
     return this.locationsService.registrar(userId, dto.lat, dto.lng);
   }
 
   @Get('me')
-  getMyPortal(@PortalUser() userId: string) {
+  getMyPortal(@GetUser('id') userId: string) {
     return this.driversService.getDriverPortalData(userId);
   }
 
@@ -68,7 +71,7 @@ export class DriverPortalController {
   @Post('trips/:tripId/accept')
   @HttpCode(200)
   async aceptarOferta(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Param('tripId', new ParseUUIDPipe()) tripId: string,
   ) {
     const choferId = await this.driverTripsService.choferDeUsuario(userId);
@@ -88,7 +91,7 @@ export class DriverPortalController {
   @Post('trips/:tripId/reject')
   @HttpCode(200)
   async rechazarOferta(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Param('tripId', new ParseUUIDPipe()) tripId: string,
   ) {
     const choferId = await this.driverTripsService.choferDeUsuario(userId);
@@ -120,7 +123,7 @@ export class DriverPortalController {
   @Post('trips/:tripId/arrived')
   @HttpCode(200)
   async marcarLlegada(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Param('tripId', new ParseUUIDPipe()) tripId: string,
   ) {
     const choferId = await this.driverTripsService.choferDeUsuario(userId);
@@ -137,7 +140,7 @@ export class DriverPortalController {
   @Post('trips/:tripId/picked-up')
   @HttpCode(200)
   async marcarRecogida(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Param('tripId', new ParseUUIDPipe()) tripId: string,
   ) {
     const choferId = await this.driverTripsService.choferDeUsuario(userId);
@@ -158,7 +161,7 @@ export class DriverPortalController {
   @Post('trips/:tripId/finished')
   @HttpCode(200)
   async finalizar(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Param('tripId', new ParseUUIDPipe()) tripId: string,
   ) {
     const choferId = await this.driverTripsService.choferDeUsuario(userId);
@@ -188,7 +191,7 @@ export class DriverPortalController {
    * solo existia detras de un boton del chat.
    */
   @Get('ratings/appealable')
-  apelablesPropias(@PortalUser() userId: string) {
+  apelablesPropias(@GetUser('id') userId: string) {
     return this.disciplineService.listarApelablesPropias({
       id: userId,
       rol: 'chofer',
@@ -198,7 +201,7 @@ export class DriverPortalController {
   @Post('ratings/:ratingId/appeal')
   @HttpCode(200)
   apelar(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Param('ratingId', new ParseUUIDPipe()) ratingId: string,
     @Body() dto: AppealRatingDto,
   ) {
@@ -217,7 +220,7 @@ export class DriverPortalController {
    * relato delante.
    */
   @Get('reports/mine')
-  reportesSobreMi(@PortalUser() userId: string) {
+  reportesSobreMi(@GetUser('id') userId: string) {
     return this.disciplineService.listarReportesPropios({
       id: userId,
       rol: 'chofer',
@@ -228,7 +231,7 @@ export class DriverPortalController {
   @Post('reports/:reportId/statement')
   @HttpCode(200)
   responderReporte(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Param('reportId', new ParseUUIDPipe()) reportId: string,
     @Body() dto: ReportStatementDto,
   ) {
@@ -247,7 +250,7 @@ export class DriverPortalController {
    */
   @Post('reports')
   @HttpCode(201)
-  reportar(@PortalUser() userId: string, @Body() dto: CreateConductReportDto) {
+  reportar(@GetUser('id') userId: string, @Body() dto: CreateConductReportDto) {
     return this.disciplineService.createReport(
       { id: userId, rol: 'chofer' },
       dto,
@@ -261,7 +264,7 @@ export class DriverPortalController {
    * que viaje calificar, asi que la opcion no aparecia por ningun lado.
    */
   @Get('ratings/pending-employees')
-  empleadasPorCalificar(@PortalUser() userId: string) {
+  empleadasPorCalificar(@GetUser('id') userId: string) {
     return this.disciplineService.listarEmpleadasPorCalificar({
       id: userId,
       rol: 'chofer',
@@ -270,7 +273,7 @@ export class DriverPortalController {
 
   @Post('ratings')
   @HttpCode(201)
-  async calificar(@PortalUser() userId: string, @Body() dto: CreateRatingDto) {
+  async calificar(@GetUser('id') userId: string, @Body() dto: CreateRatingDto) {
     return this.disciplineService.createRating(
       { id: userId, rol: 'chofer' },
       { ...dto, direction: 'driver_to_employee' },

@@ -3,11 +3,8 @@ import { Usuarios } from '../users/entities/user.entity';
 import { RealtimeController } from './realtime.controller';
 
 /*
- * sseChofer se autentica con PortalAuthGuard (token de portal), no con
- * JwtAuthGuard: no hay `request.user`, solo el usuarioId que deja resuelto
- * el guard via @PortalUser(). Estas pruebas cubren la logica del metodo en
- * si, que es lo que cambio; el guard en si mismo ya tiene sus propias
- * pruebas.
+ * sseChofer entra con JwtAuthGuard y comprueba el rol a mano, como los demas
+ * canales: un rol ajeno recibe 403 antes de tocar el repositorio.
  */
 describe('RealtimeController.sseChofer', () => {
   const realtimeEventsService = { getDriverStream: jest.fn() };
@@ -24,12 +21,14 @@ describe('RealtimeController.sseChofer', () => {
 
   beforeEach(() => jest.clearAllMocks());
 
-  it('conecta al canal del chofer resuelto por el usuarioId del token', async () => {
+  it('conecta al canal del chofer resuelto por el usuario de la sesion', async () => {
     choferesRepository.findOne.mockResolvedValue({ id: 'driver-1' });
     const stream = {} as any;
     realtimeEventsService.getDriverStream.mockReturnValue(stream);
 
-    const result = await controller.sseChofer('user-1');
+    const result = await controller.sseChofer({
+      user: { id: 'user-1', rol: 'chofer' } as Usuarios,
+    });
 
     expect(choferesRepository.findOne).toHaveBeenCalledWith({
       where: { usuarioId: 'user-1' },
@@ -44,11 +43,24 @@ describe('RealtimeController.sseChofer', () => {
   it('rechaza cuando el usuario autenticado no tiene perfil de chofer', async () => {
     choferesRepository.findOne.mockResolvedValue(null);
 
-    await expect(controller.sseChofer('user-2')).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(
+      controller.sseChofer({
+        user: { id: 'user-2', rol: 'chofer' } as Usuarios,
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
     expect(realtimeEventsService.getDriverStream).not.toHaveBeenCalled();
   });
+
+  it.each(['jefe', 'admin', 'empleada', 'cliente'] as const)(
+    'niega el canal del chofer al rol %s',
+    async (rol) => {
+      await expect(
+        controller.sseChofer({ user: { id: 'user-3', rol } as Usuarios }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(choferesRepository.findOne).not.toHaveBeenCalled();
+      expect(realtimeEventsService.getDriverStream).not.toHaveBeenCalled();
+    },
+  );
 });
 
 /*

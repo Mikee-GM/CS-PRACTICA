@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
-import { PortalAuthGuard } from '../auth/guards/portal-auth.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { EmployeesService } from '../employees/employees.service';
 import { EmployeePostsController } from './employee-posts.controller';
 import { MAX_VIDEO_BYTES } from './post-estados';
@@ -22,9 +22,9 @@ const MP4 = Buffer.concat([
 
 /**
  * La subida de media de verdad, con Multer y el `ValidationPipe` de la
- * aplicacion. `PortalAuthGuard` se sustituye (su presencia la comprueba
- * `employee-posts.controller.spec`) y deja el usuario del portal en la
- * peticion como haria el guard real.
+ * aplicacion. `JwtAuthGuard` se sustituye (su presencia la comprueba
+ * `employee-posts.controller.spec`) y deja el usuario en la peticion como
+ * haria el guard real; `RolesGuard` corre de verdad con rol `empleada`.
  */
 describe('POST /employee-portal/posts/:id/media (HTTP)', () => {
   let app: INestApplication;
@@ -39,12 +39,13 @@ describe('POST /employee-portal/posts/:id/media (HTTP)', () => {
         { provide: EmployeesService, useValue: employees },
       ],
     })
-      .overrideGuard(PortalAuthGuard)
+      .overrideGuard(JwtAuthGuard)
       .useValue({
         canActivate: (ctx: ExecutionContext) => {
-          ctx
-            .switchToHttp()
-            .getRequest<{ portalUserId?: string }>().portalUserId = 'usuario-1';
+          ctx.switchToHttp().getRequest<{ user?: unknown }>().user = {
+            id: 'usuario-1',
+            rol: 'empleada',
+          };
           return true;
         },
       })

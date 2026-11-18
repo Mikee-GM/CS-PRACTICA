@@ -13,7 +13,7 @@ import { StaffPostsController } from './staff-posts.controller';
 import { StaffPostsService } from './staff-posts.service';
 
 // `PostsService` se exporta para quien publique o modere con las mismas
-// operaciones. AuthModule aporta el AuthService de PortalAuthGuard. `Empleadas`
+// operaciones. AuthModule aporta los guards de sesion de las rutas del portal. `Empleadas`
 // se registra aqui para resolver el alcance del jefe sin importar
 // ConversationsModule. RealtimeEventsService llega del modulo global.
 @Module({

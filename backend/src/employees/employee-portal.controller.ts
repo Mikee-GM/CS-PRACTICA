@@ -17,7 +17,9 @@ import { WeeklyContentService } from '../weekly-content/weekly-content.service';
 import { ServicesService } from '../services/services.service';
 import { UpdatePortalTripStatusDto } from './dto/portal-trip-status.dto';
 import { AddPortalServiceExtraDto } from './dto/portal-service-extra.dto';
-import { PortalAuthGuard } from '../auth/guards/portal-auth.guard';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 import { DisciplineService } from '../discipline/discipline.service';
 import { GroupServicesService } from '../group-services/group-services.service';
 import {
@@ -27,7 +29,7 @@ import {
   ReportStatementDto,
 } from '../discipline/dto/discipline.dto';
 import { ExtendServiceDto } from './dto/extend-service.dto';
-import { PortalUser } from '../auth/decorators/portal-user.decorator';
+import { GetUser } from '../auth/decorators/get-user.decorator';
 import { LocationsService } from '../locations/locations.service';
 import { TeamChannelService } from '../team-channel/team-channel.service';
 import { EnviarMensajeEquipoDto } from '../team-channel/dto/team-channel.dto';
@@ -43,7 +45,8 @@ const MAX_ARCHIVOS = 12;
 
 @Controller('employee-portal')
 @ApiControllerDocs('employee-portal')
-@UseGuards(PortalAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('empleada')
 export class EmployeePortalController {
   constructor(
     private readonly employeesService: EmployeesService,
@@ -56,14 +59,14 @@ export class EmployeePortalController {
   ) {}
 
   @Get('me')
-  getMyPortal(@PortalUser() userId: string) {
+  getMyPortal(@GetUser('id') userId: string) {
     return this.employeesService.getEmployeePortalData(userId);
   }
 
   @Post('services/:servicioId/accept')
   @HttpCode(200)
   async aceptarServicio(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Param('servicioId', new ParseUUIDPipe()) servicioId: string,
   ) {
     const servicio = await this.servicesService.acceptByEmployee(
@@ -80,7 +83,7 @@ export class EmployeePortalController {
   @Post('services/:servicioId/reject')
   @HttpCode(200)
   async rechazarServicio(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Param('servicioId', new ParseUUIDPipe()) servicioId: string,
   ) {
     await this.servicesService.rejectByEmployee(servicioId, userId);
@@ -90,7 +93,7 @@ export class EmployeePortalController {
   @Post('services/:servicioId/start')
   @HttpCode(200)
   async iniciarServicio(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Param('servicioId', new ParseUUIDPipe()) servicioId: string,
   ) {
     const servicio = await this.servicesService.startByEmployee(
@@ -118,7 +121,7 @@ export class EmployeePortalController {
   @Post('trips/:tripId/status')
   @HttpCode(200)
   async updateTripStatus(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Param('tripId', new ParseUUIDPipe()) tripId: string,
     @Body() dto: UpdatePortalTripStatusDto,
   ) {
@@ -138,7 +141,7 @@ export class EmployeePortalController {
    */
   @Get('services/:servicioId/available-extras')
   async getAvailableExtras(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Param('servicioId', new ParseUUIDPipe()) servicioId: string,
   ) {
     const extras = await this.servicesService.listAvailableExtras(
@@ -162,7 +165,7 @@ export class EmployeePortalController {
   @Post('services/:servicioId/extras')
   @HttpCode(201)
   async addServiceExtra(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Param('servicioId', new ParseUUIDPipe()) servicioId: string,
     @Body() dto: AddPortalServiceExtraDto,
   ) {
@@ -197,7 +200,7 @@ export class EmployeePortalController {
   @Post('services/:servicioId/finish')
   @HttpCode(200)
   async finishMyService(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Param('servicioId', new ParseUUIDPipe()) servicioId: string,
   ) {
     /*
@@ -247,7 +250,7 @@ export class EmployeePortalController {
    * esto solo, sin volver a recalcular ranking, ganancias y reputacion.
    */
   @Get('weekly-photos')
-  async getMyWeeklyPhotos(@PortalUser() userId: string) {
+  async getMyWeeklyPhotos(@GetUser('id') userId: string) {
     const empleada = await this.employeesService.findByUserId(userId);
     const [estado, envios] = await Promise.all([
       this.weeklyContentService.getWeeklyStatusForEmployee(empleada.id),
@@ -270,7 +273,7 @@ export class EmployeePortalController {
     }),
   )
   async uploadMyWeeklyPhotos(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @UploadedFiles() fotos: UploadedFilePayload[],
   ) {
     const empleada = await this.employeesService.findByUserId(userId);
@@ -295,7 +298,7 @@ export class EmployeePortalController {
   @Post('services/:servicioId/extend')
   @HttpCode(200)
   async extenderServicio(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Param('servicioId', new ParseUUIDPipe()) servicioId: string,
     @Body() dto: ExtendServiceDto,
   ) {
@@ -315,7 +318,7 @@ export class EmployeePortalController {
   @Post('services/:servicioId/panic')
   @HttpCode(201)
   activarPanico(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Param('servicioId', new ParseUUIDPipe()) servicioId: string,
   ) {
     return this.servicesService.activatePanic(servicioId, userId);
@@ -334,7 +337,7 @@ export class EmployeePortalController {
   @Post('location')
   @HttpCode(200)
   async registrarUbicacion(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Body() dto: RegistrarUbicacionDto,
   ) {
     return this.locationsService.registrar(userId, dto.lat, dto.lng);
@@ -354,7 +357,7 @@ export class EmployeePortalController {
   @Post('services/:servicioId/prorroga')
   @HttpCode(200)
   async pedirProrroga(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Param('servicioId', new ParseUUIDPipe()) servicioId: string,
   ) {
     return this.servicesService.solicitarProrroga(servicioId, userId);
@@ -371,7 +374,7 @@ export class EmployeePortalController {
   @Post('services/:servicioId/lista')
   @HttpCode(200)
   async marcarLista(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Param('servicioId', new ParseUUIDPipe()) servicioId: string,
   ) {
     const resultado = await this.servicesService.marcarEmpleadaLista(
@@ -390,7 +393,7 @@ export class EmployeePortalController {
    * quien lo escribio, solo si viene de ella o de coordinacion.
    */
   @Get('channel')
-  async leerCanal(@PortalUser() userId: string) {
+  async leerCanal(@GetUser('id') userId: string) {
     return this.teamChannel.listarParaEmpleada(userId);
   }
 
@@ -398,7 +401,7 @@ export class EmployeePortalController {
   @Post('channel')
   @HttpCode(201)
   async escribirEnCanal(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Body() dto: EnviarMensajeEquipoDto,
   ) {
     return this.teamChannel.enviarDesdeEmpleada(userId, dto.cuerpo, dto.tipo);
@@ -423,7 +426,7 @@ export class EmployeePortalController {
    * solo existia detras de un boton del chat.
    */
   @Get('ratings/appealable')
-  apelablesPropias(@PortalUser() userId: string) {
+  apelablesPropias(@GetUser('id') userId: string) {
     return this.disciplineService.listarApelablesPropias({
       id: userId,
       rol: 'empleada',
@@ -433,7 +436,7 @@ export class EmployeePortalController {
   @Post('ratings/:ratingId/appeal')
   @HttpCode(200)
   apelar(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Param('ratingId', new ParseUUIDPipe()) ratingId: string,
     @Body() dto: AppealRatingDto,
   ) {
@@ -452,7 +455,7 @@ export class EmployeePortalController {
    * relato delante.
    */
   @Get('reports/mine')
-  reportesSobreMi(@PortalUser() userId: string) {
+  reportesSobreMi(@GetUser('id') userId: string) {
     return this.disciplineService.listarReportesPropios({
       id: userId,
       rol: 'empleada',
@@ -463,7 +466,7 @@ export class EmployeePortalController {
   @Post('reports/:reportId/statement')
   @HttpCode(200)
   responderReporte(
-    @PortalUser() userId: string,
+    @GetUser('id') userId: string,
     @Param('reportId', new ParseUUIDPipe()) reportId: string,
     @Body() dto: ReportStatementDto,
   ) {
@@ -483,7 +486,7 @@ export class EmployeePortalController {
    */
   @Post('reports')
   @HttpCode(201)
-  reportar(@PortalUser() userId: string, @Body() dto: CreateConductReportDto) {
+  reportar(@GetUser('id') userId: string, @Body() dto: CreateConductReportDto) {
     return this.disciplineService.createReport(
       { id: userId, rol: 'empleada' },
       dto,
@@ -497,7 +500,7 @@ export class EmployeePortalController {
    * qué servicio calificar, así que la opción no aparecía por ningún lado.
    */
   @Get('ratings/pending-clients')
-  clientesPorCalificar(@PortalUser() userId: string) {
+  clientesPorCalificar(@GetUser('id') userId: string) {
     return this.disciplineService.listarClientesPorCalificar({
       id: userId,
       rol: 'empleada',
@@ -506,7 +509,7 @@ export class EmployeePortalController {
 
   @Post('ratings')
   @HttpCode(201)
-  async calificar(@PortalUser() userId: string, @Body() dto: CreateRatingDto) {
+  async calificar(@GetUser('id') userId: string, @Body() dto: CreateRatingDto) {
     if (
       dto.direction !== 'employee_to_client' &&
       dto.direction !== 'employee_to_driver'
