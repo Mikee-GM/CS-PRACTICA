@@ -1786,3 +1786,30 @@ los archivos tocados.
   `choferes` sin uso (quitarlos toca a sus llamadores); los campos
   `telegramChatId` de los tipos del frontend y las columnas se quedan hasta la
   Fase 6.
+
+## Fase 5, E3-3
+
+- Frontend: borrado `app/acceso/[token]/route.ts` (canje de pases); en `app/ingresar/page.tsx` fuera `AVISO_DEL_PASE`, el parametro `acceso` y su aviso; comentario de `lib/roles.ts` ya no menciona el pase de Telegram.
+- Verificado: tsc sin errores, jest middleware y roles (79 pruebas), eslint limpio y `rg "/acceso/|panel-access|AVISO_DEL_PASE"` sin coincidencias en catalogo-cs.
+
+### Fase 5, E3-2 (cierre de auth, backend)
+
+- Borrados `PanelAccessService`, `PortalAuthGuard`, la entidad
+  `PanelAccessToken`, los DTO `panel-access` y `portal-session` y los specs
+  `panel-access.service`, `portal-token` y `portal-auth-csrf`. Fuera las rutas
+  `POST /auth/panel-access` y `POST /auth/portal-session`, y de `AuthService`
+  `issueSessionFromPortalToken` y `verifyPortalToken` (`issueSessionFor` se
+  queda: lo usa el login).
+- `AuthModule` sin esos providers, exports ni `PanelAccessToken` en `forFeature`.
+  `AuthCleanupScheduler` solo purga `auth_sessions` bajo
+  `ADVISORY_LOCKS.authCleanup`; spec ajustado, y `debe-cambiar-password.spec`
+  pierde el argumento sobrante del constructor del controller.
+- `CLAUDE.md`: fuera `PortalAuthGuard`, `PanelAccessService` y la ruta
+  `/acceso/[token]`; los portales se describen con sesion web.
+- Sin migracion: la tabla `panel_access_tokens` queda huerfana hasta la base
+  unica de la Fase 6 (decision P5). `PANEL_BASE_URL` no estaba en el esquema
+  Joi ni en plantillas de entorno; solo la leia el servicio borrado (con
+  respaldo en `WEB_URL`/`FRONTEND_URL`), asi que no sobra nada en config.
+- Verificacion: tsc sin errores, jest completo 217 suites / 2221 tests verdes,
+  el `rg` de simbolos sin coincidencias, eslint sin errores (7 warnings
+  previos de `any` en el scheduler).
