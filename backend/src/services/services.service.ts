@@ -5445,7 +5445,12 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
     if (horasFacturadas) {
       await this.requestOpenEndedFinalPayment(
-        servicioConTotal,
+        // El total viene de la relectura, pero el cliente y la modelo (para el
+        // chat web y su telegramChatId) solo estan en el servicio original.
+        Object.assign(servicioConTotal, {
+          cliente: servicio.cliente,
+          empleada: servicio.empleada,
+        }),
         servicio.cliente?.telegramChatId ?? null,
         horasFacturadas,
         duracionFormatted,
@@ -5592,7 +5597,8 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     horasFacturadas: number,
     duracionFormatted: string,
   ): Promise<void> {
-    if (!clienteChatId) return;
+    // Ni Telegram ni cuenta web: no hay a quien pasarle la cuenta.
+    if (!clienteChatId && !servicio.cliente?.usuarioId) return;
 
     const formatoMoneda = new Intl.NumberFormat(APP_LOCALE, {
       style: 'currency',
@@ -5601,11 +5607,16 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     const horasTexto =
       horasFacturadas === 1 ? '1 hora' : `${horasFacturadas} horas`;
 
-    let mensaje =
+    const cuenta =
       `*Cuenta final del servicio*\n\n` +
       `*Tiempo real:* ${duracionFormatted}\n` +
       `*Horas cobradas:* ${horasTexto} (se redondea hacia arriba a partir de los 15 minutos)\n` +
       `*Total a pagar:* ${formatoMoneda.format(Number(servicio.totalFinal))}`;
+    let mensaje = cuenta;
+    // Sin cuentas bancarias en el texto: si alguna trae una palabra vetada en
+    // la web, el filtro tiraria la frase entera y el cliente se quedaria sin
+    // la cuenta. Con esto al menos sabe el total y que le pasan los datos.
+    let respaldoWeb = `${cuenta}\n\nEn un momentico te paso los datos para la transferencia.`;
 
     if (servicio.metodoPago === 'transferencia') {
       try {
@@ -5619,6 +5630,12 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         mensaje += `\n\nEn un momentico te paso los datos para la transferencia.`;
       }
 
+      /*
+       * La marca es del servicio, no del canal: es la que hace que el chat web
+       * admita la subida del comprobante (`servicioEsperaComprobante`) y la que
+       * lee Telegram. Va antes de avisar para que el boton ya este disponible
+       * cuando el cliente lea el mensaje.
+       */
       try {
         await this.serviciosRepository.update(servicio.id, {
           cobroFinalPendiente: true,
@@ -5629,16 +5646,26 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
           error,
         );
       }
+    } else {
+      respaldoWeb = cuenta;
     }
 
-    try {
-      await this.bot.telegram.sendMessage(clienteChatId, mensaje, {
-        parse_mode: 'Markdown',
-      });
-      await this.recordAgencyMessage(servicio, mensaje);
-    } catch (error) {
-      this.logger.error('No se pudo enviar la cuenta final al cliente:', error);
+    if (clienteChatId) {
+      try {
+        await this.bot.telegram.sendMessage(clienteChatId, mensaje, {
+          parse_mode: 'Markdown',
+        });
+        await this.recordAgencyMessage(servicio, mensaje);
+      } catch (error) {
+        this.logger.error(
+          'No se pudo enviar la cuenta final al cliente:',
+          error,
+        );
+      }
     }
+
+    // Gemelo web: no depende de Telegram ni de que el envio de arriba haya ido.
+    await this.avisarClienteWeb(servicio, mensaje, { respaldo: respaldoWeb });
   }
 
   async requestReturnTransport(servicioId: string): Promise<void> {

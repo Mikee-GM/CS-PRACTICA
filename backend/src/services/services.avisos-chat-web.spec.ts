@@ -1,3 +1,4 @@
+import { palabrasVetadasEn } from '../ai/vocabulario-vetado';
 import { ServicesService } from './services.service';
 
 /**
@@ -24,6 +25,7 @@ describe('ServicesService: avisos al chat web del cliente', () => {
   };
   const usuariosRepository = { findOne: jest.fn() };
   const serviciosRepository = {
+    update: jest.fn(),
     findOne: jest.fn(),
     findOneBy: jest.fn(),
     save: jest.fn((valor: unknown) => valor),
@@ -254,6 +256,99 @@ describe('ServicesService: avisos al chat web del cliente', () => {
       );
       expect(conversationsRepository.save).toHaveBeenCalledTimes(1);
       expect(conversationNotifier.notifyClient).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('cuenta final de un servicio abierto', () => {
+    const cuentas = '1. Banco Uno\nTitular: Ana Perez\nCLABE: 0123456789';
+
+    beforeEach(() => {
+      Object.assign(service, {
+        bankTransferDetails: jest.fn().mockResolvedValue(cuentas),
+      });
+    });
+
+    const pedir = (cliente: Record<string, unknown>, extra = {}) =>
+      (service as any).requestOpenEndedFinalPayment(
+        servicio(cliente, { totalFinal: 1500, ...extra }),
+        (cliente.telegramChatId as string | null) ?? null,
+        3,
+        '2 h 40 min',
+      );
+
+    it('el cliente web recibe el total y las cuentas, sin formato ni emojis', async () => {
+      await pedir(clienteWeb, { metodoPago: 'transferencia' });
+
+      expect(bot.telegram.sendMessage).not.toHaveBeenCalled();
+      const { texto } = conversationNotifier.notifyClient.mock.calls[0][0];
+      expect(texto).toContain('Total a pagar: $1,500.00');
+      expect(texto).toContain('Horas cobradas: 3 horas');
+      expect(texto).toContain('CLABE: 0123456789');
+      expect(texto).toContain('del comprobante');
+      expect(texto).not.toMatch(/[*\p{Extended_Pictographic}]/u);
+      expect(palabrasVetadasEn(texto)).toEqual([]);
+    });
+
+    it('deja marcado el cobro pendiente aunque no haya Telegram', async () => {
+      await pedir(clienteWeb, { metodoPago: 'transferencia' });
+
+      expect(serviciosRepository.update).toHaveBeenCalledWith('svc-1', {
+        cobroFinalPendiente: true,
+      });
+    });
+
+    it('en efectivo avisa el total sin pedir comprobante ni marcar nada', async () => {
+      await pedir(clienteWeb, { metodoPago: 'efectivo' });
+
+      const { texto } = conversationNotifier.notifyClient.mock.calls[0][0];
+      expect(texto).toContain('Total a pagar');
+      expect(texto).not.toContain('comprobante');
+      expect(serviciosRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('un cliente de Telegram sin cuenta web lo recibe igual y no pasa por la web', async () => {
+      await pedir(clienteTelegram, { metodoPago: 'transferencia' });
+
+      expect(bot.telegram.sendMessage).toHaveBeenCalledWith(
+        '555',
+        expect.stringContaining('*Total a pagar:*'),
+        { parse_mode: 'Markdown' },
+      );
+      expect(conversationNotifier.notifyClient).not.toHaveBeenCalled();
+    });
+
+    it('si Telegram falla, el chat web igual recibe la cuenta', async () => {
+      bot.telegram.sendMessage.mockRejectedValueOnce(new Error('caido'));
+
+      await pedir(
+        { ...clienteWeb, telegramChatId: '777' },
+        { metodoPago: 'transferencia' },
+      );
+
+      expect(conversationNotifier.notifyClient).toHaveBeenCalledTimes(1);
+    });
+
+    it('si una cuenta trae una palabra vetada, la web cae al texto sin cuentas', async () => {
+      (service as any).bankTransferDetails.mockResolvedValue(
+        'Titular: Agencia Uno CLABE 0123',
+      );
+
+      await pedir(clienteWeb, { metodoPago: 'transferencia' });
+
+      const { texto } = conversationNotifier.notifyClient.mock.calls[0][0];
+      expect(texto).toContain('Total a pagar');
+      expect(texto).toContain('te paso los datos');
+      expect(palabrasVetadasEn(texto)).toEqual([]);
+    });
+
+    it('sin Telegram ni cuenta web no hace nada', async () => {
+      await pedir(
+        { id: 'cli-x', usuarioId: null, telegramChatId: null },
+        { metodoPago: 'transferencia' },
+      );
+
+      expect(conversationNotifier.notifyClient).not.toHaveBeenCalled();
+      expect(serviciosRepository.update).not.toHaveBeenCalled();
     });
   });
 });
