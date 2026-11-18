@@ -1,9 +1,9 @@
 /**
  * Que rol puede entrar en cada area del panel, y donde aterriza cada uno.
  *
- * Vive en un solo sitio porque lo consultan dos capas distintas —el middleware
- * que corta el paso y el canje del pase de Telegram que decide el destino— y si
- * divergieran, una mandaria al usuario justo a donde la otra no le deja entrar.
+ * Vive en un solo sitio para que el middleware y las paginas que deciden el
+ * destino no divergan: si lo hicieran, una mandaria al usuario justo a donde la
+ * otra no le deja entrar.
  */
 
 export type Rol = "admin" | "jefe" | "empleada" | "chofer" | "cliente";
