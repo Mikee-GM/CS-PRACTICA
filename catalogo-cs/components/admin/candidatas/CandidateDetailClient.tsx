@@ -116,7 +116,7 @@ export default function CandidateDetailClient({
         {(!screening.answers || screening.answers.length === 0) ? (
           <p className="py-4 text-center text-sm italic text-zinc-600">
             {screening.status === "pendiente"
-              ? "Todavía no abre el enlace de Telegram."
+              ? "Todavía no abre el enlace."
               : "Todavía no hay respuestas registradas."}
           </p>
         ) : (
@@ -194,11 +194,6 @@ export default function CandidateDetailClient({
                   onChange={(e) => setForm({ ...form, precioBaseHora: e.target.value })}
                 />
               </div>
-              <p className="text-xs text-zinc-500">
-                {screening.telegramChatId
-                  ? "Su Telegram ya vinculado se conectará automáticamente a la cuenta nueva."
-                  : "Esta candidata no llegó a vincular su Telegram — tendrá que vincularlo manualmente después."}
-              </p>
               <div className="flex flex-wrap gap-4">
                 <label className="flex items-center gap-2 text-sm text-zinc-300">
                   <input

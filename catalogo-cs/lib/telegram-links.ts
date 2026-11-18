@@ -15,7 +15,3 @@ export function getEmployeeHireTelegramUrl(employeeId: string) {
 export function getGroupServiceTelegramUrl() {
   return `https://t.me/${getTelegramBotUsername()}?start=servicio_grupal`;
 }
-
-export function getCandidateScreeningTelegramUrl(token: string) {
-  return `https://t.me/${getTelegramBotUsername()}?start=candidata_${token}`;
-}

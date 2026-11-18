@@ -11,7 +11,7 @@ import {
   deleteScreeningQuestion,
   updateScreeningQuestion,
 } from "@/lib/actions/candidate-screening";
-import { getCandidateScreeningTelegramUrl } from "@/lib/telegram-links";
+import { enlaceDeEvaluacion } from "@/lib/candidata";
 import type { CandidateScreening, ScreeningQuestion } from "@/lib/types";
 
 const STATUS_LABEL: Record<CandidateScreening["status"], string> = {
@@ -174,7 +174,7 @@ export default function CandidatasClient({
         questionIds: [...selectedQuestionIds],
       });
       setScreenings((prev) => [screening, ...prev]);
-      setGeneratedLink(getCandidateScreeningTelegramUrl(screening.token));
+      setGeneratedLink(enlaceDeEvaluacion(window.location.origin, screening.token));
       toast.success("Evaluación creada");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo crear la evaluación");
@@ -485,7 +485,7 @@ export default function CandidatasClient({
                   Evaluación creada
                 </h3>
                 <p className="mb-4 text-sm text-zinc-400">
-                  Comparte este enlace con {candidateName} para que responda el cuestionario por Telegram.
+                  Comparte este enlace con {candidateName} para que responda el cuestionario desde su teléfono.
                 </p>
                 <div className="flex items-center gap-2 rounded-lg border border-zinc-800 bg-black/40 p-3">
                   <code className="flex-1 truncate text-xs text-zinc-300">{generatedLink}</code>
