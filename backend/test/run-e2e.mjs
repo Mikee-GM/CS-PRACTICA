@@ -63,11 +63,9 @@ try {
     ]);
     ownsContainer = true;
     waitForPostgres();
-    const binding = run(
-      'docker',
-      ['port', containerName, '5432/tcp'],
-      { capture: true },
-    );
+    const binding = run('docker', ['port', containerName, '5432/tcp'], {
+      capture: true,
+    });
     host = '127.0.0.1';
     port = binding.slice(binding.lastIndexOf(':') + 1);
   }

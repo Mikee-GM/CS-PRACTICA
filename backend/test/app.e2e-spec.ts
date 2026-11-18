@@ -9,7 +9,6 @@ import {
 import { Test, TestingModule } from '@nestjs/testing';
 import cookieParser from 'cookie-parser';
 import { createHmac } from 'crypto';
-import { getBotToken } from 'nestjs-telegraf';
 import request from 'supertest';
 import { DataSource } from 'typeorm';
 import { AppModule } from '../src/app.module';
@@ -27,10 +26,6 @@ import {
   employeeOperationActions,
 } from '../src/services/operations/service-operation-state';
 import { ServicesService } from '../src/services/services.service';
-import { TelegramConversationsService } from '../src/telegram-conversations/telegram-conversations.service';
-import { TelegramBookingUpdate } from '../src/telegram/telegram-booking.update';
-import { parseTelegramStartPayload } from '../src/telegram/telegram-start-payload';
-import { TelegramService } from '../src/telegram/telegram.service';
 import { Usuarios } from '../src/users/entities/user.entity';
 import { CreateServiceOperationsCore1810000000000 } from '../src/migrations/1810000000000-CreateServiceOperationsCore';
 
@@ -48,42 +43,7 @@ const IDS = {
   service: '77777777-7777-4777-8777-777777777777',
   extra: '88888888-8888-4888-8888-888888888888',
   timerService: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  draftService: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-  booking: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-  otherBooking: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
 } as const;
-
-const telegramMethods = new Map<PropertyKey, jest.Mock>();
-const telegram = new Proxy<Record<PropertyKey, jest.Mock>>(
-  {},
-  {
-    get: (_target, property) => {
-      let method = telegramMethods.get(property);
-      if (!method) {
-        method = jest.fn().mockResolvedValue({ message_id: 101 });
-        telegramMethods.set(property, method);
-      }
-      return method;
-    },
-  },
-);
-const botMethods = new Map<PropertyKey, jest.Mock>();
-const bot = new Proxy<Record<PropertyKey, unknown>>(
-  { telegram },
-  {
-    get: (target, property) => {
-      // Evita que `await` interprete el doble como una Promise pendiente.
-      if (property === 'then') return undefined;
-      if (property in target) return target[property];
-      let method = botMethods.get(property);
-      if (!method) {
-        method = jest.fn();
-        botMethods.set(property, method);
-      }
-      return method;
-    },
-  },
-);
 
 const notifications = {
   notificar: jest.fn((_userId: string, message: { titulo: string }) => {
@@ -105,11 +65,6 @@ const aiMessages = {
       Promise.resolve(fallback),
   ),
 };
-const telegramAdapter = {
-  sendMessage: jest.fn().mockResolvedValue({ message_id: 102 }),
-  deleteMessage: jest.fn().mockResolvedValue(undefined),
-  deleteForumTopic: jest.fn().mockResolvedValue(undefined),
-};
 const realtime = {
   emitToBoss: jest.fn(),
   emitToBosses: jest.fn(),
@@ -127,19 +82,13 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
   let auth: AuthService;
   let services: ServicesService;
   let driverTrips: DriverTripsService;
-  let conversations: TelegramConversationsService;
-  let bookingUpdate: TelegramBookingUpdate;
 
   beforeAll(async () => {
     moduleFixture = await Test.createTestingModule({ imports: [AppModule] })
-      .overrideProvider(getBotToken())
-      .useValue(bot)
       .overrideProvider(NotificationsService)
       .useValue(notifications)
       .overrideProvider(AiMessageService)
       .useValue(aiMessages)
-      .overrideProvider(TelegramService)
-      .useValue(telegramAdapter)
       .overrideProvider(RealtimeBus)
       .useValue({
         onRemoteMessage: jest.fn(),
@@ -174,8 +123,6 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
     auth = moduleFixture.get(AuthService);
     services = moduleFixture.get(ServicesService);
     driverTrips = moduleFixture.get(DriverTripsService);
-    conversations = moduleFixture.get(TelegramConversationsService);
-    bookingUpdate = moduleFixture.get(TelegramBookingUpdate);
   });
 
   afterAll(async () => {
@@ -190,19 +137,17 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
 
   async function seedBase() {
     // Esta base vive en un contenedor efímero creado por run-e2e.mjs.
-    await dataSource.query(
-      'TRUNCATE TABLE "usuarios", "clientes", "telegram_sessions" CASCADE',
-    );
+    await dataSource.query('TRUNCATE TABLE "usuarios", "clientes" CASCADE');
     await dataSource.query(
       `INSERT INTO "usuarios"
-        (id, email, password_hash, rol, nombre, telegram_chat_id, activo, disponible, en_jornada)
+        (id, email, password_hash, rol, nombre, activo, disponible, en_jornada)
        VALUES
-        ($1, 'jefe-e2e@example.com', 'hash', 'jefe', 'Jefe E2E', NULL, true, true, true),
-        ($2, 'otro-jefe-e2e@example.com', 'hash', 'jefe', 'Otro Jefe E2E', NULL, true, true, true),
-        ($3, 'empleada-e2e@example.com', 'hash', 'empleada', 'Empleada E2E', NULL, true, true, true),
-        ($4, 'otra-empleada-e2e@example.com', 'hash', 'empleada', 'Otra Empleada E2E', NULL, true, true, true),
-        ($5, 'chofer-e2e@example.com', 'hash', 'chofer', 'Chofer E2E', 9003, true, true, true),
-        ($6, 'admin-e2e@example.com', 'hash', 'admin', 'Admin E2E', NULL, true, true, true)`,
+        ($1, 'jefe-e2e@example.com', 'hash', 'jefe', 'Jefe E2E', true, true, true),
+        ($2, 'otro-jefe-e2e@example.com', 'hash', 'jefe', 'Otro Jefe E2E', true, true, true),
+        ($3, 'empleada-e2e@example.com', 'hash', 'empleada', 'Empleada E2E', true, true, true),
+        ($4, 'otra-empleada-e2e@example.com', 'hash', 'empleada', 'Otra Empleada E2E', true, true, true),
+        ($5, 'chofer-e2e@example.com', 'hash', 'chofer', 'Chofer E2E', true, true, true),
+        ($6, 'admin-e2e@example.com', 'hash', 'admin', 'Admin E2E', true, true, true)`,
       [
         IDS.boss,
         IDS.otherBoss,
@@ -216,12 +161,12 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
       `INSERT INTO "empleadas"
         (id, usuario_id, nombre_real, nombre_artistico, slug_catalogo,
          precio_base_hora, disponible, catalogo_activo, ubicacion_lat,
-         ubicacion_lng, ultima_ubicacion_at, jefe_id, modo_bot)
+         ubicacion_lng, ultima_ubicacion_at, jefe_id)
        VALUES
         ($1, $2, 'Empleada E2E', 'Luna E2E', 'luna-e2e', 200,
-         true, true, 4.7109000, -74.0721000, now(), $3, false),
+         true, true, 4.7109000, -74.0721000, now(), $3),
         ($4, $5, 'Otra Empleada E2E', 'Sol E2E', 'sol-e2e', 220,
-         true, true, 4.7209000, -74.0821000, now(), $6, false)`,
+         true, true, 4.7209000, -74.0821000, now(), $6)`,
       [
         IDS.employee,
         IDS.employeeUser,
@@ -232,17 +177,17 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
       ],
     );
     await dataSource.query(
-      `INSERT INTO "clientes" (id, telegram_chat_id, nombre_telegram)
-       VALUES ($1, 9001, 'Cliente E2E')`,
+      `INSERT INTO "clientes" (id, nombre_telegram)
+       VALUES ($1, 'Cliente E2E')`,
       [IDS.client],
     );
     await dataSource.query(
       `INSERT INTO "choferes"
         (id, usuario_id, nombre, telefono, disponible, ubicacion_lat,
-         ubicacion_lng, ultima_ubicacion_at, modo_bot, vehiculo_marca,
+         ubicacion_lng, ultima_ubicacion_at, vehiculo_marca,
          vehiculo_modelo, vehiculo_color, vehiculo_placa)
        VALUES ($1, $2, 'Chofer E2E', '3000000000', true, 4.7110000,
-               -74.0720000, now(), true, 'Nissan', 'Versa', 'Negro',
+               -74.0720000, now(), 'Nissan', 'Versa', 'Negro',
                'E2E-123')`,
       [IDS.driver, IDS.driverUser],
     );
@@ -727,212 +672,6 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
     );
   });
 
-  it('opera de extremo a extremo una conversación pre-servicio con ownership', async () => {
-    const api = '/api/v1';
-    await dataSource.query('DELETE FROM servicios');
-    expect(
-      parseTelegramStartPayload(`/start contratar_${IDS.employee}`),
-    ).toEqual({ type: 'employee_hire', employeeId: IDS.employee });
-    await dataSource.query(
-      `INSERT INTO telegram_sessions (key, data)
-       VALUES ('9001:9001', jsonb_build_object(
-         'bookingSessionId', $1::text,
-         'empleadaId', $2::text,
-         'iaActiva', true,
-         'humanTakeover', false,
-         'bookingStatus', 'COLLECTING',
-         'step', 'CHAT_CON_EMPLEADA',
-         'duracionPactadaHoras', 2,
-         'metodoPago', 'efectivo'
-       ))`,
-      [IDS.booking, IDS.employee],
-    );
-
-    await (bookingUpdate as any).recordDraftConversation(
-      {
-        from: { id: 9001 },
-        session: {
-          bookingSessionId: IDS.booking,
-          empleadaId: IDS.employee,
-          iaActiva: true,
-          humanTakeover: false,
-        },
-      },
-      'cliente',
-      'Primer mensaje pre-servicio E2E',
-    );
-
-    expect(realtime.emitToBosses).toHaveBeenCalledWith(
-      [IDS.boss],
-      expect.objectContaining({
-        type: 'chat_message',
-        data: expect.objectContaining({
-          servicioId: null,
-          bookingSessionId: IDS.booking,
-          intendedEmployeeId: IDS.employee,
-        }),
-      }),
-    );
-    expect(realtime.emitToJefes).not.toHaveBeenCalled();
-
-    const bossToken = await accessToken(IDS.boss);
-    const otherBossToken = await accessToken(IDS.otherBoss);
-    const ownerList = await request(app!.getHttpServer())
-      .get(`${api}/telegram-conversations/pre-service`)
-      .set('Authorization', `Bearer ${bossToken}`)
-      .expect(200);
-    expect(ownerList.body).toEqual([
-      expect.objectContaining({
-        bookingSessionId: IDS.booking,
-        service: null,
-        intendedEmployee: { id: IDS.employee, name: 'Luna E2E' },
-        bookingData: expect.objectContaining({
-          durationHours: 2,
-          paymentMethod: 'efectivo',
-        }),
-      }),
-    ]);
-    await request(app!.getHttpServer())
-      .get(`${api}/telegram-conversations/pre-service`)
-      .set('Authorization', `Bearer ${otherBossToken}`)
-      .expect(200)
-      .expect([]);
-    await request(app!.getHttpServer())
-      .get(`${api}/telegram-conversations/session/${IDS.booking}`)
-      .set('Authorization', `Bearer ${otherBossToken}`)
-      .expect(403);
-    const history = await request(app!.getHttpServer())
-      .get(`${api}/telegram-conversations/session/${IDS.booking}`)
-      .set('Authorization', `Bearer ${bossToken}`)
-      .expect(200);
-    expect(history.body).toEqual([
-      expect.objectContaining({ mensaje: 'Primer mensaje pre-servicio E2E' }),
-    ]);
-
-    await request(app!.getHttpServer())
-      .post(`${api}/telegram-conversations/session/${IDS.booking}/toggle-ai`)
-      .set('Authorization', `Bearer ${bossToken}`)
-      .send({ iaActiva: false })
-      .expect(201);
-    const [pausedSession] = await dataSource.query(
-      `SELECT data FROM telegram_sessions WHERE key = '9001:9001'`,
-    );
-    expect(pausedSession.data).toMatchObject({
-      iaActiva: false,
-      humanTakeover: true,
-    });
-
-    await request(app!.getHttpServer())
-      .post(`${api}/telegram-conversations/session/${IDS.booking}/messages`)
-      .set('Authorization', `Bearer ${bossToken}`)
-      .send({ message: 'Respuesta humana pre-servicio E2E' })
-      .expect(201);
-    const [persistedReply] = await dataSource.query(
-      `SELECT emisor, mensaje, ia_activa
-         FROM conversaciones_telegram
-        WHERE booking_session_id = $1 AND mensaje = $2`,
-      [IDS.booking, 'Respuesta humana pre-servicio E2E'],
-    );
-    expect(persistedReply).toMatchObject({
-      emisor: 'jefe',
-      mensaje: 'Respuesta humana pre-servicio E2E',
-      ia_activa: false,
-    });
-
-    await request(app!.getHttpServer())
-      .post(`${api}/telegram-conversations/session/${IDS.booking}/toggle-ai`)
-      .set('Authorization', `Bearer ${bossToken}`)
-      .send({ iaActiva: true })
-      .expect(201);
-    const [resumedSession] = await dataSource.query(
-      `SELECT data FROM telegram_sessions WHERE key = '9001:9001'`,
-    );
-    expect(resumedSession.data).toMatchObject({
-      iaActiva: true,
-      humanTakeover: false,
-    });
-
-    await insertService(IDS.draftService, 'preparacion');
-    await (bookingUpdate as any).attachAndReplayDraftConversation(
-      IDS.booking,
-      await service(IDS.draftService),
-      '-100-e2e',
-    );
-    const afterLink = await request(app!.getHttpServer())
-      .get(`${api}/telegram-conversations/pre-service`)
-      .set('Authorization', `Bearer ${bossToken}`)
-      .expect(200);
-    expect(afterLink.body).toEqual([]);
-    const linkedHistory = await request(app!.getHttpServer())
-      .get(`${api}/telegram-conversations/service/${IDS.draftService}`)
-      .set('Authorization', `Bearer ${bossToken}`)
-      .expect(200);
-    expect(
-      linkedHistory.body.messages.map(
-        (row: { mensaje: string }) => row.mensaje,
-      ),
-    ).toEqual(
-      expect.arrayContaining([
-        'Primer mensaje pre-servicio E2E',
-        'Respuesta humana pre-servicio E2E',
-      ]),
-    );
-    const [{ count }] = await dataSource.query(
-      `SELECT COUNT(DISTINCT booking_session_id)::int AS count
-         FROM conversaciones_telegram
-        WHERE booking_session_id = $1`,
-      [IDS.booking],
-    );
-    expect(count).toBe(1);
-  });
-
-  it('prohíbe el acceso cruzado a una conversación de otra empleada y equipo', async () => {
-    await dataSource.query(
-      `INSERT INTO telegram_sessions (key, data)
-       VALUES ('9001:other', jsonb_build_object(
-         'bookingSessionId', $1::text,
-         'empleadaId', $2::text,
-         'iaActiva', true,
-         'humanTakeover', false,
-         'bookingStatus', 'COLLECTING',
-         'step', 'CHAT_CON_EMPLEADA'
-       ))`,
-      [IDS.otherBooking, IDS.otherEmployee],
-    );
-    await (bookingUpdate as any).recordDraftConversation(
-      {
-        from: { id: 9001 },
-        session: {
-          bookingSessionId: IDS.otherBooking,
-          empleadaId: IDS.otherEmployee,
-          iaActiva: true,
-        },
-      },
-      'cliente',
-      'Mensaje del otro equipo E2E',
-    );
-
-    const bossToken = await accessToken(IDS.boss);
-    const otherBossToken = await accessToken(IDS.otherBoss);
-    await request(app!.getHttpServer())
-      .get(`/api/v1/telegram-conversations/session/${IDS.otherBooking}`)
-      .set('Authorization', `Bearer ${bossToken}`)
-      .expect(403);
-    const otherTeamList = await request(app!.getHttpServer())
-      .get('/api/v1/telegram-conversations/pre-service')
-      .set('Authorization', `Bearer ${otherBossToken}`)
-      .expect(200);
-    expect(otherTeamList.body).toEqual([
-      expect.objectContaining({
-        bookingSessionId: IDS.otherBooking,
-        intendedEmployee: {
-          id: IDS.otherEmployee,
-          name: 'Sol E2E',
-        },
-      }),
-    ]);
-  });
-
   describe('superficie HTTP del flujo operativo', () => {
     const api = '/api/v1';
 
@@ -1252,153 +991,5 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
         'hard_deleted',
       ]);
     });
-  });
-
-  it('crea dos servicios independientes para el mismo cliente y conserva el historial', async () => {
-    await dataSource.query('DELETE FROM servicios');
-    await dataSource.query(
-      `UPDATE usuarios SET telegram_chat_id = CASE WHEN id = $1 THEN 9012 ELSE 9013 END
-         WHERE id IN ($1, $2)`,
-      [IDS.boss, IDS.otherBoss],
-    );
-
-    const [client] = await dataSource.query(
-      `SELECT id, nombre_telegram AS "nombreTelegram"
-         FROM clientes WHERE id = $1`,
-      [IDS.client],
-    );
-    const [employeeA] = await dataSource.query(
-      `SELECT id, nombre_artistico AS "nombreArtistico", precio_base_hora AS "precioBaseHora", jefe_id AS "jefeId"
-         FROM empleadas WHERE id = $1`,
-      [IDS.employee],
-    );
-    const [employeeB] = await dataSource.query(
-      `SELECT id, nombre_artistico AS "nombreArtistico", precio_base_hora AS "precioBaseHora", jefe_id AS "jefeId"
-         FROM empleadas WHERE id = $1`,
-      [IDS.otherEmployee],
-    );
-    const pause = jest
-      .spyOn(bookingUpdate as any, 'pausaComoSiLoEstuvieraEscribiendo')
-      .mockResolvedValue(undefined);
-
-    const buildContext = (bookingSessionId: string, employeeId: string) =>
-      ({
-        from: { id: 9001, first_name: 'Cliente E2E' },
-        session: {
-          bookingSessionId,
-          bookingStatus: 'READY',
-          empleadaId: employeeId,
-          duracionPactadaHoras: 2,
-          metodoPago: 'efectivo',
-          locationNameSnapshot: 'Hotel E2E',
-        },
-        reply: jest.fn().mockResolvedValue(undefined),
-        sendChatAction: jest.fn().mockResolvedValue(undefined),
-        telegram: {
-          sendChatAction: jest.fn().mockResolvedValue(undefined),
-          sendMessage: jest.fn().mockResolvedValue({ message_id: 901 }),
-        },
-      }) as any;
-
-    try {
-      const first = buildContext(IDS.booking, employeeB.id);
-      await (bookingUpdate as any).recordDraftConversation(
-        first,
-        'cliente',
-        'Quiero dos horas con Sol E2E',
-      );
-      const serviceOne = await bookingUpdate.finalizeBooking(
-        first,
-        client,
-        employeeB,
-        2,
-        'efectivo',
-        '4.7109000',
-        '-74.0721000',
-        'Hotel E2E',
-        '9001',
-      );
-      expect(serviceOne).toBeDefined();
-      expect(first.session.bookingStatus).toBe('SERVICE_CREATED');
-      expect(first.session.bookingServiceId).toBe(serviceOne!.id);
-
-      const duplicate = await bookingUpdate.finalizeBooking(
-        first,
-        client,
-        employeeB,
-        2,
-        'efectivo',
-        '4.7109000',
-        '-74.0721000',
-        'Hotel E2E',
-        '9001',
-      );
-      expect(duplicate!.id).toBe(serviceOne!.id);
-
-      const second = buildContext(IDS.otherBooking, employeeA.id);
-      await (bookingUpdate as any).recordDraftConversation(
-        second,
-        'cliente',
-        'Una semana despues quiero otro servicio con Luna E2E',
-      );
-      const serviceTwo = await bookingUpdate.finalizeBooking(
-        second,
-        client,
-        employeeA,
-        1,
-        'tarjeta',
-        '4.7209000',
-        '-74.0821000',
-        'Domicilio E2E',
-        '9001',
-      );
-      expect(serviceTwo).toBeDefined();
-      expect(serviceTwo!.id).not.toBe(serviceOne!.id);
-      expect(second.session.bookingSessionId).toBe(IDS.otherBooking);
-
-      const services = await dataSource.query(
-        `SELECT id, booking_session_id, empleada_id, metodo_pago
-           FROM servicios
-          WHERE id IN ($1, $2)
-          ORDER BY id`,
-        [serviceOne!.id, serviceTwo!.id],
-      );
-      expect(services).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            id: serviceOne!.id,
-            booking_session_id: IDS.booking,
-            empleada_id: employeeB.id,
-          }),
-          expect.objectContaining({
-            id: serviceTwo!.id,
-            booking_session_id: IDS.otherBooking,
-            empleada_id: employeeA.id,
-          }),
-        ]),
-      );
-
-      const history = await dataSource.query(
-        `SELECT booking_session_id, servicio_id, mensaje
-           FROM conversaciones_telegram
-          WHERE booking_session_id IN ($1, $2)
-          ORDER BY enviado_at`,
-        [IDS.booking, IDS.otherBooking],
-      );
-      expect(history).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            booking_session_id: IDS.booking,
-            servicio_id: serviceOne!.id,
-          }),
-          expect.objectContaining({
-            booking_session_id: IDS.otherBooking,
-            servicio_id: serviceTwo!.id,
-          }),
-        ]),
-      );
-    } finally {
-      pause.mockRestore();
-    }
   });
 });

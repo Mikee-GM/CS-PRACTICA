@@ -6,7 +6,7 @@ import {
   type TipoMensajeEquipo,
 } from '../entities/team-message.entity';
 
-/** Tope de un mensaje. Telegram parte cualquier cosa mas larga. */
+/** Tope de un mensaje. Mas largo deja de ser un mensaje de coordinacion. */
 export const MAX_LARGO_MENSAJE = 2000;
 
 export class EnviarMensajeEquipoDto {

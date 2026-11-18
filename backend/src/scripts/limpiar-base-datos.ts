@@ -7,7 +7,6 @@
  * - Lugares registrados (preset_service_locations)
  * - Departamentos (apartments)
  * - Jefes, Admins y Choferes (usuarios, choferes)
- * - Cuentas de Telegram y grupos vinculados (telegram_chat_id, grupo_telegram_id en usuarios y sesiones asociadas)
  * - Configuraciones del sistema (tarifas de transporte, cuentas bancarias, liquidaciones, loyalty tiers, reglamentos, preguntas de screening, preferencias)
  *
  * VACÍA:
@@ -54,7 +53,6 @@ const TABLAS_PRESERVADAS = new Set([
 const TABLAS_A_VACIAR = [
   // Clientes y fidelidad
   'alertas_clientes',
-  'conversaciones_telegram',
   'loyalty_transactions',
   'client_memberships',
   'clientes',
@@ -116,8 +114,6 @@ const TABLAS_A_VACIAR = [
   'realtime_outbox',
   'panel_access_tokens',
   'auth_sessions',
-  'telegram_link_attempts',
-  'employee_telegram_bots',
 ];
 
 interface ConteoFila {
@@ -145,22 +141,6 @@ async function contarFilas(tabla: string): Promise<number> {
   } catch {
     return 0;
   }
-}
-
-async function obtenerTelegramIdsDelPersonal(): Promise<Set<string>> {
-  const usuarios: Array<{
-    telegram_chat_id: string | null;
-    grupo_telegram_id: string | null;
-  }> = await AppDataSource.query(
-    `SELECT telegram_chat_id::text, grupo_telegram_id::text FROM usuarios`,
-  );
-
-  const ids = new Set<string>();
-  for (const u of usuarios) {
-    if (u.telegram_chat_id) ids.add(u.telegram_chat_id);
-    if (u.grupo_telegram_id) ids.add(u.grupo_telegram_id);
-  }
-  return ids;
 }
 
 async function main(): Promise<void> {
@@ -223,49 +203,11 @@ async function main(): Promise<void> {
       }
     }
 
-    // 3. Revisión de telegram_sessions
-    let totalSesiones = 0;
-    let sesionesStaff = 0;
-    let sesionesClientes = 0;
-
-    if (tablasEnDb.has('telegram_sessions')) {
-      const idsPersonal = await obtenerTelegramIdsDelPersonal();
-      const todasLasSesiones: Array<{ key: string }> =
-        await AppDataSource.query(`SELECT key FROM telegram_sessions`);
-      totalSesiones = todasLasSesiones.length;
-
-      for (const s of todasLasSesiones) {
-        const partes = s.key.split(':');
-        const coincideConStaff = partes.some((p) => idsPersonal.has(p));
-        if (coincideConStaff) {
-          sesionesStaff++;
-        } else {
-          sesionesClientes++;
-        }
-      }
-
-      console.log(
-        '\n---------------------------------------------------------------',
-      );
-      console.log('3. SESIONES DE TELEGRAM (telegram_sessions)');
-      console.log(
-        '---------------------------------------------------------------',
-      );
-      console.log(`  Total de sesiones almacenadas      : ${totalSesiones}`);
-      console.log(
-        `  Sesiones de staff / modelos / grupos: ${sesionesStaff} (SE CONSERVAN)`,
-      );
-      console.log(
-        `  Sesiones de clientes / anónimos    : ${sesionesClientes} (SE BORRARAN)`,
-      );
-    }
-
-    // 4. Tablas desconocidas en DB (si las hubiera)
+    // 3. Tablas desconocidas en DB (si las hubiera)
     const tablasNoClasificadas = [...tablasEnDb].filter(
       (t) =>
         !TABLAS_PRESERVADAS.has(t) &&
         !TABLAS_A_VACIAR.includes(t) &&
-        t !== 'telegram_sessions' &&
         !t.startsWith('typeorm_metadata') &&
         !t.startsWith('migrations'),
     );
@@ -284,8 +226,7 @@ async function main(): Promise<void> {
       '\n===============================================================',
     );
     console.log(
-      `RESUMEN: ${aVaciarExistentes.length} tablas a vaciar (~${totalRegistrosABorrar} registros), ` +
-        `${sesionesClientes} sesiones de clientes a purgar.`,
+      `RESUMEN: ${aVaciarExistentes.length} tablas a vaciar (~${totalRegistrosABorrar} registros).`,
     );
     console.log(
       '===============================================================',
@@ -321,31 +262,7 @@ async function main(): Promise<void> {
         );
       }
 
-      // 2. Limpieza de sesiones de Telegram de clientes
-      if (tablasEnDb.has('telegram_sessions') && sesionesClientes > 0) {
-        const idsPersonal = await obtenerTelegramIdsDelPersonal();
-        if (idsPersonal.size > 0) {
-          const idsArray = Array.from(idsPersonal);
-          console.log(
-            `- Purgando sesiones de clientes en telegram_sessions (conservando ${idsArray.length} IDs de personal/grupos)...`,
-          );
-          await queryRunner.query(
-            `DELETE FROM telegram_sessions 
-              WHERE NOT EXISTS (
-                SELECT 1 FROM usuarios u 
-                 WHERE (u.telegram_chat_id IS NOT NULL AND telegram_sessions.key LIKE '%' || u.telegram_chat_id::text || '%')
-                    OR (u.grupo_telegram_id IS NOT NULL AND telegram_sessions.key LIKE '%' || u.grupo_telegram_id::text || '%')
-              )`,
-          );
-        } else {
-          console.log(
-            `- Purgando sesiones de telegram_sessions sin usuarios vinculados...`,
-          );
-          await queryRunner.query(`TRUNCATE TABLE telegram_sessions`);
-        }
-      }
-
-      // 3. Reset de contadores de servicios y calificaciones en modelos
+      // 2. Reset de contadores de servicios y calificaciones en modelos
       if (tablasEnDb.has('empleadas')) {
         console.log(
           '- Reseteando métricas de servicios y calificaciones en empleadas...',
@@ -358,7 +275,7 @@ async function main(): Promise<void> {
         );
       }
 
-      // 4. Reset de contadores en choferes
+      // 3. Reset de contadores en choferes
       if (tablasEnDb.has('choferes')) {
         console.log('- Reseteando contadores de disponibilidad en choferes...');
         await queryRunner.query(
@@ -369,12 +286,12 @@ async function main(): Promise<void> {
         );
       }
 
-      // 5. Commit de la transacción
+      // 4. Commit de la transacción
       await queryRunner.commitTransaction();
       console.log('\n✓ TRANSACCIÓN COMPLETADA CON ÉXITO.');
       console.log('✓ Todas las tablas operativas han sido vaciadas.');
       console.log(
-        '✓ Modelos, lugares, departamentos, jefes, choferes y cuentas/grupos de Telegram se han conservado intactos.\n',
+        '✓ Modelos, lugares, departamentos, jefes y choferes se han conservado intactos.\n',
       );
     } catch (error) {
       console.error(

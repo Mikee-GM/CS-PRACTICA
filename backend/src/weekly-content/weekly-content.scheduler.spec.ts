@@ -52,7 +52,7 @@ describe('WeeklyContentScheduler', () => {
     dataSource,
   });
 
-  /** Ciclo pendiente de una modelo. Ya no hace falta que tenga Telegram. */
+  /** Ciclo pendiente de una modelo. Ya no hace falta un chat vinculado. */
   const pendiente = (overrides: Record<string, unknown> = {}) => ({
     id: 'sched-1',
     empleadaId: 'emp-1',
@@ -91,12 +91,12 @@ describe('WeeklyContentScheduler', () => {
     (scheduler as any).handleExhaustedReminders(SEMANA) as Promise<void>;
 
   /*
-   * Decision 3 de la Fase 5: el filtro por `telegramChatId` dejaba fuera del
+   * Decision 3 de la Fase 5: el filtro por chat vinculado dejaba fuera del
    * ciclo, y de la multa, a toda modelo sin bot.
    */
-  it('pide las fotos tambien a la modelo sin Telegram vinculado', async () => {
+  it('pide las fotos tambien a la modelo sin chat vinculado', async () => {
     empleadasRepo.find.mockResolvedValue([
-      { id: 'emp-1', usuarioId: 'user-1', usuario: { telegramChatId: null } },
+      { id: 'emp-1', usuarioId: 'user-1', usuario: {} },
     ]);
     scheduleRepo.findOne.mockResolvedValue(null);
 

@@ -493,8 +493,7 @@ export class ChallengesService {
   /**
    * Usuario de cada participante, para avisarle por push.
    *
-   * Antes se buscaba su chat de Telegram y quien no lo tenia vinculado se
-   * quedaba sin enterarse del reto. Todo participante tiene usuario.
+   * Se avisa a todos por su usuario: no hay participante sin enterarse del reto. Todo participante tiene usuario.
    */
   private async participantUserIds(
     type: ChallengeParticipantType,

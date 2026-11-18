@@ -15,7 +15,7 @@ import {
 /**
  * Un aviso, descrito por lo que significa y no por como se envia.
  *
- * Quien lo emite no sabe si saldra por push, por Telegram o por los dos: esa
+ * Quien lo emite no sabe por que canal saldra (push, chat web o varios): esa
  * decision vive aqui dentro. Es lo que permite añadir canales sin volver a
  * tocar los puntos que avisan, que hoy pasan del centenar.
  */

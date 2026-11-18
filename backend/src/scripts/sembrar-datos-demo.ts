@@ -159,7 +159,6 @@ export const TABLAS_EN_ORDEN_DE_BORRADO = [
   'prorrogas',
   'extras_servicio',
   'solicitudes_servicio_manual',
-  'conversaciones_telegram',
   'alertas_clientes',
   'servicios',
   'loyalty_transactions',
@@ -256,8 +255,8 @@ export async function limpiar(qr: QueryRunner): Promise<number> {
 
 export async function sembrar(qr: QueryRunner): Promise<void> {
   // -------------------------------------------------------------------------
-  // Personas. Todas con teléfono, Telegram y grupo: son campos opcionales que
-  // el panel enseña y que en una base a medias nunca se ven.
+  // Personas. Todas con teléfono: es un campo opcional que el panel enseña y que
+  // en una base a medias nunca se ve.
   // -------------------------------------------------------------------------
   const usuarioBase = (
     uuid: string,
@@ -265,13 +264,6 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
     rol: string,
     nombre: string,
     apellido: string,
-    /*
-     * `null` cuando todavia no ha vinculado su Telegram. Es un estado real y
-     * frecuente --a una modelo recien dada de alta le pasa hasta que canjea su
-     * codigo-- y sin ninguna fila asi el panel no puede enseñar como se ve.
-     */
-    telegram: string | null,
-    grupo: string | null,
   ): Registro => ({
     id: uuid,
     email,
@@ -283,22 +275,6 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
     disponible: true,
     en_jornada: rol === 'empleada' || rol === 'chofer',
     jornada_actualizada_at: horas(-3),
-    telegram_chat_id: telegram,
-    grupo_telegram_id: grupo,
-    /*
-     * Un codigo distinto por persona.
-     *
-     * `telegram_verification_code` lleva un indice unico parcial desde la
-     * migracion `HardenTelegramLinkCode`, y aqui habia un literal fijo para
-     * todos: el primer usuario entraba y el segundo reventaba la transaccion
-     * entera con un 23505, asi que la siembra no habia vuelto a funcionar
-     * desde entonces. Se deriva del id de Telegram, que ya es unico por
-     * persona, para que siga siendo estable entre ejecuciones.
-     */
-    telegram_verification_code: telegram
-      ? String(482900 + Number(telegram.slice(-3) || 0))
-      : null,
-    telegram_verification_expires_at: telegram ? horas(2) : null,
     telefono: '4421234567',
     created_at: dias(-120),
     last_login_at: horas(-2),
@@ -311,8 +287,6 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
       'admin',
       'Ana',
       'Demo Admin',
-      '900000001',
-      '-1009000001',
     ),
     usuarioBase(
       U.jefe1,
@@ -320,8 +294,6 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
       'jefe',
       'Beto',
       'Demo Jefe',
-      '900000002',
-      '-1009000002',
     ),
     usuarioBase(
       U.jefe2,
@@ -329,8 +301,6 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
       'jefe',
       'Carla',
       'Demo Jefa',
-      '900000003',
-      '-1009000003',
     ),
     usuarioBase(
       U.empleada1,
@@ -338,8 +308,6 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
       'empleada',
       'Daniela',
       'Demo',
-      '900000004',
-      null,
     ),
     usuarioBase(
       U.empleada2,
@@ -347,8 +315,6 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
       'empleada',
       'Elena',
       'Demo',
-      '900000005',
-      null,
     ),
     usuarioBase(
       U.empleada3,
@@ -356,9 +322,6 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
       'empleada',
       'Fabiana',
       'Demo',
-      // Sin vincular a proposito: es como se ve una modelo recien dada de alta.
-      null,
-      null,
     ),
     usuarioBase(
       U.chofer1,
@@ -366,8 +329,6 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
       'chofer',
       'Gerardo',
       'Demo',
-      '900000007',
-      null,
     ),
     usuarioBase(
       U.chofer2,
@@ -375,13 +336,6 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
       'chofer',
       'Hugo',
       'Demo',
-      /*
-       * Tambien sin vincular. Ademas de enseñar el estado en la tabla, deja el
-       * caso que mas se consulta: un chofer que nunca recibe ofertas porque le
-       * falta Telegram, que es una de las nueve condiciones del reparto.
-       */
-      null,
-      null,
     ),
   ]);
 
@@ -685,7 +639,6 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
   await insertarVarias(qr, 'clientes', [
     {
       id: CLI.uno,
-      telegram_chat_id: '800000001',
       ai_calls_today: 6,
       last_ai_call_at: horas(-1),
       nombre_telegram: 'Roberto M',
@@ -694,7 +647,6 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
     },
     {
       id: CLI.dos,
-      telegram_chat_id: '800000002',
       ai_calls_today: 0,
       last_ai_call_at: dias(-4),
       nombre_telegram: 'Luis',
@@ -703,7 +655,6 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
     },
     {
       id: CLI.tres,
-      telegram_chat_id: '800000003',
       ai_calls_today: 14,
       last_ai_call_at: horas(-0.5),
       nombre_telegram: 'Cliente sin nombre',
@@ -907,11 +858,6 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
       comentarios_calificacion: 'Todo excelente, muy puntual y atenta.',
       notas: 'El cliente pidió llegar quince minutos antes.',
       notas_jefe: 'Cliente recurrente, tratar bien.',
-      telegram_cliente_mensaje_id: 4411,
-      telegram_empleada_mensaje_id: 4412,
-      telegram_resumen_definitivo_id: 4413,
-      cliente_telegram_id: '800000001',
-      telegram_thread_id: 77,
       created_at: dias(-3),
       updated_at: horas(-68),
     }),
@@ -930,7 +876,6 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
       estado_liquidacion: 'transporte_pendiente',
       habitacion: '203',
       notas: 'Domicilio particular, portón negro.',
-      cliente_telegram_id: '800000002',
       ia_activa: true,
       proximo_recordatorio_regreso_at: horas(0.4),
       created_at: horas(-2),
@@ -968,7 +913,6 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
       metodo_pago: 'transferencia',
       customer_transport_charge: 500,
       espera_expira_at: horas(0.5),
-      cliente_telegram_id: '800000003',
       ia_activa: true,
       created_at: horas(-1),
       updated_at: horas(-1),
@@ -1024,7 +968,6 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
       metodo_pago: 'transferencia',
       hora_inicio_servicio: horas(-2.5),
       customer_transport_charge: 500,
-      cliente_telegram_id: '800000001',
       created_at: horas(-3),
       updated_at: horas(-2.5),
     }),
@@ -1157,9 +1100,7 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
       fecha_recepcion: dias(-3),
       hora_recepcion: '22:14:00',
       cliente_telegram: 'Roberto M',
-      chat_id: '800000001',
       image_url: 'https://ejemplo.local/demo/comprobante-1.jpg',
-      telegram_file_id: 'AgACAgEAAxkBAAIDEMO1',
       es_comprobante: true,
       banco_origen: 'BBVA',
       banco_destino: 'BBVA',
@@ -1190,9 +1131,7 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
       fecha_recepcion: horas(-1),
       hora_recepcion: '23:40:00',
       cliente_telegram: 'Cliente sin nombre',
-      chat_id: '800000003',
       image_url: 'https://ejemplo.local/demo/comprobante-2.jpg',
-      telegram_file_id: 'AgACAgEAAxkBAAIDEMO2',
       es_comprobante: false,
       banco_origen: null,
       banco_destino: null,
@@ -1249,9 +1188,6 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
       hora_inicio_viaje: dias(-3),
       hora_fin_viaje: horas(-71),
       choferes_notificados: json([CHO.uno, CHO.dos]),
-      telegram_chofer_msg_oferta_id: 5001,
-      telegram_empleada_msg_chofer_camino_id: 5002,
-      telegram_empleada_msg_chofer_llegado_id: 5003,
     },
     {
       id: id(261),
@@ -1263,7 +1199,6 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
       tarifa: 160,
       estado: 'finalizado',
       proveedor_transporte: 'uber',
-      telegram_uber_file_id: 'AgACAgEAAxkBAAIDEMO3',
       uber_screenshot_url: 'https://ejemplo.local/demo/uber-1.jpg',
       uber_screenshot_uploaded_at: horas(-67),
       driver_payout: 0,
@@ -1307,7 +1242,6 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
       tarifa: 145,
       estado: 'cancelado',
       proveedor_transporte: 'uber',
-      telegram_uber_file_id: 'AgACAgEAAxkBAAIDEMO4',
       uber_screenshot_url: 'https://ejemplo.local/demo/uber-2.jpg',
       uber_screenshot_uploaded_at: dias(-2),
       driver_payout: 0,
@@ -1830,39 +1764,6 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
     },
   ]);
 
-  // Conversación completa, que es lo que alimenta la bitácora y el monitor.
-  const guion: Array<[string, string]> = [
-    ['ia', 'Hola amor, aquí ando disponible. Mi hora está en $2,500.'],
-    ['cliente', 'Hola, qué incluye?'],
-    [
-      'ia',
-      'La hora completa conmigo, con besos si vienes bien aseadito. Aparte manejo algunos extras.',
-    ],
-    ['cliente', 'Cuánto es en total con el transporte?'],
-    [
-      'ia',
-      'Por una hora serían $2,500 más $500 del transporte hasta donde estés.',
-    ],
-    ['cliente', 'Va, mándame ubicación de tus moteles'],
-    ['ia', 'Atiendo en Majestic y en Montecarlo, los dos aquí en Querétaro.'],
-    ['cliente', 'Perfecto, el Majestic entonces'],
-  ];
-  await insertarVarias(
-    qr,
-    'conversaciones_telegram',
-    guion.map((linea, i) => ({
-      id: id(410 + i),
-      cliente_id: CLI.uno,
-      servicio_id: SRV.finalizado,
-      booking_session_id: id(600),
-      group_request_id: null,
-      emisor: linea[0],
-      mensaje: linea[1],
-      ia_activa: true,
-      enviado_at: new Date(dias(-3).getTime() + i * 90 * 1000),
-    })),
-  );
-
   await insertarVarias(qr, 'solicitudes_servicio_manual', [
     {
       id: id(430),
@@ -1926,7 +1827,6 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
       catalog_version: 1,
       hold_expires_at: horas(4),
       ai_active: false,
-      telegram_thread_id: 88,
       created_at: horas(-30),
       updated_at: horas(-28),
     },
@@ -2198,10 +2098,9 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
       best_score: 100,
       trust_score: 5,
       assigned_at: dias(-50),
-      welcome_sent_at: dias(-50),
-      regulation_sent_at: dias(-50),
       read_at: dias(-49),
-      reminder_sent_at: dias(-49),
+      web_reminder_count: 1,
+      last_web_reminder_at: dias(-49),
       completed_at: dias(-48),
       last_delivery_error: null,
     },
@@ -2217,12 +2116,12 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
       best_score: 60,
       trust_score: 2,
       assigned_at: dias(-5),
-      welcome_sent_at: dias(-5),
-      regulation_sent_at: dias(-5),
       read_at: null,
-      reminder_sent_at: dias(-2),
+      web_reminder_count: 1,
+      last_web_reminder_at: dias(-2),
       completed_at: null,
-      last_delivery_error: 'Telegram devolvió 403: el usuario bloqueó el bot.',
+      last_delivery_error:
+        'El push devolvió 403: el usuario bloqueó las notificaciones.',
     },
   ]);
   await insertarVarias(qr, 'questionnaire_attempts', [
@@ -2273,7 +2172,6 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
       candidate_name: 'Candidata Demo Uno',
       candidate_phone: '4423334444',
       token: 'demo-token-cand-1',
-      telegram_chat_id: '800000009',
       status: 'completado',
       question_ids: json([id(500), id(501)]),
       created_by_user_id: U.jefe1,
@@ -2287,7 +2185,6 @@ export async function sembrar(qr: QueryRunner): Promise<void> {
       candidate_name: 'Candidata Demo Dos',
       candidate_phone: null,
       token: 'demo-token-cand-2',
-      telegram_chat_id: null,
       status: 'pendiente',
       question_ids: json([id(500)]),
       created_by_user_id: U.jefe2,

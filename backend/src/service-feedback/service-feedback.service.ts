@@ -90,7 +90,7 @@ type FilaPorValorar = {
 };
 
 /**
- * Lo que pasa despues de un servicio, fuera de Telegram: calificar, reportar y
+ * Lo que pasa despues de un servicio: calificar, reportar y
  * volver a contratar desde el chat web, y los reportes del chofer desde su
  * portal.
  *

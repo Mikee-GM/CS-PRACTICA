@@ -304,17 +304,13 @@ describe('Los valores de la siembra caben en su columna', () => {
   });
 
   /**
-   * El fallo original: `telegram_verification_code` lleva un índice único
-   * parcial y la siembra ponía el mismo literal a las ocho personas, así que
-   * la transacción moría en el segundo INSERT.
+   * Un valor repetido en una columna con índice único mata la transacción
+   * entera de la siembra en el segundo INSERT.
    */
   it('no repite valores en columnas con índice único', () => {
     const unicas: [string, string][] = [
       ['usuarios', 'email'],
-      ['usuarios', 'telegram_chat_id'],
-      ['usuarios', 'telegram_verification_code'],
       ['empleadas', 'slug_catalogo'],
-      ['clientes', 'telegram_chat_id'],
     ];
     const repetidos: string[] = [];
     for (const [tabla, columna] of unicas) {

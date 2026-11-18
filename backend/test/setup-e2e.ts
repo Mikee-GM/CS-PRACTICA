@@ -14,7 +14,6 @@ const defaults: Record<string, string> = {
   JWT_SECRET: 'local-e2e-jwt-secret-0000000000000001',
   JWT_REFRESH_SECRET: 'local-e2e-refresh-secret-000000000001',
   COOKIE_SECRET: 'local-e2e-cookie-secret-000000000001',
-  TELEGRAM_BOT_TOKEN: '123456789:dummy',
   DEFAULT_ADMIN_EMAIL: 'e2e-admin@example.com',
   DEFAULT_ADMIN_PASSWORD: 'local-e2e-password',
   R2_ENDPOINT: 'http://127.0.0.1:59999',

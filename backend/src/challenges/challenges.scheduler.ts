@@ -24,9 +24,8 @@ export class ChallengesScheduler implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   /*
-   * Arranca siempre. Antes se apagaba sin token de Telegram porque los avisos
-   * del reto solo salian por el bot, y con el se apagaba tambien la activacion
-   * y el cierre de los retos, que no dependen de ningun canal.
+   * Arranca siempre. La activacion y el cierre de los retos no dependen de ningun
+   * canal de aviso.
    */
   onModuleInit() {
     this.timer = setInterval(() => void this.runCycle(), 5 * 60 * 1000);

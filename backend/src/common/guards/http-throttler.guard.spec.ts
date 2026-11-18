@@ -32,12 +32,10 @@ describe('HttpThrottlerGuard', () => {
     await guard.onModuleInit();
   });
 
-  it('no toca el almacenamiento en un contexto de Telegraf', async () => {
-    // Sin esto el guard escribia cabeceras HTTP sobre el contexto de Telegraf y
-    // cada update del bot moria con "res.header is not a function".
-    await expect(guard.canActivate(contextOfType('telegraf'))).resolves.toBe(
-      true,
-    );
+  it('no toca el almacenamiento en un contexto que no es HTTP', async () => {
+    // Sin esto el guard escribia cabeceras HTTP sobre un contexto que no es
+    // una peticion y moria con "res.header is not a function".
+    await expect(guard.canActivate(contextOfType('rpc'))).resolves.toBe(true);
     expect(increment).not.toHaveBeenCalled();
   });
 

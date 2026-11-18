@@ -117,13 +117,13 @@ describe('WeeklyContentService.reviewSubmission', () => {
     expect(aviso.cuerpo).toContain('...');
   });
 
-  it('avisa a la modelo aunque no tenga Telegram vinculado', async () => {
+  it('avisa a la modelo aunque no tenga un chat vinculado', async () => {
     submissionRepo.findOne.mockResolvedValue(
       envio({
         empleada: {
           nombreArtistico: 'Modelo',
           usuarioId: 'user-1',
-          usuario: { telegramChatId: null },
+          usuario: {},
         },
       }),
     );
@@ -160,7 +160,7 @@ describe('WeeklyContentService.reviewSubmission', () => {
 });
 
 /**
- * Decision 3 de la Fase 5: al quitar el filtro por Telegram, la primera semana
+ * Decision 3 de la Fase 5: al quitar el filtro por chat vinculado, la primera semana
  * en la que se le piden fotos a una modelo no tiene multa.
  */
 describe('WeeklyContentService.esSemanaDeGracia', () => {

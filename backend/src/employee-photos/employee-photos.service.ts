@@ -104,7 +104,7 @@ export class EmployeePhotosService {
     return { deleted: true };
   }
 
-  // --- MÉTODOS PARA FOTOS EXCLUSIVAS (CLIENTES TELEGRAM) ---
+  // --- MÉTODOS PARA FOTOS EXCLUSIVAS (CLIENTES) ---
 
   async findPrivatePhotosByEmployee(
     empleadaId: string,

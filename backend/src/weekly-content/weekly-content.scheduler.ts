@@ -51,9 +51,8 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   /*
-   * Arranca siempre. Antes se apagaba sin token de Telegram porque los avisos
-   * solo salian por el bot; ahora salen por push, y un entorno sin bot tambien
-   * tiene que pedir las fotos y cobrar la multa.
+   * Arranca siempre. Los avisos salen por push, asi que ningun entorno depende de un
+   * bot para pedir las fotos y cobrar la multa.
    */
   onModuleInit() {
     // Escanear cada 10 minutos
@@ -132,7 +131,7 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
   /**
    * Pide las fotos a todas las modelos con catalogo activo.
    *
-   * Hasta la Fase 5 se saltaba a quien no tenia Telegram vinculado, porque el
+   * Hasta la Fase 5 se saltaba a quien no tenia un chat vinculado, porque el
    * pedido solo viajaba por el bot. Ahora el aviso es push y el portal es la
    * via de entrega, asi que todas quedan sujetas al ciclo; la que entra por
    * primera vez tiene su semana de gracia (`esSemanaDeGracia`).

@@ -20,7 +20,7 @@ import { ResolveManualServiceRequestDto } from './dto/resolve-manual-service-req
 /**
  * Servicios que ocurrieron fuera del sistema.
  *
- * El camino normal es el chat --la empleada los registra desde Telegram y el
+ * El camino normal es el chat --la empleada los registra desde el chat y el
  * jefe los autoriza ahi mismo--, pero el panel necesita las mismas operaciones
  * para revisarlas con calma y para que quede una via cuando el chat falla.
  */

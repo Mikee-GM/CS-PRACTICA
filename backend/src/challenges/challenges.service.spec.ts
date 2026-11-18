@@ -3,8 +3,7 @@ import { ChallengesService } from './challenges.service';
 /**
  * Lo que se protege aqui es que el reto llegue a todos sus participantes.
  *
- * Los avisos de inicio y cierre salian solo por Telegram, y quien no tenia el
- * chat vinculado se quedaba sin enterarse. Ahora salen por push al usuario de
+ * Los avisos de inicio y cierre salen por push al usuario de
  * cada participante, con dedupe por reto para que una pasada repetida del
  * scheduler no los duplique.
  */

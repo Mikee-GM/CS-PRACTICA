@@ -249,9 +249,8 @@ export class WeeklyContentService {
   /**
    * Registrar una foto semanal subida por la modelo.
    *
-   * El origen ya no cambia nada: antes solo entraban por Telegram y ahora la
-   * via oficial es el portal, pero el registro y el cierre del ciclo son los
-   * mismos.
+   * La via oficial es el portal; el registro y el cierre del ciclo no
+   * dependen del origen.
    */
   async recordPhotoSubmission(
     empleadaId: string,
@@ -293,8 +292,8 @@ export class WeeklyContentService {
   /**
    * Subida de fotos semanales desde el portal de la modelo.
    *
-   * Es la via oficial desde que se retiro la de Telegram: alli las fotos
-   * llegaban al chat sin que la modelo pudiera ver cuales habia mandado ni
+   * Es la via oficial: por el chat las fotos
+   * llegaban sueltas sin que la modelo pudiera ver cuales habia mandado ni
    * corregirse, y cualquier foto suelta en la conversacion entraba a la cola de
    * revision aunque no fuera contenido semanal.
    *
@@ -468,7 +467,7 @@ export class WeeklyContentService {
    * Si este ciclo es la semana de gracia de la modelo: la primera en la que se
    * le piden fotos.
    *
-   * Hasta la Fase 5 solo se pedian fotos (y se multaba) a quien tenia Telegram
+   * Hasta la Fase 5 solo se pedian fotos (y se multaba) a quien tenia un chat
    * vinculado. Al quitar ese filtro, las demas pasan a estar sujetas a la multa
    * de golpe, y se decidio darles una semana sin multa para que conozcan el
    * flujo del portal. Se deriva de la historia en vez de guardarse en una

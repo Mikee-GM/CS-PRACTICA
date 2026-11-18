@@ -140,18 +140,18 @@ describe('HttpExceptionFilter', () => {
   });
 
   it('deja subir la excepcion en contextos que no son HTTP', () => {
-    // Un update de Telegram no trae respuesta HTTP: si el filtro intentara
+    // Un contexto que no es HTTP no trae respuesta: si el filtro intentara
     // escribirla, el error real quedaria tapado por un TypeError.
-    const telegrafHost = {
-      getType: () => 'telegraf',
+    const hostNoHttp = {
+      getType: () => 'rpc',
       switchToHttp: () => ({
         getResponse: () => ({}),
         getRequest: () => ({}),
       }),
     } as any as ArgumentsHost;
-    const exception = new Error('fallo dentro de un handler del bot');
+    const exception = new Error('fallo dentro de un handler no HTTP');
 
-    expect(() => filter.catch(exception, telegrafHost)).toThrow(exception);
+    expect(() => filter.catch(exception, hostNoHttp)).toThrow(exception);
     expect(mockResponse.status).not.toHaveBeenCalled();
   });
 });

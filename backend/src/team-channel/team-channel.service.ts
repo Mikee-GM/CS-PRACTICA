@@ -28,7 +28,7 @@ const TOPE_HISTORIAL = 100;
  *
  * Es anonimo de un solo lado a proposito: el jefe ve con quien habla --lo
  * necesita para coordinar-- y la modelo habla siempre con "Coordinación", sin
- * nombre, sin telefono y sin usuario de Telegram. Por eso ningun metodo
+ * nombre, sin telefono y sin usuario de contacto. Por eso ningun metodo
  * devuelve el autor hacia el portal de ella: `paraEmpleada` es el unico camino
  * de salida por ese lado, y ahi el autor no existe.
  *
