@@ -2,7 +2,10 @@ import { Badge } from "@/components/ui/badge";
 import LiveMapDynamic from "@/components/dashboard/LiveMapDynamic";
 import PageHeader from "@/components/ui/page-header";
 import { getDriver } from "@/lib/data/drivers";
-import ToggleModoBot from "@/components/admin/ToggleModoBot";
+import {
+  antiguedadDeUbicacion,
+  ubicacionEstaVieja,
+} from "@/lib/ubicacion-fresca";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -11,6 +14,7 @@ type Props = {
 export default async function DriverDetailPage({ params }: Props) {
   const { id } = await params;
   const driver = await getDriver(id);
+  const ahora = new Date();
 
   return (
     <>
@@ -34,6 +38,11 @@ export default async function DriverDetailPage({ params }: Props) {
                   ? `${driver.ubicacionLat}, ${driver.ubicacionLng}`
                   : "Sin ubicación"}
               </dd>
+              <dd className="mt-1 text-sm text-zinc-500">
+                {ubicacionEstaVieja(driver, ahora) ? "Ubicación vieja" : "Ubicación al día"}
+                {" - "}
+                {antiguedadDeUbicacion(driver.ultimaUbicacionAt, ahora)}
+              </dd>
             </div>
             <div>
               <dt className="text-sm text-zinc-500">Usuario asociado</dt>
@@ -44,22 +53,6 @@ export default async function DriverDetailPage({ params }: Props) {
               <dd>{driver.usuario?.rol ?? "chofer"}</dd>
             </div>
           </dl>
-
-          {/* Toggle modoBot — modo simulación */}
-          <div className="mt-6 rounded-xl border border-zinc-800 bg-zinc-900/60 p-4">
-            <p className="mb-2 text-xs font-medium text-zinc-400 uppercase tracking-wider">
-              Modo de operación
-            </p>
-            <ToggleModoBot
-              id={driver.id}
-              tipo="chofer"
-              initialValue={driver.modoBot ?? true}
-            />
-            <p className="mt-2 text-xs text-zinc-500">
-              <span className="text-emerald-400">Usa el app</span> = recibe ofertas de viaje por Telegram.{" "}
-              <span className="text-amber-400">Modo automático</span> = los viajes se despachan como Uber sin notificarle.
-            </p>
-          </div>
         </div>
 
         <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-6 xl:col-span-7">

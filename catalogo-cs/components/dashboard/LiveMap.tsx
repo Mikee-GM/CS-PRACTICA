@@ -5,6 +5,10 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useEffect, useState, useMemo } from "react";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
+import {
+  antiguedadDeUbicacion,
+  ubicacionEstaVieja,
+} from "@/lib/ubicacion-fresca";
 import { Search, X, Users, Car, MapPin, Eye, Filter } from "lucide-react";
 
 type Props = {
@@ -66,6 +70,13 @@ function MapResizeObserver() {
 export default function LiveMap({ employees, drivers }: Props) {
   const [localDrivers, setLocalDrivers] = useState<Driver[]>(drivers);
   const [localEmployees, setLocalEmployees] = useState<Employee[]>(employees);
+  // Recalcula cada minuto: una posicion se vuelve vieja sin que llegue evento.
+  const [ahora, setAhora] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setAhora(new Date()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Filtros y selección
   const [searchQuery, setSearchQuery] = useState("");
@@ -129,7 +140,13 @@ export default function LiveMap({ employees, drivers }: Props) {
             setLocalDrivers((prev) =>
               prev.map((d) =>
                 d.id === payload.choferId
-                  ? { ...d, ubicacionLat: payload.lat, ubicacionLng: payload.lng }
+                  ? {
+                      ...d,
+                      ubicacionLat: payload.lat,
+                      ubicacionLng: payload.lng,
+                      ultimaUbicacionAt: new Date().toISOString(),
+                      ubicacionVieja: false,
+                    }
                   : d,
               ),
             );
@@ -169,12 +186,18 @@ export default function LiveMap({ employees, drivers }: Props) {
     };
   }, []);
 
-  const createCustomIcon = (color: string, isHighlighted: boolean, isDimmed: boolean) => {
+  const createCustomIcon = (
+    color: string,
+    isHighlighted: boolean,
+    isDimmed: boolean,
+    isStale = false,
+  ) => {
     const size = isHighlighted ? 26 : 18;
     const pulse = isHighlighted
       ? `<div style="position:absolute;inset:-8px;border-radius:999px;background:${color};opacity:0.4;animation:ping 1.5s cubic-bezier(0,0,0.2,1) infinite;"></div>`
       : "";
-    const opacity = isDimmed ? 0.25 : 1;
+    // Una posicion vieja se atenua menos que un marcador fuera de foco.
+    const opacity = isDimmed ? 0.25 : isStale ? 0.5 : 1;
     return L.divIcon({
       html: `
       <div style="position:relative;width:${size}px;height:${size}px;opacity:${opacity};transition:all 0.3s;">
@@ -503,6 +526,7 @@ export default function LiveMap({ employees, drivers }: Props) {
           {driverMarkers.map((driver) => {
             const isHighlighted = selectedUser?.id === driver.id && selectedUser?.type === "driver";
             const isDimmed = Boolean(selectedUser && !isHighlighted);
+            const vieja = ubicacionEstaVieja(driver, ahora);
             if (selectedUser && selectedUser.type !== "driver" && selectedUser.id !== driver.id) {
               return null;
             }
@@ -510,7 +534,7 @@ export default function LiveMap({ employees, drivers }: Props) {
               <Marker
                 key={`drv-${driver.id}`}
                 position={driver.position}
-                icon={createCustomIcon("#22c55e", isHighlighted, isDimmed)}
+                icon={createCustomIcon("#22c55e", isHighlighted, isDimmed, vieja)}
                 eventHandlers={{
                   click: () =>
                     setSelectedUser({
@@ -527,6 +551,10 @@ export default function LiveMap({ employees, drivers }: Props) {
                     <p className="text-zinc-600">Tel: {driver.telefono}</p>
                     <p className="text-zinc-500 text-[10px]">
                       Estado: {driver.disponible ? "Disponible" : "No disponible"}
+                    </p>
+                    <p className="text-zinc-500 text-[10px]">
+                      Ubicación: {antiguedadDeUbicacion(driver.ultimaUbicacionAt, ahora)}
+                      {vieja ? " (vieja)" : ""}
                     </p>
                   </div>
                 </Popup>

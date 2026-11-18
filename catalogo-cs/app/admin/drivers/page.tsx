@@ -9,7 +9,7 @@ export default async function DriversPage() {
     <>
       <PageHeader
         title="Choferes"
-        description={`${drivers.length} choferes cargados desde BackendCitas.`}
+        description={`${drivers.length} choferes cargados registrados.`}
       />
 
       <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
@@ -22,6 +22,8 @@ export default async function DriversPage() {
             available={driver.disponible}
             latitude={driver.ubicacionLat}
             longitude={driver.ubicacionLng}
+            ubicacionVieja={driver.ubicacionVieja}
+            ultimaUbicacionAt={driver.ultimaUbicacionAt}
           />
         ))}
       </div>

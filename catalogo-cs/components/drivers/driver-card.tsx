@@ -3,6 +3,7 @@ import {
  Phone,
 } from "lucide-react";
 import Link from "next/link";
+import UbicacionBadge from "@/components/drivers/ubicacion-badge";
 
 type Props = {
  id: string;
@@ -11,6 +12,8 @@ type Props = {
  available: boolean;
  latitude?: string | null;
  longitude?: string | null;
+ ubicacionVieja?: boolean;
+ ultimaUbicacionAt?: string | null;
 };
 
 export default function DriverCard({
@@ -20,13 +23,15 @@ export default function DriverCard({
  available,
  latitude,
  longitude,
+ ubicacionVieja,
+ ultimaUbicacionAt,
 }: Props) {
 
  const hasLocation = Boolean(latitude && longitude);
 
  return (
   <Link
-   href={`/drivers/${id}`}
+   href={`/admin/drivers/${id}`}
    className="
    block
    rounded-2xl
@@ -50,7 +55,7 @@ export default function DriverCard({
      </h3>
 
      <p className="text-zinc-400">
-      Driver
+      Chofer
      </p>
     </div>
 
@@ -77,6 +82,11 @@ export default function DriverCard({
       <MapPin size={18} />
       <span>{hasLocation ? `${latitude}, ${longitude}` : "Sin ubicación"}</span>
     </div>
+
+    <UbicacionBadge
+     ubicacionVieja={ubicacionVieja}
+     ultimaUbicacionAt={ultimaUbicacionAt}
+    />
    </div>
 
    <div

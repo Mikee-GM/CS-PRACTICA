@@ -13,6 +13,7 @@ import {
   setChoferDisponibilidadAction,
   updateChoferAction,
 } from "@/lib/actions/choferes";
+import UbicacionBadge from "@/components/drivers/ubicacion-badge";
 import EstadoDeTelegram from "@/components/erp/estado-de-telegram";
 import RestablecerContrasena from "@/components/cuenta/RestablecerContrasena";
 import ConfirmDialog from "../ui/ConfirmDialog";
@@ -36,6 +37,8 @@ interface Chofer {
   trustScore?: number | null;
   disponible: boolean;
   telegramChatId?: string | null;
+  ubicacionVieja?: boolean;
+  ultimaUbicacionAt?: string | null;
 }
 
 const formatPhoneNumber = (value: string): string => {
@@ -415,7 +418,7 @@ export default function ChoferesDashboard({
         </div>
       ) : (
         <div className="border border-zinc-800/80 bg-zinc-950/40 rounded-xl overflow-x-auto">
-          <table className="w-full min-w-[1050px] text-left border-collapse">
+          <table className="w-full min-w-[1250px] text-left border-collapse">
             <thead>
               <tr className="border-b border-zinc-800 bg-zinc-900/30">
                 <th className="px-6 py-4 text-xs font-bold tracking-wider text-zinc-400 uppercase">
@@ -432,6 +435,9 @@ export default function ChoferesDashboard({
                 </th>
                 <th className="px-6 py-4 text-xs font-bold tracking-wider text-zinc-400 uppercase">
                   Confiabilidad
+                </th>
+                <th className="px-6 py-4 text-xs font-bold tracking-wider text-zinc-400 uppercase">
+                  Ubicación
                 </th>
                 <th className="px-6 py-4 text-xs font-bold tracking-wider text-zinc-400 uppercase">
                   Telegram
@@ -474,6 +480,12 @@ export default function ChoferesDashboard({
                   </td>
                   <td className="px-6 py-4">
                     <ReliabilityRating score={chofer.trustScore} compact />
+                  </td>
+                  <td className="px-6 py-4">
+                    <UbicacionBadge
+                      ubicacionVieja={chofer.ubicacionVieja}
+                      ultimaUbicacionAt={chofer.ultimaUbicacionAt}
+                    />
                   </td>
                   <td className="px-6 py-4 text-sm font-medium">
                     <EstadoDeTelegram
