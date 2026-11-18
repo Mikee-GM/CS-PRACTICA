@@ -1103,7 +1103,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
          r.subject_type AS "subjectType",
          r.subject_id AS "subjectId",
          COALESCE(r.service_id, v.servicio_id) AS "serviceId",
-         COALESCE(e.nombre_artistico, ch.nombre, c.nombre_telegram)
+         COALESCE(e.nombre_artistico, ch.nombre, c.nombre)
            AS "subjectName"
        FROM conduct_reports r
        LEFT JOIN viajes v ON v.id = r.trip_id
@@ -1189,7 +1189,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     return this.dataSource.query(
       `SELECT s.id            AS "servicioId",
               s.hora_fin_servicio AS "fecha",
-              c.nombre_telegram   AS "clienteNombre"
+              c.nombre   AS "clienteNombre"
        FROM servicios s
        JOIN clientes c ON c.id = s.cliente_id
        WHERE s.empleada_id = $1
@@ -1466,7 +1466,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
          e.id AS "empleadaId",
          e.nombre_artistico AS "empleadaNombre",
          c.id AS "clienteId",
-         c.nombre_telegram AS "clienteNombre",
+         c.nombre AS "clienteNombre",
          u.email AS "jefeEmail",
          (
            SELECT json_agg(DISTINCT jsonb_build_object('id', ch.id, 'nombre', ch.nombre))

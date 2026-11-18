@@ -177,7 +177,7 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
       ],
     );
     await dataSource.query(
-      `INSERT INTO "clientes" (id, nombre_telegram)
+      `INSERT INTO "clientes" (id, nombre)
        VALUES ($1, 'Cliente E2E')`,
       [IDS.client],
     );

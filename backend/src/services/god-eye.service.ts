@@ -186,7 +186,7 @@ export class GodEyeService {
         s.created_at AS "createdAt",
         s.notas,
         c.id AS "clienteId",
-         COALESCE(c.nombre_telegram, s.cliente_nombre_libre) AS "clienteNombre",
+         COALESCE(c.nombre, s.cliente_nombre_libre) AS "clienteNombre",
         e.id AS "empleadaId",
         e.nombre_artistico AS "empleadaNombre",
         e.foto_perfil_url AS "empleadaFoto",
@@ -283,7 +283,7 @@ export class GodEyeService {
               r.comment,
               r.appeal_status AS "appealStatus",
               r.created_at AS "createdAt",
-              c.nombre_telegram AS "clienteNombre",
+              c.nombre AS "clienteNombre",
               d.nombre AS "choferNombre"
             FROM interaction_ratings r
             LEFT JOIN clientes c ON c.id = r.client_id
@@ -365,7 +365,7 @@ export class GodEyeService {
               s.notas,
               s.created_at AS "createdAt",
               c.id AS "clienteId",
-              c.nombre_telegram AS "clienteNombre",
+              c.nombre AS "clienteNombre",
               j.email AS "jefeEmail",
               COALESCE(
                 (
@@ -757,7 +757,7 @@ export class GodEyeService {
             s.total_final AS "totalFinal",
             s.created_at AS "createdAt",
             e.nombre_artistico AS "empleadaNombre",
-            c.nombre_telegram AS "clienteNombre"
+            c.nombre AS "clienteNombre"
           FROM servicios s
           LEFT JOIN empleadas e ON e.id = s.empleada_id
           LEFT JOIN clientes c ON c.id = s.cliente_id
@@ -830,7 +830,7 @@ export class GodEyeService {
         s.created_at AS "createdAt",
         s.notas,
         c.id AS "clienteId",
-        c.nombre_telegram AS "clienteNombre",
+        c.nombre AS "clienteNombre",
         e.id AS "empleadaId",
         e.nombre_artistico AS "empleadaNombre",
         j.id AS "jefeId",

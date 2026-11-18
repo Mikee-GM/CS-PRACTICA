@@ -142,7 +142,7 @@ describe('servicio completo (PostgreSQL)', () => {
       [IDS.employee, IDS.employeeUser, IDS.boss],
     );
     await dataSource.query(
-      `INSERT INTO "clientes" (id, usuario_id, nombre_telegram)
+      `INSERT INTO "clientes" (id, usuario_id, nombre)
        VALUES ($1, $2, 'Cliente Web')`,
       [IDS.client, IDS.clientUser],
     );

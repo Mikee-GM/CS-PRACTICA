@@ -257,7 +257,7 @@ export class StaffConversationsService {
               e.id AS employee_id, e.nombre_artistico, e.foto_perfil_url,
               cl.id AS client_id,
               COALESCE(NULLIF(TRIM(CONCAT_WS(' ', u.nombre, u.apellido)), ''),
-                       u.email, cl.nombre_telegram, 'Cliente') AS client_nombre,
+                       u.email, cl.nombre, 'Cliente') AS client_nombre,
               m.id AS last_id, m.sender AS last_sender,
               LEFT(m.body, ${PREVIEW_LENGTH + 1}) AS last_body,
               (m.attachment IS NOT NULL) AS last_has_attachment,

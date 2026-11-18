@@ -73,7 +73,7 @@ export class Clientes {
   lastAiCallAt: Date | null;
 
   @Column('character varying', {
-    name: 'nombre_telegram',
+    name: 'nombre',
     nullable: true,
     length: 255,
   })

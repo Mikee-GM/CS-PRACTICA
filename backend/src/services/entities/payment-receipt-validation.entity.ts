@@ -33,7 +33,7 @@ export class PaymentReceiptValidations {
   horaRecepcion?: string;
 
   @Column({
-    name: 'cliente_telegram',
+    name: 'cliente_nombre',
     type: 'varchar',
     length: 255,
     nullable: true,

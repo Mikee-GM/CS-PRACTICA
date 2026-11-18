@@ -112,7 +112,6 @@ const TABLAS_A_VACIAR = [
 
   // Tokens temporales y colas
   'realtime_outbox',
-  'panel_access_tokens',
   'auth_sessions',
 ];
 

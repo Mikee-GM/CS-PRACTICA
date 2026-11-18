@@ -2084,3 +2084,56 @@ los archivos tocados.
 - Cobertura e2e por escribir sobre `conversations` (necesitan Postgres): conversacion pre-servicio, acceso cruzado entre clientes y dos servicios del mismo cliente (los tres tests borrados de `backend/test/app.e2e-spec.ts`).
 - Pendiente para D2: renombrar `clientes.nombre_telegram` y `payment_receipt_validations.cliente_telegram` (entidades `name:` y SQL crudo en `god-eye.service.ts`, `discipline.service.ts`, `grupo-en-chat-web.service.ts`, `staff-conversations.service.ts`, `sembrar-datos-demo.ts` y los e2e).
 - Verificacion: tsc backend limpio; jest backend 175 de 176 suites (solo falla `employee-posts.media-http`, preexistente por multer); `prompt-web-snapshot --ci` verde; eslint sin errores (solo warnings); tsc frontend sin errores fuera de `.next`; jest frontend 32 suites verdes.
+
+## Fase 6, D2 migracion RetirarTelegram
+
+Archivo: `backend/src/migrations/1812000000000-RetirarTelegram.ts` (spec al lado: `retirar-telegram.spec.ts`). No se ejecuto contra ninguna base; solo se probo con un `queryRunner` simulado.
+
+Que hace `up` (todo idempotente, en este orden):
+
+- Renombra con guarda (existe el origen y no existe el destino) `clientes.nombre_telegram` a `nombre` y `payment_receipt_validations.cliente_telegram` a `cliente_nombre`. Conserva los datos. `clientes.nombre` no existia en ninguna migracion.
+- `DROP TABLE IF EXISTS ... CASCADE`: `conversaciones_telegram`, `telegram_sessions`, `telegram_link_attempts`, `panel_access_tokens`, `employee_telegram_bots`. Despues `DROP TYPE IF EXISTS conversaciones_telegram_emisor_enum` (el unico enum de esas tablas).
+- `ALTER TABLE IF EXISTS ... DROP COLUMN IF EXISTS` en `usuarios`, `clientes`, `empleadas`, `choferes`, `servicios`, `viajes`, `group_service_requests`, `candidate_screenings`, `employee_onboardings` y `payment_receipt_validations` (lista exacta en la constante `COLUMNAS`). La tabla de onboarding se llama `employee_onboardings` (plural), no como decia la nota de D1-D.
+- No hay `DROP INDEX` explicito: `usuarios_telegram_chat_id_key`, `clientes_telegram_chat_id_key` y `uq_usuarios_telegram_verification_code` caen con su columna, y un `DROP INDEX` fallaria si el indice respalda una restriccion.
+- `viajes.telegram_uber_file_id` se borra sin copiar nada: el codigo solo usa `uber_screenshot_url`.
+
+`down` recrea columnas anulables y tablas vacias SOLO como esquema, sin datos, y revierte los renombrados. No contiene ningun `DROP`. Las columnas recreadas no llevan `NOT NULL` (`modo_bot` queda `boolean DEFAULT true` anulable). No restaura claves foraneas ni indices. Sirve para que una version vieja del codigo arranque, no para recuperar informacion.
+
+Codigo alineado: `client.entity.ts` mapea `nombre` a la columna `nombre`; `payment-receipt-validation.entity.ts` mapea `clienteNombre` a `cliente_nombre`. El SQL crudo de `god-eye.service.ts`, `discipline.service.ts`, `grupo-en-chat-web.service.ts`, `staff-conversations.service.ts` (y su spec), `scripts/sembrar-datos-demo.ts` y los dos e2e usa ya los nombres nuevos. `scripts/limpiar-base-datos.ts` deja de listar `panel_access_tokens`.
+
+Orden de despliegue (el codigo nuevo ya no usa nada de lo borrado, pero el codigo viejo si usa las columnas renombradas, asi que no debe haber backend viejo corriendo):
+
+1. Backup verificado: `scripts/backup-postgres.sh` y comprobar el dump con `scripts/restore-postgres.sh` sobre una base de prueba, o al menos listar su contenido con `pg_restore --list`.
+2. Parar el backend (y cualquier replica). Nunca `docker compose down -v`.
+3. Correr la migracion a mano: `cd backend && corepack pnpm migration:run` (compila y ejecuta desde `dist/`; la migracion corre en su propia transaccion).
+4. Levantar el backend con el codigo nuevo y revisar `health/ready`.
+
+Rollback: restaurar el dump del paso 1 con `scripts/restore-postgres.sh` y volver a la imagen anterior. `migration:revert` solo devuelve el esquema vacio y no recupera datos.
+
+Verificacion despues de correr (no deben devolver filas, salvo la primera que debe devolver 2):
+
+```sql
+-- Los dos renombrados existen (esperado: 2 filas).
+SELECT table_name, column_name FROM information_schema.columns
+ WHERE table_schema = 'public'
+   AND ((table_name = 'clientes' AND column_name = 'nombre')
+     OR (table_name = 'payment_receipt_validations' AND column_name = 'cliente_nombre'));
+
+-- Ninguna columna de Telegram ni del bot (esperado: 0 filas).
+SELECT table_name, column_name FROM information_schema.columns
+ WHERE table_schema = 'public'
+   AND (column_name ILIKE '%telegram%' OR column_name IN ('modo_bot', 'admin_topic_id',
+        'welcome_sent_at', 'regulation_sent_at', 'reminder_sent_at')
+        OR (table_name = 'payment_receipt_validations' AND column_name IN ('chat_id'))) ;
+
+-- Ninguna tabla ni tipo de Telegram (esperado: 0 filas en cada una).
+SELECT table_name FROM information_schema.tables
+ WHERE table_schema = 'public'
+   AND (table_name ILIKE '%telegram%' OR table_name = 'panel_access_tokens');
+SELECT typname FROM pg_type WHERE typname ILIKE '%telegram%';
+
+-- La migracion quedo registrada.
+SELECT name FROM migrations WHERE name = 'RetirarTelegram1812000000000';
+```
+
+Verificacion de codigo: tsc backend sin errores; jest backend 176 de 177 suites (solo falla `employee-posts.media-http`, preexistente); `rg -il "telegra(m|f)"` sobre backend/src, backend/test y catalogo-cs fuera de `migrations/` devuelve vacio.

@@ -198,7 +198,7 @@ describe('StaffConversationsService', () => {
           if (fila.status === 'en_revision') fila.status = 'activa';
           return Promise.resolve([{ status: fila.status }]);
         }
-        if (sql.includes('cl.nombre_telegram')) {
+        if (sql.includes('cl.nombre')) {
           return Promise.resolve(respuestas.bandeja ?? []);
         }
         return Promise.reject(new Error(`Consulta no prevista: ${sql}`));

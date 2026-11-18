@@ -318,7 +318,7 @@ export class GrupoEnChatWebService {
       `SELECT c.id, c.client_id, c.employee_id, c.last_message_at,
               e.nombre_artistico,
               COALESCE(NULLIF(TRIM(CONCAT_WS(' ', u.nombre, u.apellido)), ''),
-                       u.email, cl.nombre_telegram, 'Cliente') AS client_nombre
+                       u.email, cl.nombre, 'Cliente') AS client_nombre
        FROM conversations c
        INNER JOIN empleadas e ON e.id = c.employee_id
        INNER JOIN clientes cl ON cl.id = c.client_id
