@@ -8,6 +8,7 @@ import { getMyWorkShift } from "@/lib/actions/work-shift";
 import { getCurrentUser } from "@/lib/auth";
 import type { ConversacionDelEquipo } from "@/lib/chats-del-equipo";
 import { getConversacionesDelEquipo } from "@/lib/data/chats-del-equipo";
+import { getEmployees } from "@/lib/data/employees";
 import { optionalSource } from "@/lib/optional-source";
 import { inicioParaRol } from "@/lib/roles";
 import type { Employee } from "@/lib/types";
@@ -36,10 +37,10 @@ export default async function JefePage({ searchParams }: PageProps) {
       "jefe",
     ),
     optionalSource(getMyWorkShift(), null, "jefe/jornada"),
-    // getJefeEmployees solo admite rol jefe; un admin no tiene equipo propio.
+    // El jefe crea servicios con las modelos de su equipo; el admin, con todas.
     usuario.rol === "jefe"
       ? optionalSource<Employee[]>(getJefeEmployees(), [], "jefe/equipo")
-      : Promise.resolve<Employee[]>([]),
+      : optionalSource<Employee[]>(getEmployees(), [], "jefe/modelos"),
   ]);
 
   return (
