@@ -33,9 +33,10 @@ function getSetCookieHeaders(response: Response): string[] {
 /**
  * Traduce las cabeceras `Set-Cookie` del backend a la forma que espera Next.
  *
- * Dejamos que Next infiera "Secure" segun si la conexion es HTTPS, e ignoramos
- * el "Domain" del backend para que el navegador asocie la cookie al host
- * actual, que puede ser una IP.
+ * Se conserva "Secure" tal como lo emite el backend (en produccion): Next no
+ * lo infiere al escribir la cookie, y sin el la sesion viajaria tambien por
+ * HTTP. Se ignora el "Domain" del backend para que el navegador asocie la
+ * cookie al host actual, que puede ser una IP.
  *
  * El valor se copia tal cual viene, todavia porcentaje-codificado: Next lo
  * vuelve a codificar al escribir la cookie y lo decodifica al leerla, asi que
@@ -57,6 +58,7 @@ export function parseSetCookieHeaders(response: Response): ParsedCookie[] {
       const key = rawKey.toLowerCase();
       const attributeValue = rawValue.join("=");
       if (key === "httponly") options.httpOnly = true;
+      if (key === "secure") options.secure = true;
       if (key === "path") options.path = attributeValue;
       if (key === "max-age") options.maxAge = Number(attributeValue);
       if (key === "expires") options.expires = new Date(attributeValue);

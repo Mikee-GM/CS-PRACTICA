@@ -79,6 +79,22 @@ export class UsersService {
     const { password, ...toUpdate } = updateUserDto as any;
     const updateData: any = { ...toUpdate };
 
+    if (actor?.rol !== 'admin') {
+      // Un jefe no toca las cuentas de un admin ni de otro jefe (email, estado,
+      // nombre): con `activo: false` dejaria a un admin sin acceso. Su propia
+      // cuenta si, igual que el resto del personal que ya podia editar.
+      const objetivo = await this.usuariosRepository.findOne({ where: { id } });
+      if (
+        objetivo &&
+        objetivo.id !== actor?.id &&
+        (objetivo.rol === 'admin' || objetivo.rol === 'jefe')
+      ) {
+        throw new ForbiddenException(
+          'Un jefe no puede modificar la cuenta de un administrador ni de otro jefe',
+        );
+      }
+    }
+
     if (updateData.rol !== undefined && actor?.rol !== 'admin') {
       const actual = await this.usuariosRepository.findOne({ where: { id } });
       if (updateData.rol === 'admin' || actual?.rol === 'admin') {

@@ -282,8 +282,8 @@ export class EmployeesService {
    * Catalogo publico: lo sirve `GET /catalog/employees` sin autenticacion, asi
    * que la respuesta no puede arrastrar entidades `Usuarios`. Solo se carga la
    * relacion `usuario` para filtrar por `activo`, y se elimina del resultado
-   * antes de devolverlo; el frontend unicamente usa los ids escalares
-   * (`usuarioId`, `jefeId`, `jefeSecundarioId`), que sí son columnas propias.
+   * antes de devolverlo, junto con las columnas internas de la modelo
+   * (ver `stripUserRelations`).
    *
    * El criterio de visibilidad es el de `modelo-visible.ts` (chat web y feed),
    * aplicado aqui en memoria; si cambia uno, hay que cambiar el otro.
@@ -331,8 +331,21 @@ export class EmployeesService {
       usuario: _usuario,
       jefe: _jefe,
       jefeSecundario: _jefeSecundario,
+      // Tampoco salen las columnas internas: el nombre legal, el GPS del
+      // telefono de la modelo (se reescribe con cada ubicacion que publica), el
+      // puntaje interno y los ids de su equipo y su departamento. El catalogo
+      // publico no usa ninguno.
+      nombreReal: _nombreReal,
+      ubicacionLat: _ubicacionLat,
+      ubicacionLng: _ubicacionLng,
+      ultimaUbicacionAt: _ultimaUbicacionAt,
+      apartmentId: _apartmentId,
+      usuarioId: _usuarioId,
+      jefeId: _jefeId,
+      jefeSecundarioId: _jefeSecundarioId,
       ...safe
-    } = employee;
+    } = employee as Empleadas & { trustScore?: number };
+    delete (safe as { trustScore?: number }).trustScore;
     return safe as Empleadas;
   }
 
