@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { MessageCircle, X } from "lucide-react";
 
 import CanalCoordinacion from "@/components/empleada/CanalCoordinacion";
+import { useModalAccesible } from "@/hooks/useModalAccesible";
 
 /**
  * El canal con coordinación, siempre a mano.
@@ -28,6 +29,11 @@ export default function BotonCanal({
 }) {
   const [abierto, setAbierto] = useState(abrirAlEntrar);
   const [pendientes, setPendientes] = useState(sinLeer);
+  const tituloId = useId();
+  const panel = useModalAccesible<HTMLDivElement>({
+    activo: abierto,
+    onCerrar: () => setAbierto(false),
+  });
 
   // El portal se recarga solo cuando llega algo nuevo; la marca sigue a lo que
   // diga el servidor mientras la hoja esté cerrada.
@@ -70,9 +76,15 @@ export default function BotonCanal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center">
-      <div className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-white/10 bg-[#0B0D13] p-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:rounded-2xl sm:pb-4">
+      <div
+        ref={panel}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={tituloId}
+        className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-white/10 bg-[#0B0D13] p-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:rounded-2xl sm:pb-4"
+      >
         <div className="mb-3 flex items-center justify-between gap-3">
-          <h2 className="font-heading text-xl font-semibold text-white">
+          <h2 id={tituloId} className="font-heading text-xl font-semibold text-white">
             Coordinación
           </h2>
           <button

@@ -56,6 +56,7 @@ import {
   type ReactNode, useId,
 } from "react";
 import { useRouter } from "next/navigation";
+import { useModalAccesible } from "@/hooks/useModalAccesible";
 import type { NombreDeSeccion } from "./secciones";
 import {
   getGodEyeOverviewAction,
@@ -542,6 +543,31 @@ export default function GodEyeDashboard({
   const [showRevokeModal, setShowRevokeModal] = useState(false);
   const [revokeReason, setRevokeReason] = useState("");
   const [isRevoking, setIsRevoking] = useState(false);
+
+  const tituloSancionId = useId();
+  const tituloRevocarId = useId();
+  const tituloDetalleId = useId();
+  const panelSancion = useModalAccesible<HTMLDivElement>({
+    activo: showSanctionModal,
+    bloqueado: isApplyingSanction,
+    onCerrar: () => {
+      setShowSanctionModal(false);
+      setSanctionReason("");
+    },
+  });
+  const panelRevocar = useModalAccesible<HTMLDivElement>({
+    activo: showRevokeModal,
+    bloqueado: isRevoking,
+    onCerrar: () => {
+      setShowRevokeModal(false);
+      setRevokeReason("");
+      setRevokingSanctionId(null);
+    },
+  });
+  const panelDetalle = useModalAccesible<HTMLDivElement>({
+    activo: selectedSanctionDetail !== null,
+    onCerrar: () => setSelectedSanctionDetail(null),
+  });
 
   const handleRevokeSanction = async () => {
     if (!revokingSanctionId || !revokeReason.trim()) return;
@@ -2615,8 +2641,14 @@ export default function GodEyeDashboard({
       {/* MODAL DE SANCIÓN DIRECTA */}
       {showSanctionModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-3xl border border-zinc-800 bg-[#0c0c0c] p-6 shadow-2xl">
-            <h3 className="text-lg font-extrabold text-white">
+          <div
+            ref={panelSancion}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={tituloSancionId}
+            className="w-full max-w-md rounded-3xl border border-zinc-800 bg-[#0c0c0c] p-6 shadow-2xl"
+          >
+            <h3 id={tituloSancionId} className="text-lg font-extrabold text-white">
               Aplicar Sanción Disciplinaria
             </h3>
             <p className="mt-1 text-xs sm:text-sm text-zinc-400">
@@ -2741,8 +2773,14 @@ export default function GodEyeDashboard({
       {/* MODAL DE REVOCACIÓN DE SANCIÓN */}
       {showRevokeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-3xl border border-zinc-800 bg-[#0c0c0c] p-6 shadow-2xl">
-            <h3 className="text-lg font-extrabold text-white flex items-center gap-2">
+          <div
+            ref={panelRevocar}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={tituloRevocarId}
+            className="w-full max-w-md rounded-3xl border border-zinc-800 bg-[#0c0c0c] p-6 shadow-2xl"
+          >
+            <h3 id={tituloRevocarId} className="text-lg font-extrabold text-white flex items-center gap-2">
               <CheckCircle2 className="h-5 w-5 text-emerald-400" />
               Revocar Sanción Disciplinaria
             </h3>
@@ -2820,7 +2858,13 @@ export default function GodEyeDashboard({
       {/* MODAL DE DETALLE COMPLETO DE SANCIÓN */}
       {selectedSanctionDetail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-3xl border border-zinc-800 bg-[#0c0c0c] p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95">
+          <div
+            ref={panelDetalle}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={tituloDetalleId}
+            className="w-full max-w-lg rounded-3xl border border-zinc-800 bg-[#0c0c0c] p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95"
+          >
             {/* Header */}
             <div className="flex items-center justify-between border-b border-zinc-800/80 pb-4">
               <div className="flex items-center gap-3">
@@ -2839,7 +2883,7 @@ export default function GodEyeDashboard({
                   )}
                 </span>
                 <div>
-                  <h3 className="text-base sm:text-lg font-extrabold text-white">
+                  <h3 id={tituloDetalleId} className="text-base sm:text-lg font-extrabold text-white">
                     Detalle de Sanción Disciplinaria
                   </h3>
                   <p className="text-xs text-zinc-400">

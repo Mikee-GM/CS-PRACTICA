@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -12,6 +13,7 @@ import {
 import { usePathname } from "next/navigation";
 import { BellRing, RefreshCw, Share2, WifiOff, X } from "lucide-react";
 import { toast } from "sonner";
+import { useModalAccesible } from "@/hooks/useModalAccesible";
 import {
   capabilitiesFromBrowser,
   isStaffPath,
@@ -258,15 +260,17 @@ export default function PwaProvider({ children }: { children: React.ReactNode })
 }
 
 function OfflineGuard() {
+  const tituloId = useId();
   return (
     <div
       role="alertdialog"
       aria-modal="true"
+      aria-labelledby={tituloId}
       className="fixed inset-0 z-[120] flex min-h-dvh items-center justify-center bg-black px-6 pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)] text-center"
     >
       <div className="max-w-sm">
         <WifiOff className="mx-auto text-[#C5A55A]" size={40} />
-        <h1 className="mt-5 font-heading text-2xl text-white">Sin conexión</h1>
+        <h1 id={tituloId} className="mt-5 font-heading text-2xl text-white">Sin conexión</h1>
         <p className="mt-3 text-sm leading-relaxed text-zinc-400">
           La información privada no se guarda offline. Recupera la conexión para continuar con cualquier acción operativa.
         </p>
@@ -283,17 +287,20 @@ function InstallHelp({
   onClose(): void;
 }) {
   const ios = platform === "ios";
+  const tituloId = useId();
+  const panel = useModalAccesible<HTMLElement>({ onCerrar: onClose });
   return (
     <div className="fixed inset-0 z-[110] flex items-end justify-center bg-black/80 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:items-center">
       <section
+        ref={panel}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="install-title"
+        aria-labelledby={tituloId}
         className="max-h-[calc(100dvh-1.5rem)] w-full max-w-md overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-950 p-5"
       >
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 id="install-title" className="font-heading text-xl text-white">
+            <h2 id={tituloId} className="font-heading text-xl text-white">
               Instala la aplicación
             </h2>
             <p className="mt-1 text-xs text-zinc-500">

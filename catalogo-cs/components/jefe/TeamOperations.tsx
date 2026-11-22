@@ -8,6 +8,7 @@ import {
   useState,
   useTransition, useId,
 } from "react";
+import { useModalAccesible } from "@/hooks/useModalAccesible";
 import type {
   ButtonHTMLAttributes,
   ReactNode,
@@ -1680,6 +1681,11 @@ export function EditPendingServiceDialog({
   const [metodoPago, setMetodoPago] = useState(service.metodoPago);
   const [notas, setNotas] = useState(service.notas || "");
   const [saving, setSaving] = useState(false);
+  const tituloId = useId();
+  const panel = useModalAccesible<HTMLDivElement>({
+    bloqueado: saving,
+    onCerrar: onClose,
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1710,9 +1716,15 @@ export function EditPendingServiceDialog({
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-3 backdrop-blur-sm"
       onMouseDown={(e) => e.target === e.currentTarget && !saving && onClose()}
     >
-      <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-[#090909] p-6 shadow-2xl">
+      <div
+        ref={panel}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={tituloId}
+        className="w-full max-w-md rounded-2xl border border-zinc-800 bg-[#090909] p-6 shadow-2xl"
+      >
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-heading text-xl text-white">
+          <h3 id={tituloId} className="font-heading text-xl text-white">
             Editar Servicio Pendiente
           </h3>
           <button
@@ -1860,6 +1872,11 @@ export function AcceptServiceDialog({
   onAccept: (transport: "chofer" | "uber", notes?: string) => void;
 }) {
   const [notes, setNotes] = useState("");
+  const tituloId = useId();
+  const panel = useModalAccesible<HTMLElement>({
+    bloqueado: disabled,
+    onCerrar: onClose,
+  });
   const sameLocation = Boolean(
     previousService?.presetLocationId &&
     previousService.presetLocationId === service.presetLocationId,
@@ -1870,9 +1887,10 @@ export function AcceptServiceDialog({
       onMouseDown={(event) => event.target === event.currentTarget && onClose()}
     >
       <section
+        ref={panel}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="accept-service-title"
+        aria-labelledby={tituloId}
         className="w-full max-w-lg rounded-2xl border border-[#C5A55A]/50 bg-[#050505] p-5 shadow-2xl sm:p-7"
       >
         <div className="flex items-start justify-between gap-4">
@@ -1881,7 +1899,7 @@ export function AcceptServiceDialog({
               Aceptar servicio
             </p>
             <h2
-              id="accept-service-title"
+              id={tituloId}
               className="mt-1 font-heading text-3xl"
             >
               {service.empleada?.nombreArtistico || "Empleada"}
@@ -2103,12 +2121,20 @@ function EmployeeSheet({
   onCanal: () => void;
   onClose: () => void;
 }) {
+  const tituloId = useId();
+  const panel = useModalAccesible<HTMLDivElement>({ onCerrar: onClose });
   return (
     <div
       className="fixed inset-0 z-[60] flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center sm:p-3"
       onMouseDown={(event) => event.target === event.currentTarget && onClose()}
     >
-      <div className="w-full rounded-t-3xl border border-b-0 border-zinc-800 bg-[#090909] p-5 pb-8 shadow-2xl sm:max-w-md sm:rounded-2xl sm:border-b sm:pb-5">
+      <div
+        ref={panel}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={tituloId}
+        className="w-full rounded-t-3xl border border-b-0 border-zinc-800 bg-[#090909] p-5 pb-8 shadow-2xl sm:max-w-md sm:rounded-2xl sm:border-b sm:pb-5"
+      >
         <div className="mb-5 flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3.5">
             <span
@@ -2116,7 +2142,7 @@ function EmployeeSheet({
               style={fondoEmpleada(employee)}
             />
             <div className="min-w-0">
-              <h3 className="truncate font-heading text-2xl font-semibold text-white">
+              <h3 id={tituloId} className="truncate font-heading text-2xl font-semibold text-white">
                 {employee.nombreArtistico}
               </h3>
               <p className="mt-1 flex items-center gap-1 text-xs text-zinc-500">
@@ -2429,6 +2455,11 @@ export function TransportChoiceSheet({
   onExternal: () => void;
 }) {
   const [saving, setSaving] = useState(false);
+  const tituloId = useId();
+  const panel = useModalAccesible<HTMLElement>({
+    bloqueado: saving,
+    onCerrar: onClose,
+  });
   async function chooseInternal() {
     setSaving(true);
     try {
@@ -2439,13 +2470,19 @@ export function TransportChoiceSheet({
   }
   return (
     <div className="fixed inset-0 z-[75] flex items-center justify-center bg-black/80 p-3 backdrop-blur-sm">
-      <section className="max-h-[calc(100dvh-6rem-env(safe-area-inset-bottom))] w-full max-w-md overflow-y-auto rounded-2xl border border-zinc-800 bg-[#090909] p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl sm:max-h-[90dvh] sm:pb-5">
+      <section
+        ref={panel}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={tituloId}
+        className="max-h-[calc(100dvh-6rem-env(safe-area-inset-bottom))] w-full max-w-md overflow-y-auto rounded-2xl border border-zinc-800 bg-[#090909] p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] shadow-2xl sm:max-h-[90dvh] sm:pb-5"
+      >
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#C5A55A]">
               Transporte
             </p>
-            <h2 className="mt-1 font-heading text-2xl text-white">
+            <h2 id={tituloId} className="mt-1 font-heading text-2xl text-white">
               Asignar transporte
             </h2>
             <p className="mt-2 text-sm text-zinc-400">
@@ -2876,18 +2913,26 @@ function ExclusivePhotosPanel({
   employee: Employee;
   onClose: () => void;
 }) {
+  const tituloId = useId();
+  const panel = useModalAccesible<HTMLDivElement>({ onCerrar: onClose });
   return (
     <div
       className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-3 backdrop-blur-sm"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
-      <div className="relative w-full max-w-3xl max-h-[85vh] overflow-y-auto rounded-2xl border border-zinc-800 bg-[#090909] p-6 shadow-2xl">
+      <div
+        ref={panel}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={tituloId}
+        className="relative w-full max-w-3xl max-h-[85vh] overflow-y-auto rounded-2xl border border-zinc-800 bg-[#090909] p-6 shadow-2xl"
+      >
         <div className="mb-5 flex items-start justify-between gap-4">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#C5A55A]">
               Fotos de la modelo
             </p>
-            <h3 className="mt-1 font-heading text-2xl text-white">
+            <h3 id={tituloId} className="mt-1 font-heading text-2xl text-white">
               {employee.nombreArtistico}
             </h3>
           </div>

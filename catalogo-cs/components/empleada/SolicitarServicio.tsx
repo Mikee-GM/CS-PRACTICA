@@ -14,6 +14,7 @@ import { Plus, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { pedirConSesion } from "@/lib/client-fetch";
+import { useModalAccesible } from "@/hooks/useModalAccesible";
 import { desdeHoraDelNegocio, paraInputDeFechaHora } from "@/lib/locale";
 
 /**
@@ -120,6 +121,13 @@ export default function SolicitarServicio() {
     setEnviando(false);
   }, []);
 
+  const tituloId = useId();
+  const panel = useModalAccesible<HTMLDivElement>({
+    activo: abierto,
+    bloqueado: enviando,
+    onCerrar: cerrar,
+  });
+
   const enviar = useCallback(async () => {
     // Se comprueba aquí y no solo con los atributos del input: el teclado
     // numérico del móvil deja escribir cosas que `min` y `max` no frenan, y el
@@ -224,10 +232,16 @@ export default function SolicitarServicio() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-sm sm:items-center">
-      <div className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-white/10 bg-[#0B0D13] p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:rounded-2xl sm:pb-5">
+      <div
+        ref={panel}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={tituloId}
+        className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-white/10 bg-[#0B0D13] p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))] sm:rounded-2xl sm:pb-5"
+      >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="font-heading text-xl font-semibold text-white">
+            <h2 id={tituloId} className="font-heading text-xl font-semibold text-white">
               Solicitar servicio
             </h2>
             <p className="mt-1 text-[11px] leading-relaxed text-gray-500">

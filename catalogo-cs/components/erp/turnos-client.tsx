@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { CalendarRange, LayoutGrid, Percent, Users, X } from "lucide-react";
 
@@ -16,6 +16,7 @@ import {
   TFootRow,
   Th,
 } from "@/components/erp/primitives";
+import { useModalAccesible } from "@/hooks/useModalAccesible";
 import type {
   ApiUser,
   DriverShiftCandidates,
@@ -74,6 +75,15 @@ export default function TurnosClient({
   const [endsAt, setEndsAt] = useState("16:00");
   const [selectedDays, setSelectedDays] = useState<number[]>([1, 2, 3, 4, 5]);
   const [capacity, setCapacity] = useState("");
+
+  const tituloDetalleId = useId();
+  const panelDetalle = useModalAccesible<HTMLDivElement>({
+    activo: detail !== null,
+    onCerrar: () => {
+      setDetail(null);
+      setCandidates(null);
+    },
+  });
 
   const nombreUsuario = useMemo(() => {
     const mapa = new Map<string, string>();
@@ -626,10 +636,16 @@ export default function TurnosClient({
 
       {detail ? (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 p-0 sm:items-center sm:p-6">
-          <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-zinc-800 bg-[#050505] p-5 sm:rounded-2xl sm:p-6">
+          <div
+            ref={panelDetalle}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={tituloDetalleId}
+            className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-zinc-800 bg-[#050505] p-5 sm:rounded-2xl sm:p-6"
+          >
             <div className="mb-5 flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <h3 className="font-heading text-xl font-semibold text-[#E8D5A3]">
+                <h3 id={tituloDetalleId} className="font-heading text-xl font-semibold text-[#E8D5A3]">
                   {detail.title}
                 </h3>
                 <p className="mt-1 text-[11px] text-zinc-500">

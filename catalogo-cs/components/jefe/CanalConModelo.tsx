@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useId, useRef, useState, useTransition } from "react";
 import { RefreshCw, Send, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { escribirAModelo, leerCanalDeModelo } from "@/lib/actions/team-channel";
+import { useModalAccesible } from "@/hooks/useModalAccesible";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 import type { Employee, MensajeDelCanalJefe } from "@/lib/types";
 
@@ -31,6 +32,8 @@ export default function CanalConModelo({
   const [cargando, setCargando] = useState(true);
   const [enviando, startTransition] = useTransition();
   const finDelHilo = useRef<HTMLDivElement | null>(null);
+  const tituloId = useId();
+  const panel = useModalAccesible<HTMLElement>({ onCerrar: onClose });
 
   const cargar = useCallback(async () => {
     const resultado = await leerCanalDeModelo(employee.id);
@@ -86,9 +89,10 @@ export default function CanalConModelo({
       onMouseDown={(event) => event.target === event.currentTarget && onClose()}
     >
       <section
+        ref={panel}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="canal-modelo-title"
+        aria-labelledby={tituloId}
         className="flex w-full max-h-[85vh] flex-col rounded-t-3xl border border-b-0 border-zinc-800 bg-[#050505] pb-[env(safe-area-inset-bottom)] shadow-2xl sm:max-w-lg sm:rounded-2xl sm:border-b"
       >
         <header className="flex items-start justify-between gap-4 border-b border-zinc-800 px-5 py-4">
@@ -96,7 +100,7 @@ export default function CanalConModelo({
             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#C5A55A]">
               Canal privado
             </p>
-            <h2 id="canal-modelo-title" className="mt-1 truncate font-heading text-2xl">
+            <h2 id={tituloId} className="mt-1 truncate font-heading text-2xl">
               {employee.nombreArtistico}
             </h2>
             <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { ExternalLink, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { assignExternalTransport } from "@/lib/actions/jefe-panel";
+import { useModalAccesible } from "@/hooks/useModalAccesible";
 import type { Trip } from "@/lib/types";
 
 type ExternalTransportSheetProps = {
@@ -42,6 +43,11 @@ export default function ExternalTransportSheet({
     trip && Number(trip.tarifa) > 0 ? String(trip.tarifa) : "",
   );
   const [saving, startSaving] = useTransition();
+  const tituloId = useId();
+  const panel = useModalAccesible<HTMLElement>({
+    bloqueado: saving,
+    onCerrar: onClose,
+  });
 
   const platform =
     platformChoice === "Otro" ? customPlatform.trim() : platformChoice;
@@ -84,9 +90,10 @@ export default function ExternalTransportSheet({
       onMouseDown={(event) => event.target === event.currentTarget && onClose()}
     >
       <section
+        ref={panel}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="external-transport-title"
+        aria-labelledby={tituloId}
         className="flex max-h-[calc(100dvh-2*max(1rem,env(safe-area-inset-top),env(safe-area-inset-bottom)))] w-full max-w-md flex-col overflow-y-auto rounded-2xl border border-[#C5A55A]/45 bg-[#080808] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl sm:p-6"
       >
         <header className="flex items-start justify-between gap-4">
@@ -95,7 +102,7 @@ export default function ExternalTransportSheet({
               Viaje de {tripType}
             </p>
             <h2
-              id="external-transport-title"
+              id={tituloId}
               className="mt-1 font-heading text-2xl text-white"
             >
               Asignar transporte externo

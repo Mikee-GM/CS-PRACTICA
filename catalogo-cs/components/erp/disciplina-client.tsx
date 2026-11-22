@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { Gavel, Scale, ShieldAlert, Wallet } from "lucide-react";
@@ -20,6 +20,7 @@ import {
   type BadgeTone,
 } from "@/components/erp/primitives";
 import PromptDialog from "@/components/ui/PromptDialog";
+import { useModalAccesible } from "@/hooks/useModalAccesible";
 import { bloquearClienteAction } from "@/lib/actions/clientes";
 import { formatCurrency } from "@/lib/calculations";
 import {
@@ -277,6 +278,19 @@ export default function DisciplinaClient({
   const [customStartsAt, setCustomStartsAt] = useState("");
   const [customEndsAt, setCustomEndsAt] = useState("");
   const [customReason, setCustomReason] = useState("");
+
+  const tituloMultaId = useId();
+  const tituloSuspensionId = useId();
+  const panelMulta = useModalAccesible<HTMLDivElement>({
+    activo: fineDossier !== null,
+    bloqueado: pending,
+    onCerrar: () => setFineDossier(null),
+  });
+  const panelSuspension = useModalAccesible<HTMLDivElement>({
+    activo: customSuspensionDossier !== null,
+    bloqueado: pending,
+    onCerrar: () => setCustomSuspensionDossier(null),
+  });
 
   /** Nombre legible de una persona; cae al id corto si no esta en el directorio. */
   const nombre = useMemo(
@@ -1306,8 +1320,14 @@ export default function DisciplinaClient({
 
       {fineDossier ? (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-[#0A0A0A] p-6">
-            <h3 className="font-heading text-lg font-semibold text-[#E8D5A3]">
+          <div
+            ref={panelMulta}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={tituloMultaId}
+            className="w-full max-w-md rounded-2xl border border-zinc-800 bg-[#0A0A0A] p-6"
+          >
+            <h3 id={tituloMultaId} className="font-heading text-lg font-semibold text-[#E8D5A3]">
               Aplicar multa economica
             </h3>
             <p className="mt-1 text-[11px] text-zinc-500">
@@ -1365,8 +1385,14 @@ export default function DisciplinaClient({
 
       {customSuspensionDossier ? (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 p-4">
-          <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-[#0A0A0A] p-6">
-            <h3 className="font-heading text-lg font-semibold text-[#E8D5A3]">
+          <div
+            ref={panelSuspension}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={tituloSuspensionId}
+            className="w-full max-w-md rounded-2xl border border-zinc-800 bg-[#0A0A0A] p-6"
+          >
+            <h3 id={tituloSuspensionId} className="font-heading text-lg font-semibold text-[#E8D5A3]">
               Suspension personalizada
             </h3>
             <p className="mt-1 text-[11px] text-zinc-500">

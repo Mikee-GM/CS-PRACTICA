@@ -5,6 +5,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import PageHeader from "@/components/ui/page-header";
 import InputField from "@/components/ui/InputField";
+import { useModalAccesible } from "@/hooks/useModalAccesible";
 import {
   createCandidateScreening,
   createScreeningQuestion,
@@ -192,6 +193,13 @@ export default function CandidatasClient({
     setGeneratedLink(null);
     setSelectedQuestionIds(new Set(activeQuestions.map((q) => q.id)));
   };
+
+  const tituloCrearId = useId();
+  const panelCrear = useModalAccesible<HTMLDivElement>({
+    activo: showCreateModal,
+    bloqueado: creating,
+    onCerrar: closeCreateModal,
+  });
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -425,10 +433,16 @@ export default function CandidatasClient({
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
           onClick={(e) => e.target === e.currentTarget && closeCreateModal()}
         >
-          <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-zinc-800 bg-zinc-950 p-6">
+          <div
+            ref={panelCrear}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={tituloCrearId}
+            className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-zinc-800 bg-zinc-950 p-6"
+          >
             {!generatedLink ? (
               <>
-                <h3 className="mb-4 font-serif text-lg text-zinc-100">Nueva evaluación</h3>
+                <h3 id={tituloCrearId} className="mb-4 font-serif text-lg text-zinc-100">Nueva evaluación</h3>
                 <div className="space-y-4">
                   <InputField
                     label="Nombre de la candidata"
@@ -484,7 +498,7 @@ export default function CandidatasClient({
               </>
             ) : (
               <>
-                <h3 className="mb-2 font-serif text-lg text-zinc-100">
+                <h3 id={tituloCrearId} className="mb-2 font-serif text-lg text-zinc-100">
                   Evaluación creada
                 </h3>
                 <p className="mb-4 text-sm text-zinc-400">

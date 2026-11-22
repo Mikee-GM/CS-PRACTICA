@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Trophy, Users, Car, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import PageHeader from "@/components/ui/page-header";
+import { useModalAccesible } from "@/hooks/useModalAccesible";
 import { formatDateTime } from "@/lib/calculations";
 import { desdeHoraDelNegocio, paraInputDeFechaHora } from "@/lib/locale";
 import type {
@@ -70,6 +71,11 @@ export default function ChallengesClient({
   const [detail, setDetail] = useState<ChallengeDetail | null>(null);
   const [loadingDetailId, setLoadingDetailId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const tituloDetalleId = useId();
+  const panelDetalle = useModalAccesible<HTMLDivElement>({
+    activo: detail !== null,
+    onCerrar: () => setDetail(null),
+  });
 
   const [title, setTitle] = useState("");
   const [participantType, setParticipantType] =
@@ -367,10 +373,16 @@ export default function ChallengesClient({
 
       {detail && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-6">
-          <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-t-3xl border border-zinc-800 bg-zinc-950 p-5 sm:rounded-3xl sm:p-6">
+          <div
+            ref={panelDetalle}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={tituloDetalleId}
+            className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-t-3xl border border-zinc-800 bg-zinc-950 p-5 sm:rounded-3xl sm:p-6"
+          >
             <div className="mb-4 flex items-start justify-between">
               <div>
-                <h3 className="font-serif text-xl font-semibold text-zinc-100">{detail.title}</h3>
+                <h3 id={tituloDetalleId} className="font-serif text-xl font-semibold text-zinc-100">{detail.title}</h3>
                 <p className="mt-1 text-xs text-zinc-500">
                   {metricLabels[detail.metric]} ·{" "}
                   <span className={`font-semibold ${statusStyles[detail.status]}`}>

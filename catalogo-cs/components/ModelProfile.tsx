@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion } from "framer-motion";
@@ -8,6 +8,7 @@ import type { Modelo } from "@/types";
 import FichaModelo, { estadoDeContacto } from "@/components/FichaModelo";
 import { rutaDelPerfil } from "@/lib/posts";
 import BotonChatear from "@/components/cliente/BotonChatear";
+import { useModalAccesible } from "@/hooks/useModalAccesible";
 
 interface ModelProfileProps {
   modelo: Modelo;
@@ -19,6 +20,8 @@ export default function ModelProfile({ modelo, onClose }: ModelProfileProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [touchEndX, setTouchEndX] = useState<number | null>(null);
+  const tituloId = useId();
+  const panel = useModalAccesible<HTMLDivElement>({ onCerrar: onClose });
 
   const { status, canContact } = estadoDeContacto(modelo);
 
@@ -73,6 +76,10 @@ export default function ModelProfile({ modelo, onClose }: ModelProfileProps) {
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <motion.div
+        ref={panel}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={tituloId}
         initial={{ opacity: 0, scale: 0.96, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: 20 }}
@@ -191,7 +198,7 @@ export default function ModelProfile({ modelo, onClose }: ModelProfileProps) {
         <div className="w-full md:w-1/2 p-6 sm:p-8 lg:p-10 flex flex-col overflow-y-auto customized-scrollbar">
           <div className="flex-1">
             {/* Nombre */}
-            <h2 className="font-heading text-3xl sm:text-4xl font-semibold text-white tracking-wide mb-2 pr-10">
+            <h2 id={tituloId} className="font-heading text-3xl sm:text-4xl font-semibold text-white tracking-wide mb-2 pr-10">
               {modelo.nombre}
             </h2>
             {modelo.slug ? (

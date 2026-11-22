@@ -32,6 +32,7 @@ import {
 } from "@/lib/actions/jefe-panel";
 import type { ConversationMessage, Employee, GroupServiceRequest, PedidoGrupalDelChat, Trip } from "@/lib/types";
 import { formatCurrency } from "@/lib/calculations";
+import { useModalAccesible } from "@/hooks/useModalAccesible";
 import { comprimirCaptura } from "@/lib/comprimir-imagen";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 
@@ -996,6 +997,12 @@ function ActiveGroupEditor({
   } | null>(null);
   const [removeReason, setRemoveReason] = useState("");
   const [removeTransportAmount, setRemoveTransportAmount] = useState("0");
+  const tituloRetiroId = useId();
+  const panelRetiro = useModalAccesible<HTMLDivElement>({
+    activo: removingParticipant !== null,
+    bloqueado: pending,
+    onCerrar: () => setRemovingParticipant(null),
+  });
   const [returnUnits, setReturnUnits] = useState<GroupTransportUnitInput[]>(
     () => {
       const existing = (service.viajes ?? [])
@@ -1432,8 +1439,14 @@ function ActiveGroupEditor({
 
       {removingParticipant && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl border border-zinc-800 bg-[#0c0c0c] p-6 shadow-2xl">
-            <h3 className="font-heading text-lg font-bold text-white">
+          <div
+            ref={panelRetiro}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={tituloRetiroId}
+            className="w-full max-w-md rounded-2xl border border-zinc-800 bg-[#0c0c0c] p-6 shadow-2xl"
+          >
+            <h3 id={tituloRetiroId} className="font-heading text-lg font-bold text-white">
               Retirar a {removingParticipant.employeeName}
             </h3>
             <p className="mt-1 text-xs text-zinc-400">

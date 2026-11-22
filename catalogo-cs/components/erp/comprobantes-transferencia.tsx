@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
@@ -13,6 +13,7 @@ import {
   type BadgeTone,
 } from "@/components/erp/primitives";
 import { formatCurrency } from "@/lib/calculations";
+import { useModalAccesible } from "@/hooks/useModalAccesible";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 
 /**
@@ -90,6 +91,11 @@ export default function ComprobantesTransferencia({
   const [ampliado, setAmpliado] = useState<ComprobanteTransferencia | null>(
     null,
   );
+  const tituloId = useId();
+  const panel = useModalAccesible<HTMLDivElement>({
+    activo: ampliado !== null,
+    onCerrar: () => setAmpliado(null),
+  });
 
   return (
     <Panel
@@ -174,6 +180,10 @@ export default function ComprobantesTransferencia({
             }}
           >
             <motion.div
+              ref={panel}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby={tituloId}
               initial={{ opacity: 0, scale: 0.97 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.97 }}
@@ -182,7 +192,7 @@ export default function ComprobantesTransferencia({
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex flex-col gap-0.5">
-                  <span className="font-heading text-lg text-white">
+                  <span id={tituloId} className="font-heading text-lg text-white">
                     {ampliado.monto == null
                       ? "Comprobante de transferencia"
                       : formatCurrency(ampliado.monto)}

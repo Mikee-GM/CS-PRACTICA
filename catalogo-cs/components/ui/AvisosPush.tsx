@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import {
   Bell,
   BellOff,
@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useModalAccesible } from "@/hooks/useModalAccesible";
 import { pedirConSesion } from "@/lib/client-fetch";
 import { usePwa } from "@/components/pwa/PwaProvider";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
@@ -51,7 +52,13 @@ export default function AvisosPush() {
   const [state, setState] = useState<Estado>("cargando");
   const [busy, setBusy] = useState(false);
   const [permissionExplanation, setPermissionExplanation] = useState(false);
+  const tituloPermisoId = useId();
   const [serverStatus, setServerStatus] = useState<ServerStatus | null>(null);
+  const panelPermiso = useModalAccesible<HTMLElement>({
+    activo: permissionExplanation,
+    bloqueado: busy,
+    onCerrar: () => setPermissionExplanation(false),
+  });
 
   const refresh = useCallback(async () => {
     const capabilities = pwa?.capabilities;
@@ -300,10 +307,10 @@ export default function AvisosPush() {
 
       {permissionExplanation && (
         <div className="fixed inset-0 z-[110] flex items-end justify-center bg-black/80 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:items-center">
-          <section role="dialog" aria-modal="true" aria-labelledby="permission-title" className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
+          <section ref={panelPermiso} role="dialog" aria-modal="true" aria-labelledby={tituloPermisoId} className="w-full max-w-md rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 id="permission-title" className="font-heading text-xl text-white">Activar notificaciones</h2>
+                <h2 id={tituloPermisoId} className="font-heading text-xl text-white">Activar notificaciones</h2>
                 <p className="mt-2 text-sm leading-relaxed text-zinc-400">
                   Activa las notificaciones para recibir nuevos servicios, viajes y alertas aunque la aplicación esté cerrada.
                 </p>
