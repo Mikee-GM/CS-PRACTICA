@@ -108,7 +108,7 @@ function ordenarBloques(
    * Va al final en vez de desaparecer: quien guardo su tablero hace meses tiene
    * que poder ver lo que se agrego desde entonces.
    */
-  const ordenados = [...bloques].sort((a, b) => {
+  const ordenados = bloques.toSorted((a, b) => {
     const pa = posicion.get(a.id) ?? Number.MAX_SAFE_INTEGER;
     const pb = posicion.get(b.id) ?? Number.MAX_SAFE_INTEGER;
     if (pa !== pb) return pa - pb;

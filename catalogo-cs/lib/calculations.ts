@@ -71,7 +71,7 @@ export const formatDateTime = (dateString: string | Date) =>
   });
 
 export function sortRecordsByServiceNumber(records: any[]) {
-  return [...records].sort((a, b) => {
+  return records.toSorted((a, b) => {
     const countA = a.contador_servicio || Infinity;
     const countB = b.contador_servicio || Infinity;
     if (countA !== countB) return countA - countB;

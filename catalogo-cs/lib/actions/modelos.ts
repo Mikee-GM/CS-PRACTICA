@@ -239,8 +239,8 @@ export async function getGalleryAction(
     }
 
     const empleada = await apiFetch<any>(path, { authenticated: true });
-    return [...(empleada?.empleadaFotos ?? [])].sort(
-      (a, b) => (a.orden ?? 0) - (b.orden ?? 0),
+    return (empleada?.empleadaFotos ?? []).toSorted(
+      (a: { orden?: number }, b: { orden?: number }) => (a.orden ?? 0) - (b.orden ?? 0),
     );
   } catch (error) {
     if (isRedirectError(error)) throw error;

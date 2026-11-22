@@ -245,7 +245,7 @@ export default function LocationPickerMap({
                 if (searchResults.length > 0) setIsDropdownOpen(true);
               }}
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
+                if (e.key === "Enter" && !e.nativeEvent.isComposing) {
                   e.preventDefault();
                   performSearch(searchQuery);
                 }

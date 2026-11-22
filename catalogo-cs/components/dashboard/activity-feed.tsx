@@ -14,8 +14,8 @@ const statusLabels: Record<Service["estado"], string> = {
 };
 
 export default function ActivityFeed({ services, error }: Props) {
-  const recentServices = [...services]
-    .sort(
+  const recentServices = services
+    .toSorted(
       (a, b) =>
         new Date(b.updatedAt ?? b.createdAt).getTime() -
         new Date(a.updatedAt ?? a.createdAt).getTime(),

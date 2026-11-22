@@ -108,7 +108,7 @@ export function unirPaginas(
 
 /** La media en el orden que eligio quien publico, sin mutar la original. */
 export function mediaOrdenada(media: readonly MediaDelPost[]): MediaDelPost[] {
-  return [...media].sort((a, b) => a.position - b.position);
+  return media.toSorted((a, b) => a.position - b.position);
 }
 
 // ---------------------------------------------------------------------------

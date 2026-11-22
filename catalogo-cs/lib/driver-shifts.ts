@@ -8,8 +8,8 @@ export const DAY_LABELS = ["Dom", "Lun", "Mar", "Mie", "Jue", "Vie", "Sab"];
 
 export function formatDays(daysOfWeek: number[]) {
   if (daysOfWeek.length === 7) return "Todos los dias";
-  return [...daysOfWeek]
-    .sort((a, b) => (a || 7) - (b || 7))
+  return daysOfWeek
+    .toSorted((a, b) => (a || 7) - (b || 7))
     .map((day) => DAY_LABELS[day])
     .join(", ");
 }
