@@ -280,4 +280,22 @@ describe('WeeklyContentScheduler', () => {
     expect(conductReportRepo.save).toHaveBeenCalledTimes(1);
     expect(schedule.estado).toBe('falta_aplicada');
   });
+
+  it('una solicitud que falla no bloquea a las que siguen', async () => {
+    const mala = pendiente({ id: 'sched-mala', recordatoriosEnviados: 3 });
+    const buena = pendiente({
+      id: 'sched-buena',
+      empleadaId: 'emp-2',
+      recordatoriosEnviados: 3,
+    });
+    scheduleRepo.find.mockResolvedValue([mala, buena]);
+    weeklyContentService.esSemanaDeGracia
+      .mockRejectedValueOnce(new Error('falla'))
+      .mockResolvedValueOnce(true);
+
+    await aplicarMultas();
+
+    expect(buena.estado).toBe('falta_aplicada');
+    expect(mala.estado).toBe('solicitado');
+  });
 });

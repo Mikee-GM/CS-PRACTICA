@@ -270,7 +270,9 @@ export class ClientDossierService {
        FROM servicios
        WHERE cliente_id = $1
          AND deleted_at IS NULL
-         AND created_at >= date_trunc('month', now()) - make_interval(months => $3)
+         AND created_at >= (
+           date_trunc('month', now() AT TIME ZONE $2) - make_interval(months => $3)
+         ) AT TIME ZONE $2
        GROUP BY 1
        ORDER BY 1`,
       [clienteId, APP_TIME_ZONE, MESES_DE_SERIE - 1],

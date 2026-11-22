@@ -93,3 +93,38 @@ export class ResolveAppealDto {
   @IsIn(['upheld', 'overturned'])
   decision: 'upheld' | 'overturned';
 }
+
+/** Tope de una pagina de reportes: lo bastante grande para el panel actual. */
+export const MAX_LIMITE_REPORTES = 500;
+
+/**
+ * Filtros de GET /discipline/reports.
+ *
+ * Antes llegaban como `Record<string, string>`, que el ValidationPipe no
+ * inspecciona: cualquier texto entraba al QueryBuilder y no habia tope de
+ * filas. `limit` sigue siendo opcional para no cambiar el contrato: sin el, el
+ * listado se comporta como siempre.
+ */
+export class ListConductReportsQueryDto {
+  // `direction` queda como texto: los reportes del sistema usan valores que no
+  // estan en RATING_DIRECTIONS.
+  @IsOptional() @IsString() @MaxLength(40) direction?: string;
+  @IsOptional() @IsIn(['client', 'employee', 'driver']) subjectType?: string;
+  @IsOptional() @IsIn(['normal', 'alta', 'urgente']) priority?: string;
+  @IsOptional() @IsIn(['nuevo', 'en_revision', 'cerrado']) status?: string;
+  @IsOptional() @IsIn(['confirmado', 'no_sustentado']) outcome?: string;
+  @IsOptional() @IsIn(CONDUCT_CATEGORIES) category?: ConductCategory;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(MAX_LIMITE_REPORTES)
+  limit?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  offset?: number;
+}

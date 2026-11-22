@@ -226,3 +226,61 @@ describe('WeeklyContentService.esSemanaDeGracia', () => {
     );
   });
 });
+
+describe('WeeklyContentService.deleteSubmission', () => {
+  const url = 'https://cdn.example.com/foto.jpg';
+  const submissionRepo = {
+    findOne: jest.fn(),
+    delete: jest.fn(),
+    count: jest.fn(),
+  };
+  const empleadasRepo = { count: jest.fn() };
+  const fotosRepo = { delete: jest.fn(), count: jest.fn() };
+  const fotosExclusivasRepo = { delete: jest.fn(), count: jest.fn() };
+  const uploadService = { deleteFile: jest.fn() };
+
+  const service = Object.create(
+    WeeklyContentService.prototype,
+  ) as WeeklyContentService;
+  Object.assign(service, {
+    submissionRepo,
+    empleadasRepo,
+    fotosRepo,
+    fotosExclusivasRepo,
+    uploadService,
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    submissionRepo.findOne.mockResolvedValue({
+      id: 'sub-1',
+      empleadaId: 'emp-1',
+      url,
+      estado: 'aprobada',
+    });
+    empleadasRepo.count.mockResolvedValue(0);
+    fotosRepo.count.mockResolvedValue(0);
+    fotosExclusivasRepo.count.mockResolvedValue(0);
+    submissionRepo.count.mockResolvedValue(0);
+  });
+
+  it('borra el archivo cuando nadie mas lo referencia', async () => {
+    await service.deleteSubmission('sub-1');
+
+    expect(uploadService.deleteFile).toHaveBeenCalledWith(url);
+  });
+
+  it.each([
+    ['el perfil de una modelo', empleadasRepo],
+    ['la galeria de otra modelo', fotosRepo],
+    ['las fotos exclusivas de otra modelo', fotosExclusivasRepo],
+    ['otra submission', submissionRepo],
+  ])('conserva el archivo si lo usa %s', async (_nombre, repo) => {
+    repo.count.mockResolvedValue(1);
+
+    await service.deleteSubmission('sub-1');
+
+    expect(submissionRepo.delete).toHaveBeenCalledWith({ id: 'sub-1' });
+    expect(uploadService.deleteFile).not.toHaveBeenCalled();
+  });
+});

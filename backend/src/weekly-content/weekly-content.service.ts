@@ -537,13 +537,18 @@ export class WeeklyContentService {
     });
     await this.submissionRepo.delete({ id: submission.id });
 
-    // Si la modelo tiene esa misma imagen como foto de perfil, el archivo sigue
-    // en uso y borrarlo dejaria el perfil roto.
-    const enUsoComoPerfil = await this.empleadasRepo.count({
-      where: { id: submission.empleadaId, fotoPerfilUrl: submission.url },
-    });
+    // El archivo es compartido si otra fila lo referencia: el perfil de
+    // cualquier modelo, la galeria de otra, o una submission distinta (una
+    // resubida de la misma URL). Borrarlo dejaria esas filas rotas.
+    const [perfil, galeria, exclusivas, otrasSubmissions] = await Promise.all([
+      this.empleadasRepo.count({ where: { fotoPerfilUrl: submission.url } }),
+      this.fotosRepo.count({ where: { url: submission.url } }),
+      this.fotosExclusivasRepo.count({ where: { url: submission.url } }),
+      this.submissionRepo.count({ where: { url: submission.url } }),
+    ]);
+    const enUso = perfil + galeria + exclusivas + otrasSubmissions;
 
-    if (enUsoComoPerfil === 0) {
+    if (enUso === 0) {
       try {
         await this.uploadService.deleteFile(submission.url);
       } catch {

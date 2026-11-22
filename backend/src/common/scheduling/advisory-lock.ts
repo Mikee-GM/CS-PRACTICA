@@ -106,4 +106,6 @@ export const ADVISORY_LOCKS = {
   conversationTurn: 811_011,
   onboardingWebReminders: 811_021,
   groupHoldRelease: 811_022,
+  serviceExtensionCheck: 811_023,
+  returnTransportReminders: 811_024,
 } as const;

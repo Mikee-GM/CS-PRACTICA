@@ -18,6 +18,7 @@ import {
   CreateConductReportDto,
   CreateRatingDto,
   CreateSanctionDto,
+  ListConductReportsQueryDto,
   RevokeSanctionDto,
 } from './dto/discipline.dto';
 import { ConductReport } from './entities/conduct-report.entity';
@@ -526,7 +527,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  async listReports(actor: Actor, filters: Record<string, string | undefined>) {
+  async listReports(actor: Actor, filters: ListConductReportsQueryDto) {
     const query = this.reports.createQueryBuilder('report');
     for (const field of [
       'direction',
@@ -575,7 +576,11 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
         'No puede consultar reportes disciplinarios',
       );
     }
-    return query.orderBy('report.createdAt', 'DESC').getMany();
+    query.orderBy('report.createdAt', 'DESC');
+    // Sin limit se devuelve todo, como hasta ahora; con el, el DTO ya lo acoto.
+    if (filters.limit !== undefined) query.take(filters.limit);
+    if (filters.offset) query.skip(filters.offset);
+    return query.getMany();
   }
 
   async closeReport(id: string, dto: CloseConductReportDto, admin: Actor) {

@@ -50,6 +50,10 @@ import { ChangeServiceLocationDto } from './dto/change-service-location.dto';
 import { UploadService } from '../upload/upload.service';
 import { PaymentReceiptValidations } from './entities/payment-receipt-validation.entity';
 import { describeError } from '../common/errors/error-message';
+import {
+  ADVISORY_LOCKS,
+  withAdvisoryLock,
+} from '../common/scheduling/advisory-lock';
 import { ExtrasCatalogo } from '../catalog-extras/entities/catalog-extra.entity';
 import { ExtrasServicio } from '../service-extras/entities/service-extra.entity';
 import { ServiceParticipant } from '../group-services/entities/service-participant.entity';
@@ -3516,19 +3520,15 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
   onModuleInit() {
     // Check every 60 seconds
     this.maintenanceInterval = setInterval(() => {
-      this.checkActiveServicesForExtension().catch((err: unknown) =>
-        this.logger.error(
-          `Error revisando servicios activos para prorroga: ${describeError(
-            err,
-          )}`,
-        ),
+      void this.ejecutarConLock(
+        ADVISORY_LOCKS.serviceExtensionCheck,
+        'revisando servicios activos para prorroga',
+        () => this.checkActiveServicesForExtension(),
       );
-      this.processReturnTransportReminders().catch((err: unknown) =>
-        this.logger.error(
-          `Error revisando recordatorios de transporte de regreso: ${describeError(
-            err,
-          )}`,
-        ),
+      void this.ejecutarConLock(
+        ADVISORY_LOCKS.returnTransportReminders,
+        'revisando recordatorios de transporte de regreso',
+        () => this.processReturnTransportReminders(),
       );
       this.sweepExpiredDispatchOffers().catch((err: unknown) =>
         this.logger.error(
@@ -3537,6 +3537,27 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       );
     }, 60000);
     this.maintenanceInterval.unref?.();
+  }
+
+  /**
+   * Corre un ciclo del intervalo bajo advisory lock: ambos avisan al personal y
+   * no son idempotentes, asi que con dos replicas cada aviso salia duplicado.
+   * Nunca rechaza: un fallo se registra y el siguiente tick reintenta.
+   */
+  async ejecutarConLock(
+    clave: number,
+    descripcion: string,
+    tarea: () => Promise<void>,
+  ): Promise<void> {
+    try {
+      await withAdvisoryLock(
+        this.serviciosRepository.manager.connection,
+        clave,
+        tarea,
+      );
+    } catch (err: unknown) {
+      this.logger.error(`Error ${descripcion}: ${describeError(err)}`);
+    }
   }
 
   onModuleDestroy() {

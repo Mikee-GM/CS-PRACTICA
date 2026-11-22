@@ -1,3 +1,4 @@
+import { webUrlSchema } from './common/web-url';
 import { Module } from '@nestjs/common';
 import { LocationsModule } from './locations/locations.module';
 import { APP_GUARD } from '@nestjs/core';
@@ -59,7 +60,7 @@ import { ServiceFeedbackModule } from './service-feedback/service-feedback.modul
           .valid('development', 'test', 'production')
           .default('development'),
         PORT: Joi.number().port().default(4000),
-        WEB_URL: Joi.string().uri().required(),
+        WEB_URL: webUrlSchema.required(),
         DATABASE_HOST: Joi.string().required(),
         DATABASE_PORT: Joi.number().default(5432),
         DATABASE_USER: Joi.string().required(),

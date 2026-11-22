@@ -1,3 +1,4 @@
+import { describeError } from '../common/errors/error-message';
 import {
   Injectable,
   Logger,
@@ -268,73 +269,81 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
       if (schedule.recordatoriosEnviados < maxRecordatorios) continue;
       if (schedule.multaAplicadaAt) continue;
 
-      const usuarioId = schedule.empleada?.usuarioId;
-      const aplicada = new Date();
+      // Una solicitud que falla no debe dejar sin multa ni aviso a las que
+      // siguen: se registra y el siguiente ciclo la reintenta.
+      try {
+        const usuarioId = schedule.empleada?.usuarioId;
+        const aplicada = new Date();
 
-      if (
-        await this.weeklyContentService.esSemanaDeGracia(
-          schedule.empleadaId,
-          semanaInicio,
-        )
-      ) {
+        if (
+          await this.weeklyContentService.esSemanaDeGracia(
+            schedule.empleadaId,
+            semanaInicio,
+          )
+        ) {
+          schedule.estado = 'falta_aplicada';
+          schedule.faltaAt = aplicada;
+          await this.scheduleRepo.save(schedule);
+
+          await this.avisar(usuarioId, {
+            titulo: 'Esta semana no se aplico multa',
+            cuerpo:
+              'No recibimos tus fotos, pero era tu semana de gracia. A partir de la proxima, agotar los avisos tiene multa.',
+            url: PORTAL_FOTOS_PATH,
+            tag: `fotos-${schedule.id}`,
+            tipo: AVISO_FOTOS_SEMANALES,
+            relatedEntityId: schedule.id,
+            dedupeKey: `fotos-gracia:${schedule.id}`,
+          });
+          continue;
+        }
+
         schedule.estado = 'falta_aplicada';
         schedule.faltaAt = aplicada;
+        schedule.multaAplicadaAt = aplicada;
+        schedule.multaLiquidationRecordId = await this.registrarMulta(
+          schedule.empleadaId,
+          semanaInicio,
+          importeMulta,
+          aplicada,
+        );
         await this.scheduleRepo.save(schedule);
 
+        const registrada = Boolean(schedule.multaLiquidationRecordId);
+
+        await this.conductReportRepo.save(
+          this.conductReportRepo.create({
+            direction: 'system_to_employee' as any,
+            reporterType: 'employee',
+            reporterId: schedule.empleadaId,
+            subjectType: 'employee',
+            subjectId: schedule.empleadaId,
+            category: 'incumplimiento',
+            description:
+              `Incumplimiento de entrega de contenido semanal para el ciclo ${semanaInicio}. ` +
+              `Se agotaron los ${maxRecordatorios} recordatorios` +
+              (registrada ? ' y se aplico la multa correspondiente.' : '.'),
+            priority: 'alta',
+            status: 'en_revision',
+          }),
+        );
+
         await this.avisar(usuarioId, {
-          titulo: 'Esta semana no se aplico multa',
-          cuerpo:
-            'No recibimos tus fotos, pero era tu semana de gracia. A partir de la proxima, agotar los avisos tiene multa.',
+          titulo: 'Se aplico una multa por tus fotos semanales',
+          cuerpo: registrada
+            ? `Se cargo una multa de ${FORMATO_MONEDA.format(importeMulta)} a tu corte. Todavia puedes subirlas desde tu portal.`
+            : 'Se registro el incumplimiento en tu historial. Todavia puedes subirlas desde tu portal.',
           url: PORTAL_FOTOS_PATH,
           tag: `fotos-${schedule.id}`,
-          tipo: AVISO_FOTOS_SEMANALES,
+          tipo: AVISO_SANCION,
           relatedEntityId: schedule.id,
-          dedupeKey: `fotos-gracia:${schedule.id}`,
+          dedupeKey: `fotos-multa:${schedule.id}`,
         });
-        continue;
+      } catch (error) {
+        this.logger.error(
+          `Error aplicando falta de contenido semanal a ${schedule.id}: ${describeError(error)}`,
+        );
       }
-
-      schedule.estado = 'falta_aplicada';
-      schedule.faltaAt = aplicada;
-      schedule.multaAplicadaAt = aplicada;
-      schedule.multaLiquidationRecordId = await this.registrarMulta(
-        schedule.empleadaId,
-        semanaInicio,
-        importeMulta,
-        aplicada,
-      );
-      await this.scheduleRepo.save(schedule);
-
-      const registrada = Boolean(schedule.multaLiquidationRecordId);
-
-      await this.conductReportRepo.save(
-        this.conductReportRepo.create({
-          direction: 'system_to_employee' as any,
-          reporterType: 'employee',
-          reporterId: schedule.empleadaId,
-          subjectType: 'employee',
-          subjectId: schedule.empleadaId,
-          category: 'incumplimiento',
-          description:
-            `Incumplimiento de entrega de contenido semanal para el ciclo ${semanaInicio}. ` +
-            `Se agotaron los ${maxRecordatorios} recordatorios` +
-            (registrada ? ' y se aplico la multa correspondiente.' : '.'),
-          priority: 'alta',
-          status: 'en_revision',
-        }),
-      );
-
-      await this.avisar(usuarioId, {
-        titulo: 'Se aplico una multa por tus fotos semanales',
-        cuerpo: registrada
-          ? `Se cargo una multa de ${FORMATO_MONEDA.format(importeMulta)} a tu corte. Todavia puedes subirlas desde tu portal.`
-          : 'Se registro el incumplimiento en tu historial. Todavia puedes subirlas desde tu portal.',
-        url: PORTAL_FOTOS_PATH,
-        tag: `fotos-${schedule.id}`,
-        tipo: AVISO_SANCION,
-        relatedEntityId: schedule.id,
-        dedupeKey: `fotos-multa:${schedule.id}`,
-      });
     }
   }
 

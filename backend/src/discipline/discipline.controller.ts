@@ -17,6 +17,7 @@ import {
   CreateConductReportDto,
   CreateRatingDto,
   CreateSanctionDto,
+  ListConductReportsQueryDto,
   ResolveAppealDto,
   RevokeSanctionDto,
 } from './dto/discipline.dto';
@@ -47,7 +48,7 @@ export class DisciplineController {
 
   @Get('reports')
   @Roles('admin', 'jefe')
-  listReports(@Req() req: any, @Query() filters: Record<string, string>) {
+  listReports(@Req() req: any, @Query() filters: ListConductReportsQueryDto) {
     return this.discipline.listReports(req.user, filters);
   }
 
