@@ -20,18 +20,6 @@ export const MAX_CLIENT_MESSAGE_CHARS = 600;
 /** Turnos de conversacion que se conservan (usuario + modelo cuentan aparte). */
 export const MAX_HISTORY_MESSAGES = 24;
 
-/** Fotos exclusivas que como maximo se mandan en una misma conversacion. */
-export const MAX_EXCLUSIVE_PHOTOS_PER_SESSION = 3;
-
-/** Envios de fotos de otras companeras por conversacion. */
-export const MAX_CATALOG_PHOTO_SENDS_PER_SESSION = 3;
-
-/** Peticiones de trio por conversacion. */
-export const MAX_TRIO_REQUESTS_PER_SESSION = 3;
-
-/** Espera minima entre dos peticiones de trio, en milisegundos. */
-export const TRIO_REQUEST_COOLDOWN_MS = 3 * 60 * 1000;
-
 export function normalizeForMatch(value: string): string {
   return value
     .normalize('NFD')

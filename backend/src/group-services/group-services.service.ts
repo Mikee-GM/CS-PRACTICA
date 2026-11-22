@@ -52,6 +52,11 @@ import { ServiceParticipant } from './entities/service-participant.entity';
 import { ServicePayment } from './entities/service-payment.entity';
 import { TripPassenger } from './entities/trip-passenger.entity';
 import { ConfigService } from '@nestjs/config';
+import {
+  ADVISORY_LOCKS,
+  withAdvisoryLock,
+} from '../common/scheduling/advisory-lock';
+import { describeError } from '../common/errors/error-message';
 import { OfficeLiquidationSyncService } from '../liquidations/office-liquidation-sync.service';
 import { ServicesService } from '../services/services.service';
 import { GroupBossAssignmentService } from './group-boss-assignment.service';
@@ -100,7 +105,7 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit(): void {
     this.cleanupTimer = setInterval(
-      () => void this.releaseExpiredHolds(),
+      () => void this.cicloDeLiberacion(),
       60_000,
     );
     this.cleanupTimer.unref();
@@ -108,6 +113,25 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
 
   onModuleDestroy(): void {
     if (this.cleanupTimer) clearInterval(this.cleanupTimer);
+  }
+
+  /**
+   * Una pasada del temporizador. Con dos replicas cada una liberaba las mismas
+   * reservas y el jefe recibia el aviso por duplicado; y sin el `catch` un
+   * fallo de base de datos era un rechazo sin atender que tumbaba el proceso.
+   */
+  private async cicloDeLiberacion(): Promise<void> {
+    try {
+      await withAdvisoryLock(
+        this.dataSource,
+        ADVISORY_LOCKS.groupHoldRelease,
+        () => this.releaseExpiredHolds(),
+      );
+    } catch (error) {
+      this.logger.error(
+        `Error liberando reservas de grupo vencidas: ${describeError(error)}`,
+      );
+    }
   }
 
   async create(dto: CreateGroupRequestDto, actor: Actor) {
@@ -729,10 +753,6 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
           (item) => item.employeeId === dto.responsibleEmployeeId,
         )!;
         const requiresPayment = request.paymentMethod === 'transferencia';
-        const client = await manager.findOneByOrFail(Clientes, {
-          id: request.clientId,
-        });
-
         const service = await manager.save(
           Servicios,
           manager.create(Servicios, {
@@ -2266,35 +2286,58 @@ export class GroupServicesService implements OnModuleInit, OnModuleDestroy {
       },
     });
     const now = new Date();
-    for (const request of expired.filter(
+    for (const candidata of expired.filter(
       (item) => item.holdExpiresAt && item.holdExpiresAt <= now,
     )) {
-      if (request.serviceId) {
-        const service = await this.services.findOneBy({
-          id: request.serviceId,
+      // Las cuatro escrituras van juntas: si fallaba la del servicio la
+      // solicitud seguia vigente con sus participantes ya cancelados, y la
+      // siguiente pasada no los volvia a tocar. La fila se relee con bloqueo
+      // porque otra replica, o el propio jefe, pudo resolverla entre medias.
+      const request = await this.dataSource.transaction(async (manager) => {
+        const actual = await manager.findOne(GroupServiceRequest, {
+          where: { id: candidata.id },
+          lock: { mode: 'pessimistic_write' },
         });
         if (
-          service?.estado === 'pendiente' &&
-          Number(service.totalPaid) === 0
+          !actual ||
+          !['seleccionando', 'reservada', 'esperando_pago'].includes(
+            actual.status,
+          ) ||
+          !actual.holdExpiresAt ||
+          actual.holdExpiresAt > new Date()
         ) {
-          await this.participants.update(
-            {
-              serviceId: service.id,
-              status: In(['reservada', 'pendiente_pago']),
-            },
-            { status: 'cancelada', holdExpiresAt: null },
-          );
-          service.estado = 'cancelado';
-          await this.services.save(service);
+          return null;
         }
-      }
-      await this.selections.update(
-        { requestId: request.id, status: 'reservada' },
-        { status: 'liberada' },
-      );
-      request.status = 'vencida';
-      request.holdExpiresAt = null;
-      await this.requests.save(request);
+        if (actual.serviceId) {
+          const service = await manager.findOneBy(Servicios, {
+            id: actual.serviceId,
+          });
+          if (
+            service?.estado === 'pendiente' &&
+            Number(service.totalPaid) === 0
+          ) {
+            await manager.update(
+              ServiceParticipant,
+              {
+                serviceId: service.id,
+                status: In(['reservada', 'pendiente_pago']),
+              },
+              { status: 'cancelada', holdExpiresAt: null },
+            );
+            service.estado = 'cancelado';
+            await manager.save(Servicios, service);
+          }
+        }
+        await manager.update(
+          GroupServiceRequestSelection,
+          { requestId: actual.id, status: 'reservada' },
+          { status: 'liberada' },
+        );
+        actual.status = 'vencida';
+        actual.holdExpiresAt = null;
+        return manager.save(GroupServiceRequest, actual);
+      });
+      if (!request) continue;
       this.realtime.emitToBoss(request.bossId, {
         type: 'group_service_hold_expired',
         data: { requestId: request.id, serviceId: request.serviceId },

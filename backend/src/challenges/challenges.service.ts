@@ -109,25 +109,33 @@ export class ChallengesService {
     }
 
     const status = startsAt <= new Date() ? 'active' : 'scheduled';
-    const challenge = await this.challenges.save(
-      this.challenges.create({
-        title: dto.title.trim(),
-        participantType: dto.participantType,
-        metric: dto.metric,
-        status,
-        startsAt,
-        endsAt,
-        createdByUserId: actor.id,
-      }),
-    );
-    await this.participants.save(
-      uniqueIds.map((participantId) =>
-        this.participants.create({
-          challengeId: challenge.id,
-          participantId,
+    // El reto y sus participantes se guardan juntos: si fallaba la segunda
+    // escritura quedaba un reto vigente sin nadie dentro, que ningun ciclo
+    // cierra ni ningun jefe puede completar.
+    const challenge = await this.dataSource.transaction(async (manager) => {
+      const creado = await manager.save(
+        Challenge,
+        manager.create(Challenge, {
+          title: dto.title.trim(),
+          participantType: dto.participantType,
+          metric: dto.metric,
+          status,
+          startsAt,
+          endsAt,
+          createdByUserId: actor.id,
         }),
-      ),
-    );
+      );
+      await manager.save(
+        ChallengeParticipant,
+        uniqueIds.map((participantId) =>
+          manager.create(ChallengeParticipant, {
+            challengeId: creado.id,
+            participantId,
+          }),
+        ),
+      );
+      return creado;
+    });
 
     this.realtime.emitToJefes({
       type: 'challenges.created',

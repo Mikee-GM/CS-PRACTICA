@@ -289,7 +289,7 @@ export class TeamChannelService {
   }
 
   /**
-   * El jefe escribe a una modelo. El mensaje sale del bot, no de su cuenta: es
+   * El jefe escribe a una modelo. El mensaje le llega como de la agencia, no de su cuenta: es
    * lo que mantiene el anonimato sin que haya que recordarlo en cada envio.
    */
   async enviarDesdeJefe(

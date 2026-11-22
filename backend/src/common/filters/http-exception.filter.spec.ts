@@ -105,6 +105,40 @@ describe('HttpExceptionFilter', () => {
     expect(loggerWarnSpy).toHaveBeenCalled();
   });
 
+  it('traduce un dato mal formado (22P02) a 400 sin filtrar la consulta', () => {
+    const dbError = new QueryFailedError(
+      'SELECT * FROM x WHERE id = $1',
+      ['no-es-uuid'],
+      new Error('invalid input syntax for type uuid'),
+    );
+    (dbError as any).code = '22P02';
+
+    filter.catch(dbError, mockArgumentsHost);
+
+    expect(mockResponse.status).toHaveBeenCalledWith(HttpStatus.BAD_REQUEST);
+    const payload = mockResponse.json.mock.calls[0][0] as { message: string };
+    expect(payload.message).not.toContain('SELECT');
+    expect(loggerErrorSpy).not.toHaveBeenCalled();
+  });
+
+  it('un fallo de base de datos que no es del cliente sale como 500 y se registra como error', () => {
+    // Un deadlock o una tabla que no existe no son culpa de lo que mando el
+    // cliente: antes salian como 400 y quedaban en el log como simple aviso.
+    for (const code of ['40P01', '42P01', '57014']) {
+      mockResponse.status.mockClear();
+      loggerErrorSpy.mockClear();
+      const dbError = new QueryFailedError('query', [], new Error('boom'));
+      (dbError as any).code = code;
+
+      filter.catch(dbError, mockArgumentsHost);
+
+      expect(mockResponse.status).toHaveBeenCalledWith(
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+      expect(loggerErrorSpy).toHaveBeenCalled();
+    }
+  });
+
   it('should handle generic Error and classify as 500 Internal Server Error', () => {
     const error = new Error('Test server failure');
 

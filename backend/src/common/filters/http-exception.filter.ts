@@ -66,25 +66,33 @@ export class HttpExceptionFilter implements ExceptionFilter {
           : 'La subida de archivos no es valida: revisa los campos y la cantidad de archivos.';
     } else if (exception instanceof QueryFailedError) {
       // Safely catch database constraint violations without leaking raw query details to the client
-      const dbError = exception as any;
+      const dbError = exception as unknown as { code?: string };
       const code = dbError.code;
-      status = HttpStatus.BAD_REQUEST;
-      error = 'Database Error';
 
       if (code === '23505') {
         status = HttpStatus.CONFLICT;
         message = 'El registro ya existe (violación de clave única).';
         error = 'Conflict';
       } else if (code === '23503') {
+        status = HttpStatus.BAD_REQUEST;
         message =
           'No se pudo realizar la operación debido a una restricción de clave foránea.';
         error = 'Foreign Key Constraint';
       } else if (code === '23514') {
+        status = HttpStatus.BAD_REQUEST;
         message = 'Violación de restricción check en base de datos.';
         error = 'Check Constraint';
-      } else {
-        message = 'Error de base de datos interno.';
+      } else if (code?.startsWith('22') || code?.startsWith('23')) {
+        // Clase 22 (dato mal formado: un uuid o un numero invalido) y el resto
+        // de la 23 (not null...) vienen de lo que mando el cliente.
+        status = HttpStatus.BAD_REQUEST;
+        message = 'Los datos enviados no son válidos.';
+        error = 'Database Error';
       }
+      // Cualquier otro codigo (deadlock, tiempo agotado, tabla o columna que
+      // no existe, conexion caida) es un fallo del servidor, no del cliente:
+      // se queda como 500 y se registra con error en vez de con warn, que es
+      // lo que hacia pasar un incidente por una peticion mal formada.
     }
     // Cualquier otra cosa se queda como 500 con un texto fijo: el mensaje de un
     // Error interno puede llevar rutas de fichero, hosts o credenciales, y no

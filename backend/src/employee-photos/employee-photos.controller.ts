@@ -97,9 +97,7 @@ export class EmployeePhotosController {
 
   @Post('private')
   @Roles('admin', 'jefe')
-  createPrivate(
-    @Body() body: { empleadaId: string; url: string; orden?: number },
-  ) {
+  createPrivate(@Body() body: CreateEmployeePhotoDto) {
     return this.employeePhotosService.createPrivatePhoto(
       body.empleadaId,
       body.url,

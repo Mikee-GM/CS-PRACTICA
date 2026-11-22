@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Servicios } from '../services/entities/service.entity';
 import { LiquidationRecord } from './entities/liquidation-record.entity';
 import { EmployeeCashObligation } from '../transport-operations/entities/employee-cash-obligation.entity';
+import { fromCents, sumMoney, toCents } from '../common/money';
 
 @Injectable()
 export class OfficeLiquidationSyncService {
@@ -62,16 +63,13 @@ export class OfficeLiquidationSyncService {
         ? Number(trip.tarifa || 0)
         : Number(trip.driverPayout || 0);
 
-    const transportCost = cerrados.reduce(
-      (sum, trip) => sum + costoDe(trip),
-      0,
-    );
+    const transportCost = sumMoney(cerrados.map(costoDe));
 
     // Lo que se le recupera al cliente de esos traslados. La oficina lo decide
     // viaje por viaje al cerrar el costo; lo que no se cobra lo absorbe la casa.
-    const customerCharge = cerrados
-      .filter((trip) => trip.costoCobradoAlCliente)
-      .reduce((sum, trip) => sum + costoDe(trip), 0);
+    const customerCharge = sumMoney(
+      cerrados.filter((trip) => trip.costoCobradoAlCliente).map(costoDe),
+    );
 
     const existing = await this.records.findOne({
       where: { serviceId: service.id, employeeId: service.empleadaId },
@@ -159,21 +157,25 @@ export class OfficeLiquidationSyncService {
       (trip) =>
         trip.tipo === 'regreso' && trip.proveedorTransporte === 'interno',
     );
-    const uberCost = (service.viajes ?? [])
-      .filter(
-        (trip) =>
-          trip.proveedorTransporte === 'uber' &&
-          !['cancelado', 'rechazado'].includes(trip.estado) &&
-          Boolean(trip.fareConfirmedAt),
-      )
-      .reduce((sum, trip) => sum + Number(trip.tarifa || 0), 0);
+    const uberCost = sumMoney(
+      (service.viajes ?? [])
+        .filter(
+          (trip) =>
+            trip.proveedorTransporte === 'uber' &&
+            !['cancelado', 'rechazado'].includes(trip.estado) &&
+            Boolean(trip.fareConfirmedAt),
+        )
+        .map((trip) => trip.tarifa),
+    );
     const customerCharge = Number(
       service.customerTransportCharge ?? service.totalTransporte ?? 0,
     );
     const employeeUberReimbursement = electronic ? uberCost : 0;
     const employeeCashDue =
       service.metodoPago === 'efectivo'
-        ? Math.max(0, Number(service.totalFinal) - uberCost)
+        ? fromCents(
+            Math.max(0, toCents(service.totalFinal) - toCents(uberCost)),
+          )
         : 0;
     const participantRows =
       service.serviceType === 'grupal' && service.participantes?.length
@@ -198,18 +200,19 @@ export class OfficeLiquidationSyncService {
           : (service.extrasServicios ?? []);
       const extraAmount =
         service.serviceType === 'grupal'
-          ? participantExtras.reduce(
-              (sum, extra) => sum + Number(extra.precioCobrado),
-              0,
-            )
+          ? sumMoney(participantExtras.map((extra) => extra.precioCobrado))
           : Number(service.totalExtras);
-      const electronicParticipantExtras = participantExtras
-        .filter((extra) => extra.metodoPago !== 'efectivo')
-        .reduce((sum, extra) => sum + Number(extra.precioCobrado), 0);
+      const electronicParticipantExtras = sumMoney(
+        participantExtras
+          .filter((extra) => extra.metodoPago !== 'efectivo')
+          .map((extra) => extra.precioCobrado),
+      );
       // Aparte de lo electronico: solo la tarjeta paga comision en el corte.
-      const cardParticipantExtras = participantExtras
-        .filter((extra) => extra.metodoPago === 'tarjeta')
-        .reduce((sum, extra) => sum + Number(extra.precioCobrado), 0);
+      const cardParticipantExtras = sumMoney(
+        participantExtras
+          .filter((extra) => extra.metodoPago === 'tarjeta')
+          .map((extra) => extra.precioCobrado),
+      );
       const cardExtraItems = participantExtras
         .filter((extra) => extra.metodoPago === 'tarjeta')
         .map((extra) => ({

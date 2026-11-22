@@ -124,125 +124,136 @@ export class AuthService {
   ): Promise<AuthTokens> {
     const payload = await this.verifyRefreshToken(refreshToken);
 
-    return this.sessionsRepository.manager.transaction(async (manager) => {
-      const sessions = manager.getRepository(AuthSession);
-      const current = await sessions.findOne({
-        where: { id: payload.sid },
-        lock: { mode: 'pessimistic_write' },
-      });
+    // Los rechazos que ademas escriben (cortar la familia, cerrar la sesion
+    // vencida) no pueden lanzar dentro de la transaccion: la excepcion la
+    // revierte y la revocacion nunca llegaba a la base. Se devuelve el motivo y
+    // se lanza despues del commit.
+    const resultado = await this.sessionsRepository.manager.transaction(
+      async (manager): Promise<AuthTokens | { rechazo: string }> => {
+        const sessions = manager.getRepository(AuthSession);
+        const current = await sessions.findOne({
+          where: { id: payload.sid },
+          lock: { mode: 'pessimistic_write' },
+        });
 
-      const isRecentlyReplaced =
-        current &&
-        current.revokedAt !== null &&
-        current.replacedBySessionId !== null &&
-        Date.now() - current.revokedAt.getTime() < 30000;
+        const isRecentlyReplaced =
+          current &&
+          current.revokedAt !== null &&
+          current.replacedBySessionId !== null &&
+          Date.now() - current.revokedAt.getTime() < 30000;
 
-      /*
-       * Caducar no es lo mismo que estar comprometida.
-       *
-       * Antes iban juntas bajo un unico `compromised`, y la respuesta a las dos
-       * era revocar TODAS las sesiones del usuario. Con eso, abrir un panel que
-       * llevaba dias sin usarse --su refresco ya vencido-- echaba a esa misma
-       * cuenta de todos los demas sitios donde estuviera abierta, telefono y
-       * ordenador incluidos. Una sesion vencida no protege a nadie tirando las
-       * otras: se acabo, y ya esta.
-       */
-      const caducada =
-        Boolean(current) && current!.expiresAt.getTime() <= Date.now();
-
-      /*
-       * Esto si es reuso: el token no es el que se guardo, la fila dice otro
-       * dueño u otra familia, o es un refresco ya gastado fuera de la ventana
-       * de gracia. Alguien tiene en la mano un token que no deberia.
-       */
-      const reutilizado =
-        Boolean(current) &&
-        !caducada &&
-        (current!.userId !== payload.sub ||
-          current!.familyId !== payload.familyId ||
-          (current!.revokedAt !== null && !isRecentlyReplaced) ||
-          current!.refreshTokenHash !== this.hashToken(refreshToken));
-
-      // Dos peticiones que renuevan a la vez --dos pestanas, o la pagina y su
-      // fetch-- mandan el mismo refresco: la primera lo rota y la segunda llega
-      // con uno ya gastado. Devolverle 401 a la segunda echaba del panel a
-      // alguien con la sesion perfectamente viva, que es justo lo que se
-      // reportaba al recargar tras un rato. En la ventana de gracia se le firma
-      // un acceso nuevo sobre la sesion que gano y no se toca nada mas: sin
-      // rotar, dos respuestas fuera de orden no pueden pisarse.
-      if (isRecentlyReplaced) {
-        return this.renovacionEnCarrera(manager, current, payload.sub);
-      }
-
-      if (reutilizado) {
         /*
-         * Se corta la FAMILIA, no la cuenta entera.
+         * Caducar no es lo mismo que estar comprometida.
          *
-         * Una familia es una cadena de refrescos que nace en un login y se va
-         * rotando: si uno de sus eslabones aparece reutilizado, lo que hay que
-         * dar por perdido es esa cadena. Las demas sesiones de la persona
-         * nacieron de otros logins y no tienen nada que ver, asi que tirarlas
-         * solo conseguia sacarla de todas partes por un problema de una.
-         *
-         * La familia se lee de la fila y no del token: si el token miente sobre
-         * a cual pertenece, la verdad esta en la base.
+         * Antes iban juntas bajo un unico `compromised`, y la respuesta a las dos
+         * era revocar TODAS las sesiones del usuario. Con eso, abrir un panel que
+         * llevaba dias sin usarse --su refresco ya vencido-- echaba a esa misma
+         * cuenta de todos los demas sitios donde estuviera abierta, telefono y
+         * ordenador incluidos. Una sesion vencida no protege a nadie tirando las
+         * otras: se acabo, y ya esta.
          */
-        await sessions
-          .createQueryBuilder()
-          .update()
-          .set({ revokedAt: new Date() })
-          .where('family_id = :familyId AND revoked_at IS NULL', {
-            familyId: current!.familyId,
-          })
-          .execute();
-        throw new UnauthorizedException('La sesión fue revocada por seguridad');
-      }
+        const caducada =
+          Boolean(current) && current!.expiresAt.getTime() <= Date.now();
 
-      if (!current || caducada) {
-        // Solo se cierra la que vencio. Quien la tenia vuelve a entrar; el
-        // resto de sus sesiones siguen donde estaban.
-        if (current && current.revokedAt === null) {
-          await sessions.update(current.id, { revokedAt: new Date() });
+        /*
+         * Esto si es reuso: el token no es el que se guardo, la fila dice otro
+         * dueño u otra familia, o es un refresco ya gastado fuera de la ventana
+         * de gracia. Alguien tiene en la mano un token que no deberia.
+         */
+        const reutilizado =
+          Boolean(current) &&
+          !caducada &&
+          (current!.userId !== payload.sub ||
+            current!.familyId !== payload.familyId ||
+            (current!.revokedAt !== null && !isRecentlyReplaced) ||
+            current!.refreshTokenHash !== this.hashToken(refreshToken));
+
+        // Dos peticiones que renuevan a la vez --dos pestanas, o la pagina y su
+        // fetch-- mandan el mismo refresco: la primera lo rota y la segunda llega
+        // con uno ya gastado. Devolverle 401 a la segunda echaba del panel a
+        // alguien con la sesion perfectamente viva, que es justo lo que se
+        // reportaba al recargar tras un rato. En la ventana de gracia se le firma
+        // un acceso nuevo sobre la sesion que gano y no se toca nada mas: sin
+        // rotar, dos respuestas fuera de orden no pueden pisarse.
+        if (isRecentlyReplaced) {
+          return this.renovacionEnCarrera(manager, current, payload.sub);
         }
-        throw new UnauthorizedException('La sesión expiró, vuelve a entrar');
-      }
 
-      const user = await manager.getRepository(Usuarios).findOne({
-        where: { id: payload.sub, activo: true },
-      });
-      if (!user) {
-        await sessions.update(current.id, { revokedAt: new Date() });
-        throw new UnauthorizedException('Usuario no válido o inactivo');
-      }
+        if (reutilizado) {
+          /*
+           * Se corta la FAMILIA, no la cuenta entera.
+           *
+           * Una familia es una cadena de refrescos que nace en un login y se va
+           * rotando: si uno de sus eslabones aparece reutilizado, lo que hay que
+           * dar por perdido es esa cadena. Las demas sesiones de la persona
+           * nacieron de otros logins y no tienen nada que ver, asi que tirarlas
+           * solo conseguia sacarla de todas partes por un problema de una.
+           *
+           * La familia se lee de la fila y no del token: si el token miente sobre
+           * a cual pertenece, la verdad esta en la base.
+           */
+          await sessions
+            .createQueryBuilder()
+            .update()
+            .set({ revokedAt: new Date() })
+            .where('family_id = :familyId AND revoked_at IS NULL', {
+              familyId: current!.familyId,
+            })
+            .execute();
+          return { rechazo: 'La sesión fue revocada por seguridad' };
+        }
 
-      const next = await sessions.save(
-        sessions.create({
-          userId: user.id,
-          familyId: current.familyId,
-          deviceId: current.deviceId,
-          refreshTokenHash: '0'.repeat(64),
-          expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_SECONDS * 1000),
-          revokedAt: null,
-          replacedBySessionId: null,
-        }),
-      );
-      const tokens = await this.signTokens(user, next);
-      next.refreshTokenHash = this.hashToken(tokens.refreshToken);
-      current.revokedAt = new Date();
-      current.replacedBySessionId = next.id;
-      await sessions.save([current, next]);
+        if (!current || caducada) {
+          // Solo se cierra la que vencio. Quien la tenia vuelve a entrar; el
+          // resto de sus sesiones siguen donde estaban.
+          if (current && current.revokedAt === null) {
+            await sessions.update(current.id, { revokedAt: new Date() });
+          }
+          return { rechazo: 'La sesión expiró, vuelve a entrar' };
+        }
 
-      return {
-        ...tokens,
-        // El CSRF no se rota aqui a proposito. Rotarlo abria una carrera
-        // propia: una peticion que ya habia leido la cookie vieja mandaba una
-        // cabecera que dejaba de coincidir, y el rechazo se veia como sesion
-        // caida. El token sigue cambiando en cada login y muriendo con el
-        // cierre de sesion, que es cuando importa.
-        csrfToken: csrfActual ?? randomUUID(),
-        user: this.publicUser(user),
-      };
-    });
+        const user = await manager.getRepository(Usuarios).findOne({
+          where: { id: payload.sub, activo: true },
+        });
+        if (!user) {
+          await sessions.update(current.id, { revokedAt: new Date() });
+          return { rechazo: 'Usuario no válido o inactivo' };
+        }
+
+        const next = await sessions.save(
+          sessions.create({
+            userId: user.id,
+            familyId: current.familyId,
+            deviceId: current.deviceId,
+            refreshTokenHash: '0'.repeat(64),
+            expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_SECONDS * 1000),
+            revokedAt: null,
+            replacedBySessionId: null,
+          }),
+        );
+        const tokens = await this.signTokens(user, next);
+        next.refreshTokenHash = this.hashToken(tokens.refreshToken);
+        current.revokedAt = new Date();
+        current.replacedBySessionId = next.id;
+        await sessions.save([current, next]);
+
+        return {
+          ...tokens,
+          // El CSRF no se rota aqui a proposito. Rotarlo abria una carrera
+          // propia: una peticion que ya habia leido la cookie vieja mandaba una
+          // cabecera que dejaba de coincidir, y el rechazo se veia como sesion
+          // caida. El token sigue cambiando en cada login y muriendo con el
+          // cierre de sesion, que es cuando importa.
+          csrfToken: csrfActual ?? randomUUID(),
+          user: this.publicUser(user),
+        };
+      },
+    );
+
+    if ('rechazo' in resultado) {
+      throw new UnauthorizedException(resultado.rechazo);
+    }
+    return resultado;
   }
 
   /**

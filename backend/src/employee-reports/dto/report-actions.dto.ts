@@ -8,10 +8,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { REPORT_PRIORITIES } from '../entities/employee-report.entity';
-import type {
-  ReportCategory,
-  ReportPriority,
-} from '../entities/employee-report.entity';
+import type { ReportPriority } from '../entities/employee-report.entity';
 
 export class AssignReportDto {
   @IsUUID('4')

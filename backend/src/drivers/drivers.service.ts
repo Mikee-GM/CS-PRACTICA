@@ -20,8 +20,10 @@ import { Viajes } from '../trips/entities/trip.entity';
 import {
   APP_TIME_ZONE,
   APP_LOCALE,
+  lunesDeLaSemana,
   mismaSemanaOperativa,
 } from '../common/locale';
+import { fromCents, toCents } from '../common/money';
 
 export interface DriverPortalTripItem {
   id: string;
@@ -688,8 +690,10 @@ export class DriversService {
     let monthTrips = 0;
     const totalHistoricalTrips = finishedTrips.length;
 
+    // Se acumula en centavos enteros: son pagos a personas y la suma en
+    // flotante arrastra el error de `0.1 + 0.2`.
     for (const trip of finishedTrips) {
-      const payout = Number(trip.driverPayout) || 0;
+      const payout = toCents(trip.driverPayout);
       totalHistoricalNet += payout;
       const d = new Date(trip.horaFinViaje as Date);
       if (isSameDay(d, now)) {
@@ -776,14 +780,9 @@ export class DriversService {
       expiraEn: t.ofertaExpiraEn ? t.ofertaExpiraEn.toISOString() : null,
     }));
 
-    const weekBounds = (() => {
-      const d = new Date(now);
-      const day = d.getDay();
-      const adjustedDay = day === 0 ? 7 : day;
-      d.setDate(d.getDate() - adjustedDay + 1);
-      d.setHours(0, 0, 0, 0);
-      return d.toISOString().slice(0, 10);
-    })();
+    // Lunes de la semana operativa en hora de Mexico: con `getDay` y la zona del
+    // servidor, el domingo por la noche ya contaba como la semana siguiente.
+    const weekBounds = lunesDeLaSemana(now);
     const settlement = await this.dataSource.query(
       `SELECT status FROM driver_settlements WHERE driver_id = $1 AND week_start = $2`,
       [chofer.id, weekBounds],
@@ -811,10 +810,10 @@ export class DriversService {
         leaderboard,
       },
       earnings: {
-        todayNet: Math.round(todayNet * 100) / 100,
-        weekNet: Math.round(weekNet * 100) / 100,
-        monthNet: Math.round(monthNet * 100) / 100,
-        totalHistoricalNet: Math.round(totalHistoricalNet * 100) / 100,
+        todayNet: fromCents(todayNet),
+        weekNet: fromCents(weekNet),
+        monthNet: fromCents(monthNet),
+        totalHistoricalNet: fromCents(totalHistoricalNet),
         todayTrips,
         weekTrips,
         monthTrips,

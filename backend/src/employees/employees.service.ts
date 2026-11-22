@@ -3,6 +3,9 @@ import {
   APP_TIME_ZONE,
   mismaSemanaOperativa,
 } from '../common/locale';
+import { fromCents, multiplyMoney, sumMoney, toCents } from '../common/money';
+import { EMPLOYEE_SERVICE_PERCENTAGE } from '../services/service-financial-calculator';
+import { describeError } from '../common/errors/error-message';
 import {
   Injectable,
   NotFoundException,
@@ -446,7 +449,12 @@ export class EmployeesService {
         emp.weeklyContentStatus = statuses[emp.id] || 'al_dia';
         return emp;
       });
-    } catch {
+    } catch (error) {
+      // El listado no debe caerse por los contadores de fotos semanales, pero
+      // sin este aviso un fallo permanente de esa consulta pasaba inadvertido.
+      this.logger.warn(
+        `No se pudieron adjuntar las metricas de contenido semanal: ${describeError(error)}`,
+      );
       return employees;
     }
   }
@@ -1102,24 +1110,28 @@ export class EmployeesService {
       const totalExtras = Number(s.totalExtras) || 0;
 
       // 60% estándar de la tarifa base para la empleada + 100% de extras
-      const netShare = Math.round((totalBase * 0.6 + totalExtras) * 100) / 100;
+      const netShare = sumMoney([
+        multiplyMoney(totalBase, EMPLOYEE_SERVICE_PERCENTAGE / 100),
+        totalExtras,
+      ]);
+      const netShareCents = toCents(netShare);
       const sDate = s.horaFinServicio || s.horaInicioServicio || s.createdAt;
 
-      totalHistoricalNet += netShare;
+      totalHistoricalNet += netShareCents;
       totalHistoricalHours += duration;
 
       if (sDate) {
         const d = new Date(sDate);
         if (isSameDay(d, now)) {
-          todayNet += netShare;
+          todayNet += netShareCents;
           todayHours += duration;
         }
         if (isSameWeek(d, now)) {
-          weekNet += netShare;
+          weekNet += netShareCents;
           weekHours += duration;
         }
         if (isSameMonth(d, now)) {
-          monthNet += netShare;
+          monthNet += netShareCents;
           monthHours += duration;
         }
       }
@@ -1188,8 +1200,10 @@ export class EmployeesService {
       const totalBase =
         Number(activeOrUpcoming.totalBase) || baseHourly * duration;
       const totalExtras = Number(activeOrUpcoming.totalExtras) || 0;
-      const estimatedNet =
-        Math.round((totalBase * 0.6 + totalExtras) * 100) / 100;
+      const estimatedNet = sumMoney([
+        multiplyMoney(totalBase, EMPLOYEE_SERVICE_PERCENTAGE / 100),
+        totalExtras,
+      ]);
 
       /*
        * Que viaje enseña la tarjeta.
@@ -1313,16 +1327,15 @@ export class EmployeesService {
       };
     });
 
-    const totalCashPending = obligations.reduce(
-      (sum, item) => sum + item.pendingAmount,
-      0,
+    const totalCashPending = sumMoney(
+      obligations.map((item) => item.pendingAmount),
     );
     const hasProvisionalCash = obligations.some(
       (item) => item.calculationStatus === 'provisional',
     );
 
     const cashDelivery = {
-      totalPending: Math.round(totalCashPending * 100) / 100,
+      totalPending: totalCashPending,
       pendingServicesCount: obligations.length,
       hasProvisional: hasProvisionalCash,
       obligations,
@@ -1353,10 +1366,10 @@ export class EmployeesService {
         leaderboard,
       },
       earnings: {
-        todayNet: Math.round(todayNet * 100) / 100,
-        weekNet: Math.round(weekNet * 100) / 100,
-        monthNet: Math.round(monthNet * 100) / 100,
-        totalHistoricalNet: Math.round(totalHistoricalNet * 100) / 100,
+        todayNet: fromCents(todayNet),
+        weekNet: fromCents(weekNet),
+        monthNet: fromCents(monthNet),
+        totalHistoricalNet: fromCents(totalHistoricalNet),
         todayHours,
         weekHours,
         monthHours,

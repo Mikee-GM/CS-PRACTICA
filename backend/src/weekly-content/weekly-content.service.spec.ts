@@ -1,3 +1,4 @@
+import { ConflictException } from '@nestjs/common';
 import { WeeklyContentService } from './weekly-content.service';
 
 /**
@@ -156,6 +157,35 @@ describe('WeeklyContentService.reviewSubmission', () => {
     expect(resultado.estado).toBe('aprobada_publica');
     expect(resultado.motivoRechazo).toBeNull();
     expect(notifications.notificar).not.toHaveBeenCalled();
+  });
+
+  it('no copia a la galeria una foto que ya estaba aprobada', async () => {
+    submissionRepo.findOne.mockResolvedValue(
+      envio({ estado: 'aprobada_publica' }),
+    );
+
+    await expect(
+      service.reviewSubmission('sub-1', 'aprobar_publica', revisor),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(fotosRepo.save).not.toHaveBeenCalled();
+    expect(submissionRepo.save).not.toHaveBeenCalled();
+  });
+
+  it('un reintento no duplica la foto que ya llego a la galeria', async () => {
+    // El intento anterior copio la foto y fallo antes de guardar el estado.
+    submissionRepo.findOne.mockResolvedValue(envio());
+    fotosRepo.find.mockResolvedValue([
+      { url: 'https://cdn.example.com/foto.jpg', orden: 0 },
+    ]);
+
+    const resultado = await service.reviewSubmission(
+      'sub-1',
+      'aprobar_publica',
+      revisor,
+    );
+
+    expect(fotosRepo.save).not.toHaveBeenCalled();
+    expect(resultado.estado).toBe('aprobada_publica');
   });
 });
 

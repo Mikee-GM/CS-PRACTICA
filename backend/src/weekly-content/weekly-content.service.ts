@@ -3,6 +3,7 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, LessThan } from 'typeorm';
@@ -368,6 +369,17 @@ export class WeeklyContentService {
       throw new NotFoundException('Foto semanal no encontrada.');
     }
 
+    // Aprobar dos veces la misma foto (dos jefes, o un doble toque) la copiaba
+    // dos veces a la galeria. Para cambiarla de galeria ya existe el movimiento
+    // entre galerias; rechazar una aprobada si se sigue permitiendo.
+    if (
+      action !== 'rechazar' &&
+      (submission.estado === 'aprobada_publica' ||
+        submission.estado === 'aprobada_privada')
+    ) {
+      throw new ConflictException('Esa foto ya fue aprobada.');
+    }
+
     submission.revisadoPorUserId = reviewerUser.id;
     submission.revisadoAt = new Date();
     // Se limpia siempre: si una foto rechazada se acaba aprobando, el motivo
@@ -384,12 +396,16 @@ export class WeeklyContentService {
       const maxOrden =
         fotosActuales.length > 0 ? (fotosActuales[0].orden || 0) + 1 : 0;
 
-      const nuevaFotoPublica = this.fotosRepo.create({
-        empleadaId: submission.empleadaId,
-        url: submission.url,
-        orden: maxOrden,
-      });
-      await this.fotosRepo.save(nuevaFotoPublica);
+      // Si un intento anterior copio la foto y fallo despues, reintentar no la
+      // duplica.
+      if (!fotosActuales.some((foto) => foto.url === submission.url)) {
+        const nuevaFotoPublica = this.fotosRepo.create({
+          empleadaId: submission.empleadaId,
+          url: submission.url,
+          orden: maxOrden,
+        });
+        await this.fotosRepo.save(nuevaFotoPublica);
+      }
     } else if (action === 'aprobar_privada') {
       submission.estado = 'aprobada_privada';
       // Obtener el orden maximo actual en fotos privadas
@@ -400,12 +416,14 @@ export class WeeklyContentService {
       const maxOrden =
         fotosPrivadas.length > 0 ? (fotosPrivadas[0].orden || 0) + 1 : 0;
 
-      const nuevaFotoPrivada = this.fotosExclusivasRepo.create({
-        empleadaId: submission.empleadaId,
-        url: submission.url,
-        orden: maxOrden,
-      });
-      await this.fotosExclusivasRepo.save(nuevaFotoPrivada);
+      if (!fotosPrivadas.some((foto) => foto.url === submission.url)) {
+        const nuevaFotoPrivada = this.fotosExclusivasRepo.create({
+          empleadaId: submission.empleadaId,
+          url: submission.url,
+          orden: maxOrden,
+        });
+        await this.fotosExclusivasRepo.save(nuevaFotoPrivada);
+      }
     } else if (action === 'rechazar') {
       submission.estado = 'rechazada';
       submission.motivoRechazo = motivo?.trim() || null;

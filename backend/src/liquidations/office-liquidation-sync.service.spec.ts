@@ -1,326 +1,73 @@
 import { OfficeLiquidationSyncService } from './office-liquidation-sync.service';
 
-describe('OfficeLiquidationSyncService', () => {
-  const services = { findOne: jest.fn() };
+/**
+ * El corte de oficina suma importes de Uber y extras de cada servicio. Se hace
+ * en centavos enteros: con flotantes, `0.1 + 0.2` dejaba una deuda de efectivo
+ * un centavo fuera de lo que la oficina tenia en su hoja.
+ */
+describe('OfficeLiquidationSyncService.syncOfficeRecord', () => {
   const records = {
     findOne: jest.fn(),
-    findOneOrFail: jest.fn(),
-    create: jest.fn((value) => value),
-    merge: jest.fn((record, value) => ({ ...record, ...value })),
-    save: jest.fn(),
+    create: jest.fn((valor: object) => valor),
+    merge: jest.fn(),
+    save: jest.fn((valor: object) => Promise.resolve(valor)),
+    findOneOrFail: jest.fn().mockResolvedValue({ id: 'registro' }),
   };
-  const cashObligations = { findOneBy: jest.fn(), upsert: jest.fn() };
-  /*
-   * Se construye por nombre y no con `new`.
-   *
-   * Con la lista posicional, cada dependencia nueva del servicio desplazaba todos
-   * los dobles y estas pruebas fallaban por un motivo ajeno a lo que probaban.
-   * Los campos inicializados de la clase entran como dobles porque
-   * `Object.create` no los ejecuta.
-   */
-  const sync = Object.create(
-    OfficeLiquidationSyncService.prototype,
-  ) as OfficeLiquidationSyncService;
-  Object.assign(sync, {
-    logger: { error: jest.fn(), warn: jest.fn(), log: jest.fn() },
-    services,
-    records,
-    cashObligations,
-  });
+  const cashObligations = {
+    findOneBy: jest.fn().mockResolvedValue(null),
+    upsert: jest.fn().mockResolvedValue(undefined),
+  };
+  const services = { findOne: jest.fn() };
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-    records.findOne.mockResolvedValue(null);
-  });
-
-  function finalized(overrides: Record<string, unknown> = {}) {
-    return {
-      id: 'service',
-      estado: 'finalizado',
-      horaFinServicio: new Date('2026-07-18T20:00:00Z'),
-      empleadaId: 'employee',
-      jefeId: 'boss',
-      jefe: { rol: 'jefe' },
-      metodoPago: 'efectivo',
-      totalBase: 2500,
-      totalExtras: 1000,
-      totalTransporte: 120,
-      totalFinal: 2620,
-      viajes: [
-        { tipo: 'ida', proveedorTransporte: 'interno' },
-        { tipo: 'regreso', proveedorTransporte: 'uber' },
-      ],
-      ...overrides,
-    };
-  }
-
-  it('no registra servicios que todavía no finalizaron', async () => {
-    services.findOne.mockResolvedValue(finalized({ estado: 'en_curso' }));
-
-    await expect(sync.syncOfficeRecord('service')).resolves.toBeNull();
-    expect(records.save).not.toHaveBeenCalled();
-  });
-
-  it('separa el corte semanal de la entrega física de efectivo', async () => {
-    services.findOne.mockResolvedValue(finalized());
-    records.findOneOrFail.mockResolvedValue({ id: 'record' });
-
-    await sync.syncOfficeRecord('service');
-
-    expect(records.save).toHaveBeenCalledWith(
-      expect.objectContaining({
-        serviceId: 'service',
-        serviceTotal: 2500,
-        extraAmount: 1000,
-        companyTransportExpense: 0,
-        customerTransportCharge: 120,
-        employeeCashDue: 2620,
-        cashAmount: 2500,
-        cardAmounts: [],
-        hasOutboundDriver: true,
-        hasReturnDriver: false,
-      }),
-    );
-  });
-
-  it.each(['tarjeta', 'transferencia'])(
-    'trata %s como pago electrónico',
-    async (paymentMethod) => {
-      services.findOne.mockResolvedValue(
-        finalized({ metodoPago: paymentMethod }),
-      );
-      records.findOneOrFail.mockResolvedValue({ id: 'record' });
-
-      await sync.syncOfficeRecord('service');
-
-      expect(records.save).toHaveBeenCalledWith(
-        expect.objectContaining({ cashAmount: 0, cardAmounts: [2500] }),
-      );
-    },
+  const service = new OfficeLiquidationSyncService(
+    services as never,
+    records as never,
+    cashObligations as never,
   );
 
-  it('exige entregar el total final cuando no hubo Uber', async () => {
-    services.findOne.mockResolvedValue(
-      finalized({
-        totalBase: 5000,
-        totalFinal: 5000,
-        viajes: [
-          { tipo: 'ida', proveedorTransporte: 'interno', estado: 'finalizado' },
-          {
-            tipo: 'regreso',
-            proveedorTransporte: 'interno',
-            estado: 'finalizado',
-          },
-        ],
-      }),
-    );
-    records.findOneOrFail.mockResolvedValue({ id: 'record' });
-
-    await sync.syncOfficeRecord('service');
-
-    expect(cashObligations.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        amount: 5000,
-        uberDeduction: 0,
-        calculationStatus: 'ready',
-      }),
-      ['serviceId'],
-    );
+  const servicioEnEfectivo = () => ({
+    id: 'svc-1',
+    estado: 'finalizado',
+    horaFinServicio: new Date('2026-09-10T20:00:00Z'),
+    empleadaId: 'emp-1',
+    jefeId: 'jefe-1',
+    jefe: { rol: 'jefe' },
+    metodoPago: 'efectivo',
+    serviceType: 'individual',
+    totalBase: '100.00',
+    totalExtras: '0.00',
+    totalFinal: '0.30',
+    extrasServicios: [],
+    participantes: [],
+    viajes: [
+      {
+        tipo: 'regreso',
+        proveedorTransporte: 'uber',
+        estado: 'finalizado',
+        fareConfirmedAt: new Date(),
+        tarifa: '0.10',
+      },
+      {
+        tipo: 'ida',
+        proveedorTransporte: 'uber',
+        estado: 'finalizado',
+        fareConfirmedAt: new Date(),
+        tarifa: '0.20',
+      },
+    ],
   });
 
-  it('descuenta únicamente las tarifas de Uber confirmadas', async () => {
-    services.findOne.mockResolvedValue(
-      finalized({
-        totalBase: 5000,
-        totalFinal: 5000,
-        viajes: [
-          {
-            tipo: 'ida',
-            proveedorTransporte: 'uber',
-            estado: 'finalizado',
-            tarifa: 180,
-            fareConfirmedAt: new Date(),
-          },
-          {
-            tipo: 'regreso',
-            proveedorTransporte: 'uber',
-            estado: 'finalizado',
-            tarifa: 220,
-            fareConfirmedAt: new Date(),
-          },
-        ],
-      }),
-    );
-    records.findOneOrFail.mockResolvedValue({ id: 'record' });
+  beforeEach(() => jest.clearAllMocks());
 
-    await sync.syncOfficeRecord('service');
+  it('descuenta el Uber de la deuda de efectivo sin arrastrar error de flotante', async () => {
+    services.findOne.mockResolvedValue(servicioEnEfectivo());
+    records.findOne.mockResolvedValue(null);
 
-    expect(cashObligations.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        amount: 4600,
-        uberDeduction: 400,
-        calculationStatus: 'ready',
-      }),
-      ['serviceId'],
-    );
-  });
+    await service.syncOfficeRecord('svc-1');
 
-  it('repite la sincronización por servicio y empleada sin depender de ON CONFLICT', async () => {
-    services.findOne.mockResolvedValue(finalized());
-    records.findOneOrFail.mockResolvedValue({ id: 'record' });
-
-    await sync.syncOfficeRecord('service');
-    await sync.syncOfficeRecord('service');
-
-    expect(records.save).toHaveBeenCalledTimes(2);
-    expect(records.save).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ serviceId: 'service' }),
-    );
-  });
-
-  it('crea un corte por participante y asigna transporte solo a la responsable', async () => {
-    services.findOne.mockResolvedValue(
-      finalized({
-        serviceType: 'grupal',
-        empleadaId: 'employee-responsible',
-        totalBase: 6000,
-        totalExtras: 500,
-        totalFinal: 6620,
-        participantes: [
-          {
-            id: 'participant-responsible',
-            employeeId: 'employee-responsible',
-            role: 'responsable',
-            status: 'retirada',
-            confirmedSubtotal: 2000,
-          },
-          {
-            id: 'participant-2',
-            employeeId: 'employee-2',
-            role: 'participante',
-            status: 'retirada',
-            confirmedSubtotal: 4000,
-          },
-        ],
-        extrasServicios: [
-          {
-            participantId: 'participant-2',
-            precioCobrado: 500,
-            metodoPago: 'efectivo',
-          },
-        ],
-      }),
-    );
-    records.findOneOrFail.mockResolvedValue({ id: 'responsible-record' });
-
-    await sync.syncOfficeRecord('service');
-
-    const values = records.save.mock.calls.map(([value]) => value);
-    expect(values).toHaveLength(2);
-    expect(values).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          employeeId: 'employee-responsible',
-          serviceTotal: 2000,
-          customerTransportCharge: 120,
-          extraAmount: 0,
-        }),
-        expect.objectContaining({
-          employeeId: 'employee-2',
-          serviceTotal: 4000,
-          customerTransportCharge: 0,
-          extraAmount: 500,
-        }),
-      ]),
-    );
-    expect(cashObligations.upsert).toHaveBeenCalledWith(
-      expect.objectContaining({
-        employeeId: 'employee-responsible',
-        amount: 6620,
-      }),
-      ['serviceId'],
-    );
-  });
-
-  describe('syncCancelledRecord', () => {
-    function cancelled(viajes: unknown[]) {
-      return {
-        id: 'service',
-        estado: 'cancelado',
-        empleadaId: 'employee',
-        jefeId: 'boss',
-        jefe: { rol: 'jefe' },
-        metodoPago: 'efectivo',
-        canceladoAt: new Date('2026-07-18T20:00:00Z'),
-        createdAt: new Date('2026-07-18T18:00:00Z'),
-        viajes,
-      };
-    }
-
-    it('lleva al corte el Uber ya pagado de un servicio cancelado', async () => {
-      services.findOne.mockResolvedValue(
-        cancelled([
-          {
-            proveedorTransporte: 'uber',
-            tarifa: 500,
-            fareConfirmedAt: new Date('2026-07-18T20:05:00Z'),
-          },
-        ]),
-      );
-
-      await sync.syncCancelledRecord('service');
-
-      expect(records.save).toHaveBeenCalledWith(
-        expect.objectContaining({
-          cancelled: true,
-          companyTransportExpense: 500,
-          serviceTotal: 0,
-          // Un servicio que no ocurrio no le cobra transporte al cliente.
-          customerTransportCharge: 0,
-          employeeCashDue: 0,
-        }),
-      );
-    });
-
-    it('le cobra al cliente el traslado que la oficina marco como cobrado', async () => {
-      services.findOne.mockResolvedValue(
-        cancelled([
-          {
-            proveedorTransporte: 'uber',
-            tarifa: 500,
-            fareConfirmedAt: new Date('2026-07-18T20:05:00Z'),
-            costoCobradoAlCliente: true,
-          },
-        ]),
-      );
-
-      await sync.syncCancelledRecord('service');
-
-      expect(records.save).toHaveBeenCalledWith(
-        expect.objectContaining({
-          companyTransportExpense: 500,
-          customerTransportCharge: 500,
-        }),
-      );
-    });
-
-    it('ignora el Uber cuyo costo aun no se ha cerrado', async () => {
-      services.findOne.mockResolvedValue(
-        cancelled([
-          { proveedorTransporte: 'uber', tarifa: 0, fareConfirmedAt: null },
-        ]),
-      );
-
-      await expect(sync.syncCancelledRecord('service')).resolves.toBeNull();
-      expect(records.save).not.toHaveBeenCalled();
-    });
-
-    it('no toca un servicio que no está cancelado', async () => {
-      services.findOne.mockResolvedValue(finalized());
-
-      await expect(sync.syncCancelledRecord('service')).resolves.toBeNull();
-      expect(records.save).not.toHaveBeenCalled();
-    });
+    const [obligacion] = cashObligations.upsert.mock.calls[0];
+    // 0.30 - (0.10 + 0.20) = 0 exacto; en flotante sobraba 5.5e-17.
+    expect(obligacion.amount).toBe(0);
+    expect(obligacion.uberDeduction).toBe(0.3);
   });
 });

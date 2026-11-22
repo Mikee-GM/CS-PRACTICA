@@ -1672,20 +1672,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     service.notaCancelacion = dto.note?.trim() || null;
     service.canceladoPorUserId = actor.id;
     service.canceladoAt = new Date();
-    await this.serviciosRepository.save(service);
 
     const viajesActivos = (service.viajes ?? []).filter(
       (trip) => !['finalizado', 'cancelado', 'rechazado'].includes(trip.estado),
     );
-    await this.viajesRepository.update(
-      {
-        servicioId: id,
-        estado: Not(In(['finalizado', 'cancelado', 'rechazado'])),
-      },
-      { estado: 'cancelado' },
-    );
-    await this.liberarChoferesDe(viajesActivos);
-
     // Un Uber que ya estaba despachado se pago aunque el servicio no ocurriera.
     // No se puede saber desde aqui si el viaje llego a pedirse, asi que se deja
     // marcado para que la oficina cierre el costo en vez de perderlo.
@@ -1695,12 +1685,28 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         !trip.fareConfirmedAt &&
         DISPATCHED_TRIP_STATES.includes(trip.estado),
     );
-    if (uberPorCerrar.length > 0) {
-      await this.viajesRepository.update(
-        { id: In(uberPorCerrar.map((trip) => trip.id)) },
-        { canceladoConCosto: true },
+    // El servicio y sus viajes se cancelan juntos: con escrituras sueltas, un
+    // fallo a medias dejaba el servicio cancelado con un viaje aun vivo que un
+    // chofer podia aceptar.
+    await this.serviciosRepository.manager.transaction(async (manager) => {
+      await manager.save(Servicios, service);
+      await manager.update(
+        Viajes,
+        {
+          servicioId: id,
+          estado: Not(In(['finalizado', 'cancelado', 'rechazado'])),
+        },
+        { estado: 'cancelado' },
       );
-    }
+      if (uberPorCerrar.length > 0) {
+        await manager.update(
+          Viajes,
+          { id: In(uberPorCerrar.map((trip) => trip.id)) },
+          { canceladoConCosto: true },
+        );
+      }
+    });
+    await this.liberarChoferesDe(viajesActivos);
 
     const anotherActiveService = await this.serviciosRepository.exists({
       where: {
@@ -3571,9 +3577,14 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       const notificationTime = endTime - 15 * 60 * 1000; // 15 minutes before scheduled end
 
       if (now >= notificationTime) {
-        // Mark as sent to prevent multiple triggers
-        service.notificacionExtensionEnviada = true;
-        await this.serviciosRepository.save(service);
+        // Se marca con una sentencia condicionada: guardar la entidad leida un
+        // minuto antes podia pisar cambios hechos entretanto, y con dos
+        // replicas las dos pasaban el control y avisaban a la vez.
+        const marcado = await this.serviciosRepository.update(
+          { id: service.id, notificacionExtensionEnviada: false },
+          { notificacionExtensionEnviada: true },
+        );
+        if (marcado.affected === 0) continue;
 
         try {
           // Nivel 1: la ventana para decidir es corta y ella esta trabajando.
@@ -3920,10 +3931,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       /* Mismo motivo que en el rechazo: soltar el chofer con `update` y no con
        * `save`. Aqui el sintoma era mas callado --la oferta caducada seguia
        * figurando como suya-- pero es el mismo fallo. */
-      await this.viajesRepository.update(viajeId, {
-        choferId: null,
-        ofertaExpiraEn: null,
-      });
+      if (!(await this.soltarOferta(viajeId, choferId))) return;
       /* Para que la tarjeta se vaya de su portal sin recargar. */
       this.realtimeEventsService.emitToDriver(choferId, {
         type: 'trip_offer_released',
@@ -3932,6 +3940,25 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
       await this.dispatchViaje(viajeId);
     }
+  }
+
+  /**
+   * Suelta la oferta solo si sigue siendo de ese chofer, en una sola sentencia.
+   *
+   * La lectura previa no basta: el temporizador, el barrido y un doble toque del
+   * chofer pueden llegar a la vez, pasar todos el mismo control y repartir el
+   * viaje dos veces o contarle dos rechazos. Quien no consigue soltarla no
+   * sigue adelante.
+   */
+  private async soltarOferta(
+    viajeId: string,
+    choferId: string,
+  ): Promise<boolean> {
+    const resultado = await this.viajesRepository.update(
+      { id: viajeId, estado: 'notificado', choferId },
+      { choferId: null, ofertaExpiraEn: null },
+    );
+    return resultado?.affected !== 0;
   }
 
   /**
@@ -3994,10 +4021,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
        * control de "esta oferta es tuya" y le contaba un rechazo mas. Tres
        * toques al mismo boton bastaban para llevarse la multa.
        */
-      await this.viajesRepository.update(viajeId, {
-        choferId: null,
-        ofertaExpiraEn: null,
-      });
+      if (!(await this.soltarOferta(viajeId, choferId))) return false;
       /* Para que la tarjeta se vaya de su portal sin recargar. */
       this.realtimeEventsService.emitToDriver(choferId, {
         type: 'trip_offer_released',
@@ -5273,27 +5297,16 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         ),
       );
 
-    // Un transporte externo queda asignado al elegirlo; uno interno solo
-    // queda asignado cuando un chofer acepta la oferta.
-    if (provider === 'interno') {
-      await this.dispatchViaje(result.trip.id).catch((error) =>
-        this.logger.error(
-          `[chooseReturnTransport] El viaje ${result.trip.id} se creó, pero el despacho inicial falló:`,
-          error,
-        ),
-      );
-      // La modelo se entera por el push que el puente deriva de
-      // `return_transport_selected`.
-      this.realtimeEventsService.emitToBoss(result.servicio.jefeId, {
-        type: 'return_transport_selected',
-        data: { serviceId: result.servicio.id, trip: result.trip },
-      });
-      this.realtimeEventsService.emitToEmployee(result.servicio.empleadaId, {
-        type: 'return_transport_selected',
-        data: { serviceId: result.servicio.id, tripId: result.trip.id },
-      });
-      return { trip: result.trip };
-    }
+    // El transporte externo se registra aparte (arriba se rechaza): aqui solo
+    // llega el interno, que queda asignado cuando un chofer acepta la oferta.
+    await this.dispatchViaje(result.trip.id).catch((error) =>
+      this.logger.error(
+        `[chooseReturnTransport] El viaje ${result.trip.id} se creó, pero el despacho inicial falló:`,
+        error,
+      ),
+    );
+    // La modelo se entera por el push que el puente deriva de
+    // `return_transport_selected`.
     this.realtimeEventsService.emitToBoss(result.servicio.jefeId, {
       type: 'return_transport_selected',
       data: { serviceId: result.servicio.id, trip: result.trip },
@@ -5302,31 +5315,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       type: 'return_transport_selected',
       data: { serviceId: result.servicio.id, tripId: result.trip.id },
     });
-    const employee = await this.serviciosRepository.findOne({
-      where: { id: result.servicio.id },
-      relations: { empleada: true },
-    });
-    const uberLink = employee
-      ? this.buildUberLinkForTrip(employee, 'regreso')
-      : undefined;
-    return { trip: result.trip, uberLink };
-  }
-
-  private buildUberLink(servicio: Servicios): string {
-    let link = `https://m.uber.com/ul/?action=setPickup`;
-    const employee = servicio.empleada;
-    if (employee?.ubicacionLat != null && employee.ubicacionLng != null) {
-      link += `&dropoff[latitude]=${employee.ubicacionLat}&dropoff[longitude]=${employee.ubicacionLng}&dropoff[nickname]=Casa`;
-    }
-    if (
-      servicio.ubicacionClienteLat != null &&
-      servicio.ubicacionClienteLng != null
-    ) {
-      link += `&pickup[latitude]=${servicio.ubicacionClienteLat}&pickup[longitude]=${servicio.ubicacionClienteLng}&pickup[nickname]=Recoger%20Empleada`;
-    } else {
-      link += '&pickup=my_location';
-    }
-    return link;
+    return { trip: result.trip };
   }
 
   async changeTripTransport(
@@ -5405,14 +5394,12 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     if (!servicio) throw new NotFoundException('Servicio no encontrado');
     await this.liquidationSync.syncOfficeRecord(servicio.id);
 
-    let uberLink: string | undefined;
     if (provider === 'interno') {
       await this.dispatchViaje(result.trip.id);
       if (result.trip.tipo === 'regreso') {
         await this.sendFinalReceiptAndAward(servicio.id);
       }
     } else {
-      uberLink = this.buildUberLinkForTrip(servicio, result.trip.tipo);
       // El viaje puede cambiar de proveedor varias veces: la hora de
       // notificacion, que se renueva en cada cambio, separa un aviso de otro.
       await this.avisar(servicio.empleada?.usuarioId, {

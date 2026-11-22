@@ -7,6 +7,7 @@ import {
   ValidationPipe,
   VersioningType,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
@@ -15,6 +16,9 @@ import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  // El esquema Joi de AppModule ya validó y completó estas variables: se leen
+  // por aquí y no de `process.env`, que no trae los valores por defecto.
+  const config = app.get(ConfigService);
 
   // Enable shutdown hooks for graceful cleanup
   app.enableShutdownHooks();
@@ -35,11 +39,12 @@ async function bootstrap() {
 
   // Security headers using Helmet
   app.use(helmet());
-  app.use(cookieParser(process.env.COOKIE_SECRET));
+  app.use(cookieParser(config.getOrThrow<string>('COOKIE_SECRET')));
 
   // Explicit CORS configuration
   app.enableCors({
-    origin: (process.env.WEB_URL || 'http://localhost:3000')
+    origin: config
+      .getOrThrow<string>('WEB_URL')
       .split(',')
       .map((origin) => origin.trim()),
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
@@ -87,11 +92,11 @@ async function bootstrap() {
   // Swagger solo fuera de produccion: el documento es un mapa completo de la
   // superficie de ataque (cada ruta, cada DTO, cada campo de cada entidad) y no
   // aporta nada al cliente final.
-  if (process.env.NODE_ENV !== 'production') {
+  if (config.get<string>('NODE_ENV') !== 'production') {
     setupSwagger(app);
   }
 
-  await app.listen(process.env.PORT ?? 4000);
+  await app.listen(config.get<number>('PORT') ?? 4000);
 }
 
 function setupSwagger(app: INestApplication) {

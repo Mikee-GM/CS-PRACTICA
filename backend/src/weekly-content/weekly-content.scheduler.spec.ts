@@ -197,6 +197,8 @@ describe('WeeklyContentScheduler', () => {
     });
     scheduleRepo.find.mockResolvedValue([schedule]);
     dataSource.query
+      // Primero se mira si el ciclo ya tenia multa registrada.
+      .mockResolvedValueOnce([])
       .mockResolvedValueOnce([{ id: 'jefe-1', rol: 'jefe' }])
       .mockResolvedValueOnce([{ id: 'registro-1' }]);
 
@@ -206,13 +208,28 @@ describe('WeeklyContentScheduler', () => {
     expect(schedule.multaAplicadaAt).toBeInstanceOf(Date);
     expect(schedule.multaLiquidationRecordId).toBe('registro-1');
 
-    const [insercion, parametros] = dataSource.query.mock.calls[1];
+    const [insercion, parametros] = dataSource.query.mock.calls[2];
     expect(insercion).toContain('INSERT INTO liquidation_records');
     expect(parametros).toContain(300);
 
     expect(aviso().titulo).toContain('multa');
     expect(aviso().tipo).toBe('sancion');
     expect(aviso().dedupeKey).toBe('fotos-multa:sched-1');
+  });
+
+  it('un reintento reutiliza la multa ya insertada en vez de cobrarla otra vez', async () => {
+    // La pasada anterior inserto la multa y fallo al marcar el ciclo.
+    const schedule = pendiente({
+      recordatoriosEnviados: 3,
+      estado: 'recordatorio_enviado',
+    });
+    scheduleRepo.find.mockResolvedValue([schedule]);
+    dataSource.query.mockResolvedValueOnce([{ id: 'registro-previo' }]);
+
+    await aplicarMultas();
+
+    expect(schedule.multaLiquidationRecordId).toBe('registro-previo');
+    expect(dataSource.query).toHaveBeenCalledTimes(1);
   });
 
   it('en la semana de gracia cierra el ciclo sin multa ni reporte', async () => {
@@ -254,7 +271,8 @@ describe('WeeklyContentScheduler', () => {
   it('registra el incumplimiento aunque no haya quien firme la multa', async () => {
     const schedule = pendiente({ recordatoriosEnviados: 3 });
     scheduleRepo.find.mockResolvedValue([schedule]);
-    dataSource.query.mockResolvedValueOnce([]);
+    // Sin multa previa y sin nadie que pueda firmarla.
+    dataSource.query.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 
     await aplicarMultas();
 

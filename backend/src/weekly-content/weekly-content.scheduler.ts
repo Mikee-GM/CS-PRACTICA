@@ -52,7 +52,7 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
 
   /*
    * Arranca siempre. Los avisos salen por push, asi que ningun entorno depende de un
-   * bot para pedir las fotos y cobrar la multa.
+   * canal externo para pedir las fotos y cobrar la multa.
    */
   onModuleInit() {
     // Escanear cada 10 minutos
@@ -132,7 +132,7 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
    * Pide las fotos a todas las modelos con catalogo activo.
    *
    * Hasta la Fase 5 se saltaba a quien no tenia un chat vinculado, porque el
-   * pedido solo viajaba por el bot. Ahora el aviso es push y el portal es la
+   * pedido solo viajaba por un chat externo. Ahora el aviso es push y el portal es la
    * via de entrega, asi que todas quedan sujetas al ciclo; la que entra por
    * primera vez tiene su semana de gracia (`esSemanaDeGracia`).
    */
@@ -368,7 +368,22 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
   ): Promise<string | null> {
     if (importe <= 0) return null;
 
+    // El texto identifica el ciclo: sirve de llave para no cobrar dos veces.
+    const lugar = `Multa: fotos semanales no entregadas (ciclo ${semanaInicio})`;
+
     try {
+      // La multa se inserta antes de marcar el ciclo como multado, en escrituras
+      // separadas: si la segunda fallaba, la pasada siguiente volvia a cobrarla.
+      // Con el lock del ciclo no hay dos pasadas a la vez, asi que mirar antes
+      // basta para que repetirla sea inocuo.
+      const [existente]: Array<{ id: string }> = await this.dataSource.query(
+        `SELECT id FROM liquidation_records
+          WHERE employee_id = $1 AND is_fine = true AND place = $2
+          LIMIT 1`,
+        [empleadaId, lugar],
+      );
+      if (existente) return existente.id;
+
       const firmantes: Array<{ id: string; rol: string }> =
         await this.dataSource.query(
           `SELECT u.id, u.rol, 0 AS prioridad
@@ -406,7 +421,7 @@ export class WeeklyContentScheduler implements OnModuleInit, OnModuleDestroy {
           firmante.rol === 'admin' ? 'admin' : 'jefe',
           occurredAt,
           importe,
-          `Multa: fotos semanales no entregadas (ciclo ${semanaInicio})`,
+          lugar,
         ],
       );
 

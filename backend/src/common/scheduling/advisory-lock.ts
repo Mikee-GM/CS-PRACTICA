@@ -105,4 +105,5 @@ export const ADVISORY_LOCKS = {
   // vez sobre la misma conversacion, tampoco entre replicas.
   conversationTurn: 811_011,
   onboardingWebReminders: 811_021,
+  groupHoldRelease: 811_022,
 } as const;

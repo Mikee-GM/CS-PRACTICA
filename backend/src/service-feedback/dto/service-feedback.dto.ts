@@ -17,8 +17,7 @@ import {
 } from '../../employee-reports/entities/employee-report.entity';
 
 /**
- * Los mismos motivos que ofrecen los botones del bot despues de una
- * calificacion de tres estrellas o menos.
+ * Motivos que se ofrecen tras una calificacion de tres estrellas o menos.
  */
 export const MOTIVOS_DE_CALIFICACION = [
   'trato',
@@ -45,8 +44,8 @@ export class PendientesDeValorarQueryDto {
  * Calificacion del cliente a un servicio suyo.
  *
  * A diferencia de la empleada y el chofer, el cliente no esta obligado a
- * comentar una calificacion baja: en el bot tampoco lo estaba, y exigirlo en
- * la web solo haria que no calificara. El motivo es la version corta del
+ * comentar una calificacion baja: exigirlo solo haria que no
+ * calificara. El motivo es la version corta del
  * comentario y solo se guarda si no escribio uno.
  */
 export class CalificarServicioDto {
@@ -79,7 +78,7 @@ export class CalificarServicioDto {
   readonly comentario?: string;
 }
 
-/** Mismos limites que el reporte del bot: entre 3 y 2000 caracteres. */
+/** Entre 3 y 2000 caracteres, como el resto de los reportes. */
 export class ReportarServicioDto {
   @ApiProperty({ enum: REPORT_CATEGORIES })
   @IsIn(REPORT_CATEGORIES)

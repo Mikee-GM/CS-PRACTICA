@@ -81,7 +81,7 @@ export function datosDeReserva(borrador?: BorradorDeReserva): DatosDeReserva {
  * base de la modelo y sin el transporte: en un servicio en trio el cliente
  * podia transferir la mitad de lo cotizado y el comprobante se aprobaba igual,
  * y con ubicacion externa se colaba sin el cargo de transporte que el propio
- * bot le acababa de sumar en el mensaje del precio.
+ * asistente le acababa de sumar en el mensaje del precio.
  *
  * En pago mixto solo se espera la parte transferida: el resto y el transporte
  * se pagan en efectivo, y asi se le dijo al cliente.

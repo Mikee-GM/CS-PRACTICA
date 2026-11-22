@@ -22,6 +22,7 @@ import {
 } from './dto/discipline.dto';
 import { ConductReport } from './entities/conduct-report.entity';
 import { DisciplinarySanction } from './entities/disciplinary-sanction.entity';
+import { describeError } from '../common/errors/error-message';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AVISO_SANCION } from '../notifications/avisos-catalogo';
 import {
@@ -97,7 +98,12 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     this.expirationTimer = setInterval(
-      () => void this.expireSanctions().catch(() => undefined),
+      () =>
+        void this.expireSanctions().catch((error: unknown) =>
+          this.logger.error(
+            `No se pudieron vencer las sanciones: ${describeError(error)}`,
+          ),
+        ),
       60_000,
     );
     this.expirationTimer.unref();

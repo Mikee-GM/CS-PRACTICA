@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   ArrayMinSize,
   IsArray,
   IsBoolean,
@@ -12,23 +13,38 @@ import {
   MaxLength,
   Min,
   MinLength,
+  ValidateNested,
 } from 'class-validator';
+
+/**
+ * Opcion de una pregunta. Sin esta clase el arreglo solo se validaba como
+ * arreglo: cada elemento entraba tal cual a la columna jsonb, con cualquier
+ * forma y tamaño, y de ahi salia a la pantalla de la candidata.
+ */
+export class ScreeningOptionDto {
+  @IsString() @MinLength(1) @MaxLength(500) text: string;
+  @IsOptional() @IsBoolean() isCorrect?: boolean;
+}
 
 export class CreateScreeningQuestionDto {
   @IsString() @MinLength(3) @MaxLength(2000) text: string;
-  @IsOptional() @IsArray() options?: Array<{
-    text: string;
-    isCorrect?: boolean;
-  }>;
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ValidateNested({ each: true })
+  @Type(() => ScreeningOptionDto)
+  options?: ScreeningOptionDto[];
 }
 
 export class UpdateScreeningQuestionDto {
   @IsOptional() @IsString() @MinLength(3) @MaxLength(2000) text?: string;
   @IsOptional() @IsBoolean() active?: boolean;
-  @IsOptional() @IsArray() options?: Array<{
-    text: string;
-    isCorrect?: boolean;
-  }>;
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ValidateNested({ each: true })
+  @Type(() => ScreeningOptionDto)
+  options?: ScreeningOptionDto[];
 }
 
 export class ReorderScreeningQuestionsDto {

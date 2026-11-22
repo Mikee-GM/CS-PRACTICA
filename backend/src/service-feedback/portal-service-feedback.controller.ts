@@ -49,8 +49,7 @@ export class PortalServiceFeedbackController {
 
   /**
    * Reporte del chofer sobre la modelo de un viaje suyo, al sistema de
-   * `employee_reports` (el que revisa el admin), no al de conducta. Es la
-   * entrada web del boton que el bot ofrecia al cerrar el viaje.
+   * `employee_reports` (el que revisa el admin), no al de conducta.
    */
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('driver-portal/employee-reports')

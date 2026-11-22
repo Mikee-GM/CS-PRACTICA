@@ -10,6 +10,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
 import { Clientes } from '../clients/entities/client.entity';
 import { Servicios } from '../services/entities/service.entity';
+import { esViolacionDeUnicidad } from '../common/errors/db-errors';
 import { AdjustPointsDto } from './dto/adjust-points.dto';
 import { CreateLoyaltyTierDto } from './dto/create-loyalty-tier.dto';
 import { SetClientTierDto } from './dto/set-client-tier.dto';
@@ -104,6 +105,9 @@ export class LoyaltyService implements OnModuleInit {
     try {
       return await this.tiersRepository.save(tier);
     } catch (error) {
+      // Solo el indice unico significa "ya existe": cualquier otro fallo
+      // (base caida, deadlock) se contaba al cliente como un nivel repetido.
+      if (!esViolacionDeUnicidad(error)) throw error;
       throw new ConflictException(
         `El nivel de membresía "${tier.code}" ya existe`,
       );
@@ -130,6 +134,7 @@ export class LoyaltyService implements OnModuleInit {
     try {
       return await this.tiersRepository.save(tier);
     } catch (error) {
+      if (!esViolacionDeUnicidad(error)) throw error;
       throw new ConflictException(
         `No se pudo actualizar el nivel "${tier.code}"`,
       );

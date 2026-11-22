@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { Clientes } from './entities/client.entity';
 import { DisciplineService } from '../discipline/discipline.service';
-import { APP_TIME_ZONE } from '../common/locale';
+import { APP_TIME_ZONE, enHoraDelNegocio } from '../common/locale';
 
 /** Lo que devuelve cada consulta agregada, para no perder el tipo. */
 interface FilaResumen {
@@ -278,18 +278,20 @@ export class ClientDossierService {
 
     const porMes = new Map(filas.map((fila) => [fila.mes, fila]));
     const serie: ClientDossier['porMes'] = [];
-    const cursor = new Date();
-    cursor.setDate(1);
-    cursor.setMonth(cursor.getMonth() - (MESES_DE_SERIE - 1));
+    // El SQL agrupa los meses en hora de Mexico: el cursor tiene que contarlos
+    // igual, o en un servidor UTC la serie se corre un mes los primeros dias.
+    const cursor = enHoraDelNegocio(new Date());
+    cursor.setUTCDate(1);
+    cursor.setUTCMonth(cursor.getUTCMonth() - (MESES_DE_SERIE - 1));
     for (let i = 0; i < MESES_DE_SERIE; i++) {
-      const clave = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}`;
+      const clave = `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, '0')}`;
       const fila = porMes.get(clave);
       serie.push({
         mes: clave,
         servicios: fila?.servicios ?? 0,
         gasto: Number((fila?.gasto ?? 0).toFixed(2)),
       });
-      cursor.setMonth(cursor.getMonth() + 1);
+      cursor.setUTCMonth(cursor.getUTCMonth() + 1);
     }
     return serie;
   }

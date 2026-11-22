@@ -14,7 +14,10 @@ describe('ServicesService cancel', () => {
     // arrow asincrona sin await no pasa el lint.
     save: jest.fn((value) => value),
     exists: jest.fn().mockResolvedValue(false),
-    manager: { getRepository: jest.fn(() => ({ update: jest.fn() })) },
+    manager: {
+      getRepository: jest.fn(() => ({ update: jest.fn() })),
+      transaction: jest.fn(),
+    },
   };
   const viajesRepository = {
     update: jest.fn(),
@@ -23,6 +26,21 @@ describe('ServicesService cancel', () => {
     // de devolverle la disponibilidad.
     find: jest.fn().mockResolvedValue([]),
   };
+  // La cancelacion escribe servicio y viajes en una transaccion. El doble
+  // reenvia cada escritura a los mismos mocks de repositorio, asi las pruebas
+  // siguen mirando lo que se guardo y no como se agrupo.
+  serviciosRepository.manager.transaction.mockImplementation(
+    (
+      trabajo: (m: {
+        save: (e: unknown, v: unknown) => unknown;
+        update: (e: unknown, w: unknown, s: unknown) => unknown;
+      }) => unknown,
+    ) =>
+      trabajo({
+        save: (_entidad, valor) => serviciosRepository.save(valor),
+        update: (_entidad, where, set) => viajesRepository.update(where, set),
+      }),
+  );
   const choferesRepository = { findOne: jest.fn(), update: jest.fn() };
   const usuariosRepository = { findOne: jest.fn(), findOneBy: jest.fn() };
   const realtime = { emitToBoss: jest.fn(), emitToDriver: jest.fn() };
@@ -111,6 +129,24 @@ describe('ServicesService cancel', () => {
     expect(guardado.notaCancelacion).toBe('se arrepintio al llegar');
     expect(guardado.canceladoPorUserId).toBe('user-1');
     expect(guardado.canceladoAt).toBeInstanceOf(Date);
+  });
+
+  it('cancela el servicio y sus viajes en una sola transaccion', async () => {
+    const servicio = {
+      ...servicioEnCurso(),
+      viajes: [{ id: 'viaje-1', estado: 'notificado' }],
+    };
+    serviciosRepository.findOne.mockResolvedValue(servicio);
+    usuariosRepository.findOne.mockResolvedValue(null);
+
+    await service.cancel('svc-1', actor, { reason: 'seguridad' });
+
+    expect(serviciosRepository.manager.transaction).toHaveBeenCalledTimes(1);
+    expect(serviciosRepository.save).toHaveBeenCalledTimes(1);
+    expect(viajesRepository.update).toHaveBeenCalledWith(
+      expect.objectContaining({ servicioId: 'svc-1' }),
+      { estado: 'cancelado' },
+    );
   });
 
   it('deja la nota en nulo cuando llega vacia, en vez de guardar espacios', async () => {

@@ -20,6 +20,8 @@ import { Choferes } from '../drivers/entities/driver.entity';
 import { NotificationsService } from '../notifications/notifications.service';
 import { AVISO_LIQUIDACION } from '../notifications/avisos-catalogo';
 import { Usuarios } from '../users/entities/user.entity';
+import { desdeHoraDelNegocio, lunesDeLaSemana } from '../common/locale';
+import { fromCents, roundMoney, sumMoney, toCents } from '../common/money';
 import { LiquidationAudit } from '../liquidations/entities/liquidation-audit.entity';
 
 @Injectable()
@@ -40,19 +42,34 @@ export class SettlementsService {
     private readonly notifications: NotificationsService,
   ) {}
 
+  /**
+   * Semana operativa (lunes a domingo, hora de Mexico) a la que pertenece una
+   * fecha. Antes salia de `getDay` y `toISOString` con la zona del servidor:
+   * en UTC, un viaje cerrado el domingo a las 20:00 caia en la semana siguiente.
+   */
   private getWeekBounds(date: Date): { weekStart: string; weekEnd: string } {
-    const d = new Date(date);
-    const day = d.getDay();
-    const adjustedDay = day === 0 ? 7 : day;
-    const diff = d.getDate() - adjustedDay + 1;
-    const start = new Date(d);
-    start.setDate(diff);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setDate(start.getDate() + 6);
-    end.setHours(23, 59, 59, 999);
-    const toDateOnly = (value: Date) => value.toISOString().slice(0, 10);
-    return { weekStart: toDateOnly(start), weekEnd: toDateOnly(end) };
+    const weekStart = lunesDeLaSemana(date);
+    const fin = new Date(`${weekStart}T12:00:00.000Z`);
+    fin.setUTCDate(fin.getUTCDate() + 6);
+    return { weekStart, weekEnd: fin.toISOString().slice(0, 10) };
+  }
+
+  /**
+   * Rango `Between` de un periodo `YYYY-MM-DD` en hora de Mexico: desde la
+   * medianoche del primer dia hasta el ultimo milisegundo del ultimo. Con
+   * `T00:00:00Z` el periodo empezaba a las seis de la tarde del dia anterior.
+   */
+  private ventanaDeSemana(startDate: string, endDate: string) {
+    const siguiente = new Date(`${endDate}T12:00:00.000Z`);
+    siguiente.setUTCDate(siguiente.getUTCDate() + 1);
+    const desde = desdeHoraDelNegocio(`${startDate}T00:00:00`);
+    const hasta = desdeHoraDelNegocio(
+      `${siguiente.toISOString().slice(0, 10)}T00:00:00`,
+    );
+    if (!desde || !hasta) {
+      throw new BadRequestException('El periodo no es válido');
+    }
+    return Between(desde, new Date(hasta.getTime() - 1));
   }
 
   private async allowedEmployeeIds(actor: Usuarios): Promise<string[] | null> {
@@ -100,10 +117,12 @@ export class SettlementsService {
         id: employee.id,
         name: employee.nombreArtistico,
       })),
-      total: rows.reduce(
-        (sum, row) =>
-          sum + Math.max(0, Number(row.amount) - Number(row.paidAmount)),
-        0,
+      total: fromCents(
+        rows.reduce(
+          (sum, row) =>
+            sum + Math.max(0, toCents(row.amount) - toCents(row.paidAmount)),
+          0,
+        ),
       ),
     };
   }
@@ -126,29 +145,33 @@ export class SettlementsService {
         order: { createdAt: 'ASC' },
         lock: { mode: 'pessimistic_write' },
       });
-      const available = pending.reduce(
-        (sum, row) => sum + Number(row.amount) - Number(row.paidAmount),
+      // En centavos enteros: con flotantes, un abono por el saldo exacto podia
+      // salir rechazado o dejar una obligacion a un centavo de quedar pagada.
+      const availableCents = pending.reduce(
+        (sum, row) => sum + toCents(row.amount) - toCents(row.paidAmount),
         0,
       );
-      if (amount > available + 0.001)
+      if (toCents(amount) > availableCents)
         throw new BadRequestException('El abono supera el saldo pendiente');
       const payment = await manager.getRepository(EmployeeCashPayment).save({
         employeeId,
-        amount,
+        amount: roundMoney(amount),
         note: note ?? null,
         registeredByUserId: actor.id,
         origin: 'physical',
       });
-      let remaining = amount;
+      let remainingCents = toCents(amount);
       for (const obligation of pending) {
-        if (remaining <= 0) break;
-        const applied = Math.min(
-          remaining,
-          Number(obligation.amount) - Number(obligation.paidAmount),
+        if (remainingCents <= 0) break;
+        const appliedCents = Math.min(
+          remainingCents,
+          toCents(obligation.amount) - toCents(obligation.paidAmount),
         );
-        obligation.paidAmount = Number(obligation.paidAmount) + applied;
+        obligation.paidAmount = fromCents(
+          toCents(obligation.paidAmount) + appliedCents,
+        );
         obligation.status =
-          obligation.paidAmount >= Number(obligation.amount)
+          toCents(obligation.paidAmount) >= toCents(obligation.amount)
             ? 'paid'
             : 'pending';
         if (obligation.status === 'paid') obligation.calculationStatus = 'paid';
@@ -157,12 +180,13 @@ export class SettlementsService {
         await manager.getRepository(EmployeeCashPaymentAllocation).save({
           paymentId: payment.id,
           obligationId: obligation.id,
-          amount: applied,
+          amount: fromCents(appliedCents),
         });
-        remaining -= applied;
+        remainingCents -= appliedCents;
       }
       return payment;
     });
+    return resultado;
   }
 
   async closeCashObligation(id: string, actor: Usuarios) {
@@ -174,7 +198,7 @@ export class SettlementsService {
         row.pendingReason || 'La entrega todavía es provisional',
       );
     }
-    const remaining = Number(row.amount) - Number(row.paidAmount);
+    const remaining = fromCents(toCents(row.amount) - toCents(row.paidAmount));
     if (remaining <= 0) return row;
     await this.registerCashPayment(
       row.employeeId,
@@ -273,12 +297,16 @@ export class SettlementsService {
           lock: { mode: 'pessimistic_write' },
         });
       if (!obligation) continue;
-      obligation.paidAmount = Math.max(
-        0,
-        Number(obligation.paidAmount) - Number(allocation.amount),
+      obligation.paidAmount = fromCents(
+        Math.max(
+          0,
+          toCents(obligation.paidAmount) - toCents(allocation.amount),
+        ),
       );
       obligation.status =
-        obligation.paidAmount >= Number(obligation.amount) ? 'paid' : 'pending';
+        toCents(obligation.paidAmount) >= toCents(obligation.amount)
+          ? 'paid'
+          : 'pending';
       /*
        * Vuelve a `ready`, no a `provisional`: el abono solo pudo aplicarse
        * sobre una obligacion ya calculada, asi que ese es su estado previo.
@@ -321,10 +349,7 @@ export class SettlementsService {
       where: {
         proveedorTransporte: 'interno',
         estado: 'finalizado',
-        horaFinViaje: Between(
-          new Date(`${startDate}T00:00:00Z`),
-          new Date(`${endDate}T23:59:59.999Z`),
-        ),
+        horaFinViaje: this.ventanaDeSemana(startDate, endDate),
       },
       relations: { chofer: true, servicio: true },
       order: { horaFinViaje: 'ASC' },
@@ -443,17 +468,11 @@ export class SettlementsService {
           proveedorTransporte: 'interno',
           estado: 'finalizado',
           driverSettlementId: IsNull(),
-          horaFinViaje: Between(
-            new Date(`${startDate}T00:00:00Z`),
-            new Date(`${endDate}T23:59:59.999Z`),
-          ),
+          horaFinViaje: this.ventanaDeSemana(startDate, endDate),
         },
         lock: { mode: 'pessimistic_write' },
       });
-      const total = trips.reduce(
-        (sum, trip) => sum + Number(trip.driverPayout),
-        0,
-      );
+      const total = sumMoney(trips.map((trip) => trip.driverPayout));
       const settlement = await manager.getRepository(DriverSettlement).save({
         ...(existing ?? {}),
         driverId,
@@ -525,16 +544,10 @@ export class SettlementsService {
         proveedorTransporte: 'interno',
         estado: 'finalizado',
         driverSettlementId: IsNull(),
-        horaFinViaje: Between(
-          new Date(`${weekStart}T00:00:00Z`),
-          new Date(`${weekEnd}T23:59:59.999Z`),
-        ),
+        horaFinViaje: this.ventanaDeSemana(weekStart, weekEnd),
       },
     });
-    const total = trips.reduce(
-      (sum, item) => sum + Number(item.driverPayout),
-      0,
-    );
+    const total = sumMoney(trips.map((item) => item.driverPayout));
     await this.driverSettlements.save({
       ...(existing ?? {}),
       driverId: trip.choferId,
@@ -551,10 +564,7 @@ export class SettlementsService {
       where: {
         proveedorTransporte: 'interno',
         estado: 'finalizado',
-        horaFinViaje: Between(
-          new Date(`${startDate}T00:00:00Z`),
-          new Date(`${endDate}T23:59:59.999Z`),
-        ),
+        horaFinViaje: this.ventanaDeSemana(startDate, endDate),
       },
     });
     const driverIds = [
@@ -575,10 +585,7 @@ export class SettlementsService {
         choferId: driverId,
         proveedorTransporte: 'interno',
         estado: 'finalizado',
-        horaFinViaje: Between(
-          new Date(`${startDate}T00:00:00Z`),
-          new Date(`${endDate}T23:59:59.999Z`),
-        ),
+        horaFinViaje: this.ventanaDeSemana(startDate, endDate),
       },
       order: { horaFinViaje: 'ASC' },
     });
@@ -588,7 +595,7 @@ export class SettlementsService {
     });
     const totalPay = existing
       ? Number(existing.total)
-      : trips.reduce((sum, trip) => sum + Number(trip.driverPayout), 0);
+      : sumMoney(trips.map((trip) => trip.driverPayout));
     return {
       driver: { id: driver.id, name: driver.nombre },
       period: { startDate, endDate },

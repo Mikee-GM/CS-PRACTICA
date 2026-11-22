@@ -208,3 +208,80 @@ describe('ChallengesService (avisos del ciclo)', () => {
     });
   });
 });
+
+/**
+ * El reto y sus participantes se escriben en una sola transaccion: sin ella,
+ * un fallo al guardar los participantes dejaba un reto vigente sin nadie.
+ */
+describe('ChallengesService.createChallenge (atomicidad)', () => {
+  const manager = {
+    create: jest.fn((_entidad: unknown, valor: unknown) => valor),
+    save: jest.fn(),
+  };
+  const dataSource = {
+    transaction: jest.fn((trabajo: (m: typeof manager) => unknown) =>
+      trabajo(manager),
+    ),
+  };
+  const realtime = { emitToJefes: jest.fn() };
+
+  const service = Object.create(
+    ChallengesService.prototype,
+  ) as ChallengesService;
+  Object.assign(service, {
+    logger: { warn: jest.fn(), error: jest.fn(), log: jest.fn() },
+    dataSource,
+    realtime,
+  });
+
+  const dto = {
+    title: ' Semana fuerte ',
+    participantType: 'employee',
+    metric: 'services',
+    endsAt: new Date(Date.now() + 86_400_000).toISOString(),
+    startsAt: new Date(Date.now() + 3_600_000).toISOString(),
+    participantIds: ['emp-a', 'emp-b', 'emp-a'],
+  } as never;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest
+      .spyOn(
+        service as unknown as { assertParticipantsExist: () => Promise<void> },
+        'assertParticipantsExist',
+      )
+      .mockResolvedValue(undefined);
+    jest
+      .spyOn(
+        service as unknown as { getChallenge: () => Promise<unknown> },
+        'getChallenge',
+      )
+      .mockResolvedValue({ id: 'reto-1' });
+    manager.save.mockImplementation((_entidad: unknown, valor: unknown) =>
+      Promise.resolve(
+        Array.isArray(valor) ? valor : { id: 'reto-1', ...(valor as object) },
+      ),
+    );
+  });
+
+  it('guarda el reto y sus participantes en la misma transaccion', async () => {
+    await service.createChallenge(dto, { id: 'admin-1', rol: 'admin' });
+
+    expect(dataSource.transaction).toHaveBeenCalledTimes(1);
+    const guardados = manager.save.mock.calls.map(([, valor]) => valor);
+    expect(guardados[0]).toMatchObject({ title: 'Semana fuerte' });
+    // Un participante repetido en la peticion entra una sola vez.
+    expect(guardados[1]).toHaveLength(2);
+  });
+
+  it('no anuncia el reto si fallan los participantes', async () => {
+    manager.save
+      .mockResolvedValueOnce({ id: 'reto-1', title: 'Semana fuerte' })
+      .mockRejectedValueOnce(new Error('fallo al guardar participantes'));
+
+    await expect(
+      service.createChallenge(dto, { id: 'admin-1', rol: 'admin' }),
+    ).rejects.toThrow('fallo al guardar participantes');
+    expect(realtime.emitToJefes).not.toHaveBeenCalled();
+  });
+});

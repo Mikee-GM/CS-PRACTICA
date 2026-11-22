@@ -56,10 +56,10 @@ describe('ServicesService rechazarOfertaManual', () => {
     const rechazado = await service.rechazarOfertaManual('viaje-1', 'chofer-1');
 
     expect(rechazado).toBe(true);
-    expect(viajesRepository.update).toHaveBeenCalledWith('viaje-1', {
-      choferId: null,
-      ofertaExpiraEn: null,
-    });
+    expect(viajesRepository.update).toHaveBeenCalledWith(
+      { id: 'viaje-1', estado: 'notificado', choferId: 'chofer-1' },
+      { choferId: null, ofertaExpiraEn: null },
+    );
     // `save` volveria a escribir el chofer que trae la relacion cargada.
     expect(viajesRepository.save).not.toHaveBeenCalled();
     expect(contar).toHaveBeenCalledWith('chofer-1', 'viaje-1');
@@ -98,6 +98,23 @@ describe('ServicesService rechazarOfertaManual', () => {
     expect(viajesRepository.update).not.toHaveBeenCalled();
     expect(contar).not.toHaveBeenCalled();
     expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it('un doble toque simultaneo cuenta un solo rechazo', async () => {
+    // Las dos llamadas leen la oferta como suya; solo una consigue soltarla.
+    viajesRepository.findOne.mockResolvedValue(ofertaDe('chofer-1'));
+    viajesRepository.update
+      .mockResolvedValueOnce({ affected: 1 })
+      .mockResolvedValueOnce({ affected: 0 });
+
+    const [primero, segundo] = await Promise.all([
+      service.rechazarOfertaManual('viaje-1', 'chofer-1'),
+      service.rechazarOfertaManual('viaje-1', 'chofer-1'),
+    ]);
+
+    expect([primero, segundo].sort()).toEqual([false, true]);
+    expect(contar).toHaveBeenCalledTimes(1);
+    expect(dispatch).toHaveBeenCalledTimes(1);
   });
 
   it('no cuenta el rechazo de un chofer al que ya no le toca la oferta', async () => {

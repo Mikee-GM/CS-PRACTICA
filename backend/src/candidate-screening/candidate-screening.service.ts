@@ -394,8 +394,7 @@ function preguntaParaCandidata(next: {
 }
 
 /**
- * Traduce lo que mando la candidata al texto que se guarda, igual que el bot:
- * en una pregunta con opciones se guarda el texto de la opcion elegida.
+ * Traduce lo que mando la candidata al texto que se guarda: en una pregunta con opciones se guarda el texto de la opcion elegida.
  */
 function respuestaElegida(
   question: ScreeningQuestion,

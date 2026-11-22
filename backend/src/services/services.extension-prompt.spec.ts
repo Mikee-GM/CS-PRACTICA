@@ -10,7 +10,7 @@ describe('ServicesService checkActiveServicesForExtension', () => {
 
   function armar(servicios: unknown[]) {
     const notificar = jest.fn().mockResolvedValue(1);
-    const save = jest.fn((v) => v);
+    const update = jest.fn().mockResolvedValue({ affected: 1 });
 
     /*
      * Se construye por nombre y no con `new`: son mas de veinte dependencias, y
@@ -25,12 +25,12 @@ describe('ServicesService checkActiveServicesForExtension', () => {
       dispatchTimeouts: new Map(),
       serviciosRepository: {
         find: jest.fn().mockResolvedValue(servicios),
-        save,
+        update,
       },
       notificationsService: { notificar },
     });
 
-    return { service, notificar, save };
+    return { service, notificar, update };
   }
 
   /** Uno que termina dentro de diez minutos: ya entra en la ventana de aviso. */
@@ -85,12 +85,23 @@ describe('ServicesService checkActiveServicesForExtension', () => {
   });
 
   it('marca el aviso como enviado para no repetirlo cada vuelta', async () => {
-    const { service, save } = armar([porTerminar()]);
+    const { service, update } = armar([porTerminar()]);
 
     await service.checkActiveServicesForExtension();
 
-    expect(save).toHaveBeenCalledWith(
-      expect.objectContaining({ notificacionExtensionEnviada: true }),
+    expect(update).toHaveBeenCalledWith(
+      { id: 'svc-1', notificacionExtensionEnviada: false },
+      { notificacionExtensionEnviada: true },
     );
+  });
+
+  it('no avisa si otra replica ya lo marco', async () => {
+    // El UPDATE condicionado no afecta ninguna fila: otra replica llego antes.
+    const { service, notificar, update } = armar([porTerminar()]);
+    update.mockResolvedValue({ affected: 0 });
+
+    await service.checkActiveServicesForExtension();
+
+    expect(notificar).not.toHaveBeenCalled();
   });
 });

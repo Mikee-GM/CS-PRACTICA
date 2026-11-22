@@ -94,7 +94,7 @@ type FilaPorValorar = {
  * volver a contratar desde el chat web, y los reportes del chofer desde su
  * portal.
  *
- * No hay reglas nuevas: cada accion entra por el mismo metodo que usa el bot
+ * No hay reglas nuevas: cada accion entra por el metodo de siempre
  * (`createClientRatingIdempotent`, `EmployeeReportsService`), de modo que la
  * ventana, la propiedad del servicio y los efectos disciplinarios no pueden
  * divergir entre las dos vias. Aqui solo se resuelve quien es el cliente a
@@ -115,8 +115,8 @@ export class ServiceFeedbackService {
   /**
    * Servicios del cliente terminados dentro del plazo, con lo que ya valoro.
    *
-   * En un servicio grupal se califica a cada participante por separado, como
-   * en el bot; en uno individual, a la modelo del servicio. Por eso la lista
+   * En un servicio grupal se califica a cada participante por separado; en uno
+   * individual, a la modelo del servicio. Por eso la lista
    * sale por modelo y se agrupa por servicio aqui.
    */
   async pendientes(
@@ -206,7 +206,7 @@ export class ServiceFeedbackService {
         rating.stars,
       );
     } else if (dto.motivo && !rating.comment && !dto.empleadaId) {
-      // Igual que el bot: el motivo puede llegar despues de las estrellas, y
+      // El motivo puede llegar despues de las estrellas, y
       // solo se guarda si todavia no hay comentario. En un grupal no se usa
       // porque `addClientRatingReason` no distingue participantes.
       await this.discipline.addClientRatingReason(
@@ -269,9 +269,8 @@ export class ServiceFeedbackService {
    * Una conversacion web es una reserva: al aceptarse queda `con_servicio` y
    * la IA deja de contestar, asi que el chat del servicio anterior no sirve
    * para pedir otro. Se cierra --solo si sigue colgada de este servicio-- y se
-   * abre una nueva con la misma modelo; el historial queda intacto. Es lo
-   * mismo que hacia el bot: una sesion limpia en la que solo viaja la
-   * intencion de contratar a la misma modelo.
+   * abre una nueva con la misma modelo; el historial queda intacto. Es una
+   * sesion limpia en la que solo viaja la intencion de contratar a la misma modelo.
    *
    * Si ya hay otro chat abierto con ella (una reserva nueva en curso, u otro
    * servicio todavia vivo) no se toca y se devuelve ese.
@@ -329,7 +328,7 @@ export class ServiceFeedbackService {
   }
 
   /**
-   * Copia las estrellas a `servicios.calificacion`, como hace el bot. Solo la
+   * Copia las estrellas a `servicios.calificacion`. Solo la
    * modelo principal: en un grupal cada participante tiene su propia fila en
    * `interaction_ratings` y el servicio solo guarda una cifra. Condicionado a
    * que este vacia para que una carrera no pise la primera.

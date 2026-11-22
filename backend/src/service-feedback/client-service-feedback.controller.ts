@@ -34,8 +34,7 @@ import {
 
 /**
  * Lo que el cliente hace con un servicio terminado desde el chat web:
- * calificarlo, reportarlo y volver a contratar a la misma modelo. Sustituye a
- * los botones que el bot mandaba al cerrar el servicio.
+ * calificarlo, reportarlo y volver a contratar a la misma modelo.
  *
  * Calificar y volver a contratar responden 201 cuando crean algo y 200 cuando
  * devuelven lo que ya existia, como el resto del chat.

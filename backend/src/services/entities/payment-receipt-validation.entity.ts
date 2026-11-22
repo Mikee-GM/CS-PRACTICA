@@ -10,6 +10,7 @@ import {
 } from 'typeorm';
 import { Servicios } from './service.entity';
 import { Usuarios } from '../../users/entities/user.entity';
+import { ColumnNumericTransformer } from '../../common/transformers/column-numeric.transformer';
 
 @Entity('payment_receipt_validations')
 export class PaymentReceiptValidations {
@@ -103,6 +104,8 @@ export class PaymentReceiptValidations {
     precision: 10,
     scale: 2,
     nullable: true,
+    // Sin esto el driver devuelve la cadena '350.00' aunque el tipo diga number.
+    transformer: new ColumnNumericTransformer(),
   })
   @ApiPropertyOptional({ description: 'Monto transferido' })
   monto?: number;
@@ -113,6 +116,7 @@ export class PaymentReceiptValidations {
     precision: 10,
     scale: 2,
     nullable: true,
+    transformer: new ColumnNumericTransformer(),
   })
   @ApiPropertyOptional({ description: 'Importe que se esperaba transferir' })
   montoEsperado?: number;

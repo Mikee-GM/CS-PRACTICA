@@ -79,7 +79,7 @@ export class EmployeePhotosService {
     id: string,
     updateEmployeePhotoDto: UpdateEmployeePhotoDto,
   ): Promise<EmpleadaFotos> {
-    const foto = await this.findOne(id);
+    await this.findOne(id);
 
     if (updateEmployeePhotoDto.empleadaId) {
       const empleada = await this.empleadasRepository.findOne({
@@ -221,42 +221,46 @@ export class EmployeePhotosService {
       throw new BadRequestException('La foto ya está en esa galería');
     }
 
-    const origen =
-      from === 'publica'
-        ? await this.empleadaFotosRepository.findOne({ where: { id } })
-        : await this.fotosExclusivasRepository.findOne({ where: { id } });
+    // Copiar y borrar van en una sola transaccion: si el borrado fallaba a
+    // medias la foto quedaba en las dos galerias, y dos toques seguidos al
+    // boton la duplicaban. El bloqueo de la fila de origen hace que el segundo
+    // toque espere y encuentre la foto ya movida.
+    const creada = await this.dataSource.transaction(async (manager) => {
+      const origenRepo =
+        from === 'publica'
+          ? manager.getRepository(EmpleadaFotos)
+          : manager.getRepository(EmpleadaFotosExclusivas);
+      const destinoRepo =
+        to === 'publica'
+          ? manager.getRepository(EmpleadaFotos)
+          : manager.getRepository(EmpleadaFotosExclusivas);
 
-    if (!origen) {
-      throw new NotFoundException(`Foto con ID ${id} no encontrada`);
-    }
+      const origen = await origenRepo.findOne({
+        where: { id },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!origen) {
+        throw new NotFoundException(`Foto con ID ${id} no encontrada`);
+      }
 
-    const destino = await this.listGallery(origen.empleadaId, to);
-    const siguienteOrden = destino.length
-      ? Math.max(...destino.map((foto) => foto.orden ?? 0)) + 1
-      : 0;
+      const destino = await destinoRepo.find({
+        where: { empleadaId: origen.empleadaId },
+        order: { orden: 'ASC' },
+      });
+      const siguienteOrden = destino.length
+        ? Math.max(...destino.map((foto) => foto.orden ?? 0)) + 1
+        : 0;
 
-    const creada =
-      to === 'publica'
-        ? await this.empleadaFotosRepository.save(
-            this.empleadaFotosRepository.create({
-              empleadaId: origen.empleadaId,
-              url: origen.url,
-              orden: siguienteOrden,
-            }),
-          )
-        : await this.fotosExclusivasRepository.save(
-            this.fotosExclusivasRepository.create({
-              empleadaId: origen.empleadaId,
-              url: origen.url,
-              orden: siguienteOrden,
-            }),
-          );
-
-    if (from === 'publica') {
-      await this.empleadaFotosRepository.delete(id);
-    } else {
-      await this.fotosExclusivasRepository.delete(id);
-    }
+      const nueva = await destinoRepo.save(
+        destinoRepo.create({
+          empleadaId: origen.empleadaId,
+          url: origen.url,
+          orden: siguienteOrden,
+        }),
+      );
+      await origenRepo.delete(id);
+      return nueva;
+    });
 
     return { moved: true, id: creada.id, gallery: to };
   }

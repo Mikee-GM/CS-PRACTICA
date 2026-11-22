@@ -141,6 +141,39 @@ describe('AuthService.refresh', () => {
     expect(revokeWhere[0].params).toEqual({ familyId: 'fam-1' });
   });
 
+  it('el corte de la familia no se revierte: el rechazo sale tras el commit', async () => {
+    // Lanzar dentro de la transaccion la revierte, y con ella la revocacion
+    // que se acababa de ejecutar: el token robado seguia vivo.
+    const { service } = build({
+      revokedAt: new Date(Date.now() - 120_000),
+      replacedBySessionId: 'sid-2',
+    });
+    const manager = (
+      service as unknown as {
+        sessionsRepository: {
+          manager: {
+            transaction: (fn: (m: unknown) => Promise<unknown>) => unknown;
+          };
+        };
+      }
+    ).sessionsRepository.manager;
+    const original = manager.transaction;
+    let lanzoDentro = false;
+    manager.transaction = async (fn) => {
+      try {
+        return await original(fn);
+      } catch (error) {
+        lanzoDentro = true;
+        throw error;
+      }
+    };
+
+    await expect(service.refresh('token-valido')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(lanzoDentro).toBe(false);
+  });
+
   it('corta la familia si el hash del token no coincide con el guardado', async () => {
     const { service, revokeAll, revokeWhere } = build({
       refreshTokenHash: hash('otro'),

@@ -17,7 +17,7 @@ import { ReglamentoWebService } from './reglamento-web.service';
  * Recordatorio push del reglamento (decision 7 de la Fase 5): a las
  * `ONBOARDING_REMINDER_HOURS` de asignarlo y despues uno al dia, con tope.
  *
- * No depende de ningun bot ni de su token: corre siempre. Si el push no
+ * No depende de ningun canal externo: corre siempre. Si el push no
  * esta configurado, `NotificationsService` lo registra como omitido y el
  * contador avanza igual, asi que tampoco se acumulan pendientes.
  */

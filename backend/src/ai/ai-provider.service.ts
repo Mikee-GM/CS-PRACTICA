@@ -23,7 +23,7 @@ const DEFAULT_CHAT_TEMPERATURE = 0.45;
  *
  * Con un modelo que razona, lo que piensa se descuenta de este mismo tope, asi
  * que un presupuesto ajustado a la respuesta visible se agota razonando y la
- * API devuelve contenido vacio. Aqui eso no se nota como un error: el bot
+ * API devuelve contenido vacio. Aqui eso no se nota como un error: el asistente
  * acabaria pasandole el chat al jefe en cada mensaje. El tope deja sitio al
  * razonamiento; que la respuesta sea corta lo gobierna el prompt, no este
  * numero.
@@ -79,7 +79,7 @@ export class AiProviderService {
 
   /**
    * El modelo se lee del entorno para poder cambiarlo o volver al anterior sin
-   * desplegar: cuando el proveedor retira una version, el bot se queda mudo.
+   * desplegar: cuando el proveedor retira una version, el asistente se queda mudo.
    */
   private get chatModel(): string {
     return (
@@ -108,9 +108,7 @@ export class AiProviderService {
   private getApiKey(): string | undefined {
     return (
       this.configService.get<string>('XAI_API_KEY') ||
-      this.configService.get<string>('GROQ_API_KEY') ||
-      process.env.XAI_API_KEY ||
-      process.env.GROQ_API_KEY
+      this.configService.get<string>('GROQ_API_KEY')
     );
   }
 
@@ -368,7 +366,7 @@ Devuelve estrictamente un JSON con esta estructura (si un dato no existe usa nul
       try {
         const parsed = JSON.parse(content);
         return parsed;
-      } catch (e) {
+      } catch {
         this.logger.error('Failed to parse xAI response as JSON', content);
         return {
           esComprobante: false,
@@ -454,7 +452,7 @@ Devuelve estrictamente un JSON con esta estructura:
           esComprobante: Boolean(parsed.esComprobante),
           descripcion: parsed.descripcion || 'una foto',
         };
-      } catch (e) {
+      } catch {
         return { esComprobante: false, descripcion: 'una imagen' };
       }
     } catch (err: any) {
