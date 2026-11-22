@@ -42,6 +42,7 @@ export default function UberScreenshotUploader({
       <input
         ref={inputRef}
         type="file"
+        aria-label="Captura del resumen del viaje"
         accept="image/*"
         disabled={uploading}
         aria-busy={uploading}

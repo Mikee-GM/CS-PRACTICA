@@ -147,7 +147,7 @@ export default function DineroListado({
         flush
         action={
           <div className="flex flex-wrap items-center gap-2">
-            <input
+            <input aria-label="Buscar por nombre"
               value={busqueda}
               onChange={(evento) => setBusqueda(evento.target.value)}
               placeholder="Buscar por nombre"

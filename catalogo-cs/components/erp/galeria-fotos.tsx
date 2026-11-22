@@ -286,9 +286,10 @@ export default function GaleriaFotos({
                     target="_blank"
                     rel="noopener noreferrer"
                     className="absolute right-2 top-2 rounded-lg border border-zinc-700 bg-black/80 p-1.5 text-zinc-300 transition-colors hover:text-white"
-                    title="Ver en tamano completo"
+                    title="Ver en tamaño completo"
+                    aria-label="Ver en tamaño completo"
                   >
-                    <ExternalLink className="h-3 w-3" />
+                    <ExternalLink className="h-3 w-3" aria-hidden="true" />
                   </a>
                 </div>
 

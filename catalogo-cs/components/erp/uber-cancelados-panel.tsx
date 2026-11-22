@@ -237,7 +237,7 @@ function ViajeCard({
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-zinc-800/60 pt-4">
-        <input
+        <input aria-label="Costo del Uber"
           value={monto}
           onChange={(e) => setMonto(e.target.value)}
           inputMode="decimal"

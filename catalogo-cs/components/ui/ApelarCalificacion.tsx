@@ -137,7 +137,7 @@ export default function ApelarCalificacion({
 
                 {abierta === calificacion.id ? (
                   <div className="mt-3 flex flex-col gap-2">
-                    <textarea
+                    <textarea aria-label="Qué pasó realmente"
                       value={motivo}
                       onChange={(evento) => setMotivo(evento.target.value)}
                       rows={3}

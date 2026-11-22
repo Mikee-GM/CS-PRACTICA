@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useId } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import imageCompression from "browser-image-compression";
 import { Ban, Globe, Lock } from "lucide-react";
+import { useModalAccesible } from "@/hooks/useModalAccesible";
 import type { Modelo, ModeloPayload } from "@/types";
 
 import {
@@ -23,6 +24,7 @@ import PromptDialog from "../ui/PromptDialog";
 import InputField from "../ui/InputField";
 import TextareaField from "../ui/TextareaField";
 import SelectField from "../ui/SelectField";
+import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 
 const inputClass =
   "w-full bg-black border border-zinc-800 text-white text-sm font-medium px-4 py-3 transition-all duration-200 focus:border-[#C5A55A] placeholder:text-zinc-600 focus:outline-none";
@@ -166,6 +168,11 @@ export default function ModelModal({
 
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const tituloId = useId();
+  const panel = useModalAccesible<HTMLDivElement>({
+    bloqueado: saving || uploading,
+    onCerrar: onClose,
+  });
   const [activeTab, setActiveTab] = useState<"perfil" | "semanal" | "exclusivas">("perfil");
 
   // Estado para Contenido Semanal
@@ -550,6 +557,10 @@ export default function ModelModal({
       onClick={(e) => e.target === e.currentTarget && !saving && !uploading && onClose()}
     >
       <motion.div
+        ref={panel}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={tituloId}
         initial={{ opacity: 0, scale: 0.96, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: 20 }}
@@ -558,7 +569,7 @@ export default function ModelModal({
       >
         <div className="flex items-center justify-between px-6 py-5 border-b border-zinc-800 bg-zinc-900/30">
           <div>
-            <h2 className="text-xl font-heading font-semibold text-white tracking-wide">
+            <h2 id={tituloId} className="text-xl font-heading font-semibold text-white tracking-wide">
               {modelo ? `Editar Modelo: ${modelo.nombre}` : "Nueva Modelo"}
             </h2>
             <p className="text-xs text-zinc-500 font-light mt-1">
@@ -566,12 +577,14 @@ export default function ModelModal({
             </p>
           </div>
           <button
+            type="button"
             onClick={onClose}
             disabled={saving || uploading}
             aria-busy={saving}
+            aria-label="Cerrar"
             className="text-zinc-600 hover:text-[#C5A55A] transition-colors disabled:opacity-40"
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
@@ -659,7 +672,7 @@ export default function ModelModal({
                     </div>
                     <div className="p-3 space-y-2 flex-1 flex flex-col justify-between">
                       <p className="text-[10px] text-zinc-500">
-                        Enviada: {new Date(sub.createdAt).toLocaleDateString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                        Enviada: {new Date(sub.createdAt).toLocaleDateString(APP_LOCALE, { timeZone: APP_TIME_ZONE, day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
                       </p>
                       {sub.estado === "pendiente" ? (
                         <div className="space-y-1.5 pt-2 border-t border-zinc-900">
@@ -762,6 +775,7 @@ export default function ModelModal({
                 </button>
                 <input
                   type="file"
+                  aria-label="Subir foto exclusiva"
                   accept="image/*"
                   disabled={uploading}
                   aria-busy={uploading}
@@ -786,9 +800,10 @@ export default function ModelModal({
                     <button
                       type="button"
                       onClick={() => handleDeletePrivatePhoto(photo.id)}
-                      className="absolute top-2 right-2 bg-black/80 text-red-400 p-1.5 rounded hover:bg-red-950 transition-colors opacity-0 group-hover:opacity-100"
+                      aria-label="Eliminar foto privada"
+                      className="absolute top-2 right-2 bg-black/80 text-red-400 p-1.5 rounded hover:bg-red-950 transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
                     >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <line x1="18" y1="6" x2="6" y2="18" />
                         <line x1="6" y1="6" x2="18" y2="18" />
                       </svg>
@@ -937,6 +952,9 @@ export default function ModelModal({
                   <button
                     type="button"
                     onClick={() => setForm({ ...form, catalogoActivo: form.catalogoActivo === false ? true : false })}
+                    role="switch"
+                    aria-checked={form.catalogoActivo !== false}
+                    aria-label="Estado en la agencia"
                     className={`relative w-12 h-6 transition-colors duration-300 rounded-full ${
                       form.catalogoActivo !== false ? "bg-[#C5A55A]" : "bg-red-900"
                     }`}
@@ -960,6 +978,9 @@ export default function ModelModal({
                     type="button"
                     disabled={form.catalogoActivo === false}
                     onClick={() => setForm({ ...form, disponible: !form.disponible })}
+                    role="switch"
+                    aria-checked={form.catalogoActivo !== false && form.disponible}
+                    aria-label="Disponibilidad actual"
                     className={`relative w-12 h-6 transition-colors duration-300 rounded-full ${
                       form.catalogoActivo === false
                         ? "bg-zinc-800 opacity-50 cursor-not-allowed"
@@ -1053,7 +1074,7 @@ export default function ModelModal({
                             </div>
                             <div className="flex items-center gap-2">
                               <span className="text-zinc-500 text-[11px]">$</span>
-                              <input
+                              <input aria-label={`Precio de ${extra.nombre}`}
                                 type="number"
                                 value={extra.precio}
                                 onChange={(e) => updateExtraPrecio(idx, parseFloat(e.target.value) || 0)}
@@ -1117,7 +1138,7 @@ export default function ModelModal({
                                 servicio. Dejalo vacio para usar la explicacion
                                 estandar.
                               </p>
-                              <textarea
+                              <textarea aria-label="Ej. Mi amor, con tu pareja los atiendo a los dos y los consiento"
                                 value={extra.speechPersonalizado || ""}
                                 onChange={(e) => updateExtraSpeech(idx, e.target.value)}
                                 maxLength={2000}
@@ -1147,7 +1168,7 @@ export default function ModelModal({
                   </span>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
                     <div className="sm:col-span-2 space-y-1">
-                      <input
+                      <input aria-label="Nombre del servicio personalizado"
                         type="text"
                         value={newExtraNombre}
                         onChange={(e) => setNewExtraNombre(e.target.value)}
@@ -1156,7 +1177,7 @@ export default function ModelModal({
                       />
                     </div>
                     <div className="flex gap-2">
-                      <input
+                      <input aria-label="Costo"
                         type="number"
                         value={newExtraPrecio}
                         onChange={(e) => setNewExtraPrecio(e.target.value)}
@@ -1197,7 +1218,7 @@ export default function ModelModal({
                       <button type="button" className="bg-zinc-900 border border-zinc-700 hover:border-[#C5A55A] text-xs font-semibold px-4 py-2 uppercase tracking-wider transition-colors disabled:opacity-50">
                         Cambiar Foto
                       </button>
-                      <input
+                      <input aria-label="Subir foto principal"
                         type="file"
                         accept="image/*"
                         disabled={saving}
@@ -1224,7 +1245,7 @@ export default function ModelModal({
                       <button type="button" className="text-[10px] text-white hover:text-[#C5A55A] font-bold uppercase tracking-wider transition-colors disabled:opacity-50">
                         + Anadir Fotos
                       </button>
-                      <input
+                      <input aria-label="Añadir fotos a la galería"
                         type="file"
                         accept="image/*"
                         multiple
@@ -1254,9 +1275,10 @@ export default function ModelModal({
                             <button
                               type="button"
                               onClick={() => removeFotoGaleria(i)}
-                              className="absolute top-1 right-1 bg-black/80 text-white p-1 rounded hover:bg-red-900/80 transition-colors opacity-0 group-hover:opacity-100"
+                              aria-label="Quitar foto de la galería"
+                              className="absolute top-1 right-1 bg-black/80 text-white p-1 rounded hover:bg-red-900/80 transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
                             >
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <svg aria-hidden="true" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <line x1="18" y1="6" x2="6" y2="18" />
                                 <line x1="6" y1="6" x2="18" y2="18" />
                               </svg>

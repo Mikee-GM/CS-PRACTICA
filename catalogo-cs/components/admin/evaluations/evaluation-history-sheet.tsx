@@ -11,6 +11,7 @@ import {
 import { getAttemptDetailAction, getUserAttemptsAction } from "@/lib/actions/regulations";
 import { CheckCircle2, XCircle, FileText, ChevronDown, ChevronUp, Loader2, Award, Calendar, HelpCircle } from "lucide-react";
 import { toast } from "sonner";
+import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 
 type Props = {
   userId: string | null;
@@ -144,8 +145,8 @@ export default function EvaluationHistorySheet({
                         <div className="flex items-center gap-4 text-xs text-zinc-400">
                           <span className="flex items-center gap-1">
                             <Calendar className="w-3.5 h-3.5 text-zinc-500" />
-                            {new Date(attempt.completedAt || attempt.startedAt).toLocaleString("es-MX", {
-                              day: "2-digit",
+                            {new Date(attempt.completedAt || attempt.startedAt).toLocaleString(APP_LOCALE, {
+                              timeZone: APP_TIME_ZONE, day: "2-digit",
                               month: "short",
                               year: "numeric",
                               hour: "2-digit",

@@ -197,7 +197,7 @@ export default function PanelDeudas({
               {desplegada ? (
                 <div className="border-t border-zinc-800 p-4">
                   <div className="flex flex-wrap items-end gap-2">
-                    <input
+                    <input aria-label="Monto a abonar"
                       value={abonos[deuda.id] ?? ""}
                       onChange={(evento) =>
                         setAbonos((previo) => ({

@@ -73,6 +73,7 @@ export default function CorteSimulacion({
         </div>
         <input
           type="range"
+          aria-label="Porcentaje de la empresa"
           min="10"
           max="100"
           step="5"

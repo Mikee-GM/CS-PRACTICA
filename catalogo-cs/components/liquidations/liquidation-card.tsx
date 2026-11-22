@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { APP_LOCALE } from "@/lib/locale";
 
 interface Props {
   id: number;
@@ -37,7 +38,7 @@ export default function LiquidationCard({
         </p>
 
         <p className="text-3xl font-bold mt-4">
-          ${sales.toLocaleString()}
+          ${sales.toLocaleString(APP_LOCALE)}
         </p>
 
         <span

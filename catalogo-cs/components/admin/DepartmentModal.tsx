@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useId } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
+import { useModalAccesible } from "@/hooks/useModalAccesible";
 import {
   X,
   Building2,
@@ -29,6 +30,7 @@ export default function DepartmentModal({
   department,
   onSaved,
 }: DepartmentModalProps) {
+  const idsCampos = useId();
   const isEditing = Boolean(department);
 
   const [nombre, setNombre] = useState("");
@@ -37,6 +39,12 @@ export default function DepartmentModal({
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
+  const tituloId = useId();
+  const panel = useModalAccesible<HTMLDivElement>({
+    activo: isOpen,
+    bloqueado: saving,
+    onCerrar: onClose,
+  });
 
   useEffect(() => {
     if (department) {
@@ -114,6 +122,10 @@ export default function DepartmentModal({
 
         {/* Modal Container */}
         <motion.div
+          ref={panel}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={tituloId}
           initial={{ opacity: 0, scale: 0.95, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 15 }}
@@ -126,7 +138,7 @@ export default function DepartmentModal({
                 <Building2 className="h-5 w-5" />
               </div>
               <div>
-                <h2 className="text-lg font-bold text-white tracking-wide">
+                <h2 id={tituloId} className="text-lg font-bold text-white tracking-wide">
                   {isEditing ? "Editar Departamento" : "Nuevo Departamento"}
                 </h2>
                 <p className="text-xs text-zinc-400">
@@ -138,10 +150,12 @@ export default function DepartmentModal({
             </div>
 
             <button
+              type="button"
               onClick={onClose}
+              aria-label="Cerrar"
               className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors"
             >
-              <X className="h-5 w-5" />
+              <X className="h-5 w-5" aria-hidden="true" />
             </button>
           </div>
 
@@ -150,12 +164,12 @@ export default function DepartmentModal({
             {/* Nombre y Dirección */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
+                <label htmlFor={`${idsCampos}-c1`} className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
                   Nombre del Departamento <span className="text-[#C5A55A]">*</span>
                 </label>
                 <div className="relative">
                   <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 pointer-events-none" />
-                  <input
+                  <input id={`${idsCampos}-c1`}
                     type="text"
                     required
                     value={nombre}
@@ -167,12 +181,12 @@ export default function DepartmentModal({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
+                <label htmlFor={`${idsCampos}-c2`} className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
                   Dirección Física
                 </label>
                 <div className="relative">
                   <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 pointer-events-none" />
-                  <input
+                  <input id={`${idsCampos}-c2`}
                     type="text"
                     value={direccion}
                     onChange={(e) => setDireccion(e.target.value)}
@@ -185,12 +199,12 @@ export default function DepartmentModal({
 
             {/* Descripción / Notas */}
             <div>
-              <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
+              <label htmlFor={`${idsCampos}-c3`} className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
                 Descripción / Notas de Acceso
               </label>
               <div className="relative">
                 <FileText className="absolute left-3.5 top-3 h-4 w-4 text-zinc-500 pointer-events-none" />
-                <textarea
+                <textarea id={`${idsCampos}-c3`}
                   rows={2}
                   value={descripcion}
                   onChange={(e) => setDescripcion(e.target.value)}

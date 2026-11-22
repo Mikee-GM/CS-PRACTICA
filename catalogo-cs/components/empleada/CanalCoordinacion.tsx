@@ -120,7 +120,7 @@ export default function CanalCoordinacion() {
       </div>
 
       <div className="flex items-end gap-2 border-t border-white/10 p-3">
-        <textarea
+        <textarea aria-label="Escribe tu duda"
           value={texto}
           onChange={(evento) => setTexto(evento.target.value)}
           rows={1}

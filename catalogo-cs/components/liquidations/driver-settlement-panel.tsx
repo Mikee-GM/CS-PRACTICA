@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { confirmDriverSettlement } from "@/app/admin/liquidations/actions";
 import { formatCurrency } from "@/lib/calculations";
 import type { DriverLiquidationReport } from "./types";
+import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 
 const money = formatCurrency;
 
@@ -94,7 +95,7 @@ export default function DriverSettlementPanel({
               <span className="capitalize">
                 {trip.tipo} · {trip.zona} ·{" "}
                 {trip.horaFinViaje
-                  ? new Date(trip.horaFinViaje).toLocaleDateString("es-MX")
+                  ? new Date(trip.horaFinViaje).toLocaleDateString(APP_LOCALE, { timeZone: APP_TIME_ZONE })
                   : "--"}
               </span>
               <span className="text-zinc-200">{money(trip.driverPayout)}</span>

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useId } from "react";
+import { useModalAccesible } from "@/hooks/useModalAccesible";
 import type { OffDutyPerson } from "@/lib/actions/work-shift";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
@@ -58,6 +59,12 @@ export default function JefesDashboard({
   const [rol, setRol] = useState<RolDeOficina>("jefe");
   const [editingJefe, setEditingJefe] = useState<Jefe | null>(null);
   const [saving, setSaving] = useState(false);
+  const tituloModalId = useId();
+  const panelModal = useModalAccesible<HTMLDivElement>({
+    activo: showModal,
+    bloqueado: saving,
+    onCerrar: () => setShowModal(false),
+  });
 
   const [confirmDelete, setConfirmDelete] = useState<Jefe | null>(null);
 
@@ -166,22 +173,28 @@ export default function JefesDashboard({
         {showModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
             <motion.div
+              ref={panelModal}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby={tituloModalId}
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
               className="w-full max-w-md bg-zinc-950 border border-zinc-800 p-8 rounded-2xl shadow-2xl relative"
             >
               <button
+                type="button"
                 onClick={() => setShowModal(false)}
+                aria-label="Cerrar"
                 className="absolute top-4 right-4 text-zinc-500 hover:text-white transition-colors"
               >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
               </button>
 
-              <h3 className="font-heading text-2xl font-semibold text-white tracking-wide mb-6">
+              <h3 id={tituloModalId} className="font-heading text-2xl font-semibold text-white tracking-wide mb-6">
                 {editingJefe ? "Editar cuenta" : "Crear nueva cuenta"}
               </h3>
 
@@ -265,6 +278,7 @@ export default function JefesDashboard({
                 <InputField
                   label={editingJefe ? "Contrasena (opcional)" : "Contrasena"}
                   type="password"
+                  autoComplete="new-password"
                   required={!editingJefe}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}

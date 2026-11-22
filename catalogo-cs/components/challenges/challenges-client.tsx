@@ -6,6 +6,7 @@ import { Trophy, Users, Car, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import PageHeader from "@/components/ui/page-header";
 import { formatDateTime } from "@/lib/calculations";
+import { desdeHoraDelNegocio, paraInputDeFechaHora } from "@/lib/locale";
 import type {
   ChallengeDetail,
   ChallengeMetric,
@@ -38,10 +39,17 @@ const statusStyles: Record<ChallengeStatus, string> = {
   cancelled: "border-red-900/40 bg-red-900/10 text-red-400",
 };
 
-function toLocalInputValue(date: Date) {
-  const offset = date.getTimezoneOffset();
-  const local = new Date(date.getTime() - offset * 60 * 1000);
-  return local.toISOString().slice(0, 16);
+const SIETE_DIAS_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * El cierre por defecto, a una semana, escrito en la hora del negocio.
+ *
+ * Antes se armaba con el desfase del navegador (`getTimezoneOffset`), asi que
+ * un panel abierto desde otra zona proponia y enviaba una hora distinta a la de
+ * Ciudad de Mexico, que es la que usa el reto.
+ */
+function cierrePorDefecto() {
+  return paraInputDeFechaHora(new Date(Date.now() + SIETE_DIAS_MS));
 }
 
 interface Props {
@@ -68,11 +76,7 @@ export default function ChallengesClient({
     useState<ChallengeParticipantType>("employee");
   const [metric, setMetric] = useState<ChallengeMetric>("kpi_score");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [endsAt, setEndsAt] = useState(() => {
-    const inAWeek = new Date();
-    inAWeek.setDate(inAWeek.getDate() + 7);
-    return toLocalInputValue(inAWeek);
-  });
+  const [endsAt, setEndsAt] = useState(cierrePorDefecto);
 
   const roster = participantType === "employee" ? employees : drivers;
   const rosterOptions = useMemo(
@@ -95,9 +99,7 @@ export default function ChallengesClient({
     setParticipantType("employee");
     setMetric("kpi_score");
     setSelectedIds([]);
-    const inAWeek = new Date();
-    inAWeek.setDate(inAWeek.getDate() + 7);
-    setEndsAt(toLocalInputValue(inAWeek));
+    setEndsAt(cierrePorDefecto());
   };
 
   const handleCreate = async () => {
@@ -109,7 +111,8 @@ export default function ChallengesClient({
       toast.error("Selecciona al menos 2 participantes");
       return;
     }
-    if (!endsAt) {
+    const cierre = desdeHoraDelNegocio(endsAt);
+    if (!cierre) {
       toast.error("Elige una fecha de cierre");
       return;
     }
@@ -120,7 +123,7 @@ export default function ChallengesClient({
         participantType,
         metric,
         participantIds: selectedIds,
-        endsAt: new Date(endsAt).toISOString(),
+        endsAt: cierre.toISOString(),
       });
       setChallenges((current) => [
         {

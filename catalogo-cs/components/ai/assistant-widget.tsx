@@ -88,7 +88,7 @@ export default function AssistantWidget() {
             </div>
 
             <div className="absolute bottom-0 left-0 right-0 border-t border-zinc-800 p-4">
-              <input
+              <input aria-label="Pregúntale algo"
                 placeholder="Pregúntale algo..."
                 className="w-full rounded-xl border border-zinc-800 bg-zinc-900 px-4 py-3 outline-none"
               />

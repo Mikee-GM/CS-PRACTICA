@@ -82,7 +82,7 @@ export default function CerrarPorOficina({
         entra en la liquidación. Queda anotado que lo cerraste tú.
       </p>
 
-      <textarea
+      <textarea aria-label="Por qué no pudo cerrarlo ella"
         value={motivo}
         onChange={(evento) => setMotivo(evento.target.value)}
         rows={3}

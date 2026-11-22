@@ -156,7 +156,7 @@ export default function CanalConModelo({
         </div>
 
         <div className="flex items-end gap-2 border-t border-zinc-800 p-3">
-          <textarea
+          <textarea aria-label="Escribe tu mensaje"
             value={texto}
             onChange={(evento) => setTexto(evento.target.value)}
             rows={1}

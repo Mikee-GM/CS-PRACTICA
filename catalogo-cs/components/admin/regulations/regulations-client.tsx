@@ -8,6 +8,7 @@ import TextareaField from "@/components/ui/TextareaField";
 import SelectField from "@/components/ui/SelectField";
 import { toast } from "sonner";
 import { PlusCircle, Trash2, Save, Eye } from "lucide-react";
+import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 
 export default function RegulationsClient() {
   const [targetRole, setTargetRole] = useState<"empleada" | "chofer" | "jefe">("empleada");
@@ -321,13 +322,14 @@ export default function RegulationsClient() {
                           <input
                             type="radio"
                             name={`correct-${qIndex}`}
+                            aria-label={`Marcar la opción ${oIndex + 1} como correcta`}
                             checked={opt.isCorrect}
                             onChange={() => handleSetCorrectOption(qIndex, oIndex)}
                             className="w-4 h-4 text-brand-gold bg-zinc-950 border-zinc-700 focus:ring-brand-gold cursor-pointer"
                             title="Marcar como respuesta correcta"
                           />
                           <div className="flex-1">
-                            <input
+                            <input aria-label={`Opción ${oIndex + 1}`}
                               type="text"
                               value={opt.text}
                               onChange={(e) => handleOptionChange(qIndex, oIndex, e.target.value)}
@@ -339,9 +341,10 @@ export default function RegulationsClient() {
                             <button
                               type="button"
                               onClick={() => handleRemoveOption(qIndex, oIndex)}
+                              aria-label="Quitar opción"
                               className="text-zinc-500 hover:text-red-400 transition-colors"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-4 h-4" aria-hidden="true" />
                             </button>
                           )}
                         </div>
@@ -400,7 +403,7 @@ export default function RegulationsClient() {
                 </div>
                 <div>
                   <p className="text-xs text-zinc-500 uppercase tracking-widest">Última Actualización</p>
-                  <p className="text-sm text-white">{new Date(currentRegulation.updatedAt).toLocaleString()}</p>
+                  <p className="text-sm text-white">{new Date(currentRegulation.updatedAt).toLocaleString(APP_LOCALE, { timeZone: APP_TIME_ZONE })}</p>
                 </div>
                 <div>
                   <p className="text-xs text-zinc-500 uppercase tracking-widest mb-1">Preguntas</p>

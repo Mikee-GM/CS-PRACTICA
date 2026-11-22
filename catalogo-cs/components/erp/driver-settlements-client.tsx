@@ -183,7 +183,7 @@ export default function DriverSettlementsClient({
         subtitle="viajes con proveedor interno y estado finalizado"
         flush
         action={
-          <input
+          <input aria-label="Buscar chofer"
             type="search"
             value={busqueda}
             onChange={(event) => setBusqueda(event.target.value)}

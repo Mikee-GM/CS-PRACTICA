@@ -1,6 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  Children,
+  cloneElement,
+  isValidElement,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+} from "react";
 import { Plus, X } from "lucide-react";
 import { toast } from "sonner";
 
@@ -428,17 +437,50 @@ function Campo({
   opcional?: boolean;
   children: React.ReactNode;
 }) {
+  const id = useId();
+  // Un campo de un solo control asocia su rotulo con `for`/`id`; los grupos de
+  // opciones (botones) lo nombran con aria-labelledby. Antes el rotulo quedaba
+  // suelto y el control se anunciaba sin nombre.
+  let conControl = false;
+  const contenido = Children.map(children, (hijo) => {
+    if (
+      isValidElement<{ id?: string }>(hijo) &&
+      typeof hijo.type === "string" &&
+      ["input", "select", "textarea"].includes(hijo.type)
+    ) {
+      conControl = true;
+      return cloneElement(hijo, { id: hijo.props.id ?? id });
+    }
+    return hijo;
+  });
+  const claseEtiqueta =
+    "flex items-baseline gap-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400";
+  const textoOpcional = opcional && (
+    <span className="text-[10px] font-normal normal-case tracking-normal text-gray-600">
+      opcional
+    </span>
+  );
+
   return (
     <div>
-      <label className="flex items-baseline gap-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-        {etiqueta}
-        {opcional && (
-          <span className="text-[10px] font-normal normal-case tracking-normal text-gray-600">
-            opcional
-          </span>
-        )}
-      </label>
-      <div className="mt-2">{children}</div>
+      {conControl ? (
+        <label htmlFor={id} className={claseEtiqueta}>
+          {etiqueta}
+          {textoOpcional}
+        </label>
+      ) : (
+        <p id={id} className={claseEtiqueta}>
+          {etiqueta}
+          {textoOpcional}
+        </p>
+      )}
+      <div
+        className="mt-2"
+        role={conControl ? undefined : "group"}
+        aria-labelledby={conControl ? undefined : id}
+      >
+        {contenido}
+      </div>
       {ayuda && <p className="mt-1.5 text-[11px] text-gray-500">{ayuda}</p>}
     </div>
   );

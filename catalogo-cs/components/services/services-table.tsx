@@ -10,6 +10,7 @@ import CreateServiceDialog from "./create-service-dialog";
 import type { Service } from "@/lib/types";
 import { formatAvailabilityTime } from "@/lib/availability";
 import { getServices } from "@/lib/data/services";
+import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 
 type Props = {
   initialServices?: Service[];
@@ -55,7 +56,7 @@ export default function ServicesTable({ initialServices = [] }: Props) {
       <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
         <div className="relative flex-1 max-w-md">
           <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" />
-          <input
+          <input aria-label="Buscar por ID, modelo o cliente"
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -164,7 +165,7 @@ export default function ServicesTable({ initialServices = [] }: Props) {
 
                     <td className="p-4">
                       <p className="font-bold text-white">
-                        ${parseFloat(service.totalFinal || "0").toLocaleString()}
+                        ${parseFloat(service.totalFinal || "0").toLocaleString(APP_LOCALE)}
                       </p>
                       <p className="text-[10px] text-zinc-500 uppercase">
                         {service.metodoPago}
@@ -193,7 +194,7 @@ export default function ServicesTable({ initialServices = [] }: Props) {
                       </div>
                       {service.tipoAgenda === "programado" && service.fechaProgramada ? (
                         <p className="mt-1 text-[11px] text-purple-300 font-medium">
-                          Cita: {new Date(service.fechaProgramada).toLocaleString("es-MX", { dateStyle: "short", timeStyle: "short" })}
+                          Cita: {new Date(service.fechaProgramada).toLocaleString(APP_LOCALE, { timeZone: APP_TIME_ZONE, dateStyle: "short", timeStyle: "short" })}
                         </p>
                       ) : (
                         service.horaInicioEstimada && (

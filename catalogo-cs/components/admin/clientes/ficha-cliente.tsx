@@ -16,6 +16,7 @@ import {
   desbloquearClienteAction,
 } from "@/lib/actions/clientes";
 import type { ClientDossier } from "@/lib/types";
+import { APP_LOCALE } from "@/lib/locale";
 
 /*
  * Una sola serie por gráfica, en el dorado de la marca.
@@ -37,7 +38,7 @@ const moneda = new Intl.NumberFormat("es-MX", {
 
 const fechaCorta = (valor: string | null) =>
   valor
-    ? new Date(valor).toLocaleDateString("es-MX", {
+    ? new Date(valor).toLocaleDateString(APP_LOCALE, {
         timeZone: "America/Mexico_City",
         day: "2-digit",
         month: "short",
@@ -395,6 +396,7 @@ export default function FichaCliente({ ficha }: { ficha: ClientDossier }) {
               </p>
             )}
             <textarea
+              aria-label="Motivo"
               value={motivo}
               onChange={(evento) => setMotivo(evento.target.value)}
               rows={2}

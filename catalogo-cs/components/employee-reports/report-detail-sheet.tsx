@@ -192,7 +192,7 @@ export default function ReportDetailSheet({
                     </label>
                   </div>
                   <div className="mt-4 space-y-2">
-                    <textarea value={note} onChange={(event) => setNote(event.target.value)} maxLength={4000} rows={3} placeholder="Agregar nota interna…" className="w-full resize-none border border-zinc-800 bg-black p-3 text-sm text-white outline-none placeholder:text-zinc-700 focus:border-[#C5A55A]" />
+                    <textarea aria-label="Agregar nota interna" value={note} onChange={(event) => setNote(event.target.value)} maxLength={4000} rows={3} placeholder="Agregar nota interna…" className="w-full resize-none border border-zinc-800 bg-black p-3 text-sm text-white outline-none placeholder:text-zinc-700 focus:border-[#C5A55A]" />
                     <button disabled={pending || note.trim().length < 2}
  aria-busy={pending} onClick={() => scheduleAction(async () => { const result = await addEmployeeReportNote(report.id, note.trim()); if (result.success) setNote(""); return result; }, "Nota agregada")} className="w-full border border-zinc-700 px-4 py-2.5 text-xs font-semibold text-zinc-300 hover:border-zinc-500 disabled:opacity-40">Agregar nota</button>
                   </div>
@@ -235,7 +235,7 @@ export default function ReportDetailSheet({
             <DialogTitle>{closing === "resolve" ? "Resolver reporte" : "Descartar reporte"}</DialogTitle>
             <DialogDescription className="text-zinc-500">La explicación quedará registrada permanentemente en el historial.</DialogDescription>
           </DialogHeader>
-          <textarea autoFocus value={resolution} onChange={(event) => setResolution(event.target.value)} maxLength={4000} rows={4} placeholder="Describe la resolución…" className="w-full resize-none border border-zinc-800 bg-black p-3 text-sm outline-none focus:border-[#C5A55A]" />
+          <textarea aria-label="Describe la resolución" autoFocus value={resolution} onChange={(event) => setResolution(event.target.value)} maxLength={4000} rows={4} placeholder="Describe la resolución…" className="w-full resize-none border border-zinc-800 bg-black p-3 text-sm outline-none focus:border-[#C5A55A]" />
           <div className="flex items-center justify-between text-[11px]">
             <span className={`font-medium ${resolution.trim().length >= 3 ? "text-emerald-400" : "text-amber-400"}`}>
               {resolution.trim().length >= 3 ? "✓ Mínimo alcanzado" : `Mínimo 3 caracteres (${3 - resolution.trim().length} restantes)`}

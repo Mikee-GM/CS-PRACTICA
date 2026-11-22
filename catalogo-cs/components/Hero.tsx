@@ -58,11 +58,24 @@ interface HeroProps {
 
 export default function Hero({ onViewCatalog, modelos, onSelectModelo }: HeroProps) {
   const carouselRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [isHovered, setIsHovered] = useState(false);
+
+  // Quien pidió reducir el movimiento no ve el video de fondo en marcha: el
+  // atributo autoPlay no lo respeta por sí solo.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      video.pause();
+    }
+  }, []);
 
   // Desplazamiento automático del carrusel cada 12 segundos para mayor dinamismo
   useEffect(() => {
     if (!modelos || modelos.length <= 1) return;
+    // Un carrusel que se mueve solo, sin botón de pausa, es justo lo que esta
+    // preferencia pide no hacer.
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const interval = setInterval(() => {
       if (isHovered) return;
       const el = carouselRef.current;
@@ -100,7 +113,9 @@ export default function Hero({ onViewCatalog, modelos, onSelectModelo }: HeroPro
       {/* Video Background - Optimizado con aceleración por GPU para eliminar lag/stutter en Desktop */}
       <div className="absolute inset-0 z-0 overflow-hidden" style={{ transform: "translateZ(0)" }}>
         <video
+          ref={videoRef}
           src="/Colombia-Slider-1.mp4"
+          aria-hidden="true"
           autoPlay
           loop
           muted
@@ -176,7 +191,7 @@ export default function Hero({ onViewCatalog, modelos, onSelectModelo }: HeroPro
         >
           <button
             onClick={onViewCatalog}
-            className="group relative inline-flex flex-col items-center justify-center py-3 px-8 text-center transition-all duration-500 focus:outline-none"
+            className="group relative inline-flex flex-col items-center justify-center py-3 px-8 text-center transition-all duration-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C5A55A]/70"
           >
             {/* Aura difusa sutil e invisible hasta hover */}
             <span className="absolute inset-0 rounded-full bg-[#C5A55A]/0 blur-xl transition-all duration-700 group-hover:bg-[#C5A55A]/15" />
@@ -192,7 +207,7 @@ export default function Hero({ onViewCatalog, modelos, onSelectModelo }: HeroPro
           <button
             onClick={onViewCatalog}
             // El chat detecta el servicio grupal; aqui solo se lleva al catalogo.
-            className="group relative inline-flex flex-col items-center justify-center py-3 px-8 text-center transition-all duration-500 focus:outline-none"
+            className="group relative inline-flex flex-col items-center justify-center py-3 px-8 text-center transition-all duration-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C5A55A]/70"
           >
             {/* Aura difusa sutil e invisible hasta hover */}
             <span className="absolute inset-0 rounded-full bg-[#C5A55A]/0 blur-xl transition-all duration-700 group-hover:bg-[#C5A55A]/15" />

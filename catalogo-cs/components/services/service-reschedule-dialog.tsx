@@ -5,6 +5,7 @@ import { AlertTriangle, CalendarClock, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { rescheduleServiceAction } from "@/lib/data/services";
+import { useModalAccesible } from "@/hooks/useModalAccesible";
 import {
   APP_LOCALE,
   APP_TIME_ZONE,
@@ -45,6 +46,10 @@ export default function ServiceRescheduleDialog({
   );
   const [avisarCliente, setAvisarCliente] = useState(true);
   const [guardando, setGuardando] = useState(false);
+  const panel = useModalAccesible<HTMLElement>({
+    bloqueado: guardando,
+    onCerrar: onClose,
+  });
 
   const nuevaFecha = desdeHoraDelNegocio(cuando);
   const enElPasado = nuevaFecha !== null && nuevaFecha.getTime() <= Date.now();
@@ -96,6 +101,7 @@ export default function ServiceRescheduleDialog({
       }
     >
       <section
+        ref={panel}
         role="dialog"
         aria-modal="true"
         aria-labelledby="reprogramar-titulo"

@@ -13,12 +13,14 @@ export default function SearchBar({ placeholder = "Buscar...", value, onChange }
     <div className="relative mb-8 max-w-md">
       <input
         type="text"
+        aria-label={placeholder}
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="w-full bg-transparent border-b border-zinc-700 text-white text-base py-3 pl-10 focus:border-[#C5A55A] focus:outline-none transition-colors placeholder:text-zinc-600"
       />
       <svg
+        aria-hidden="true"
         className="absolute left-1 top-1/2 -translate-y-1/2 text-zinc-500"
         width="18"
         height="18"

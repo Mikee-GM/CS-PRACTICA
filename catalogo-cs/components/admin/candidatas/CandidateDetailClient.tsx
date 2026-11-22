@@ -8,6 +8,7 @@ import InputField from "@/components/ui/InputField";
 import { createEmployeeAction } from "@/lib/actions/registro";
 import { promoteCandidateScreening } from "@/lib/actions/candidate-screening";
 import type { CandidateScreening } from "@/lib/types";
+import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 
 const STATUS_LABEL: Record<CandidateScreening["status"], string> = {
   pendiente: "Pendiente",
@@ -16,8 +17,8 @@ const STATUS_LABEL: Record<CandidateScreening["status"], string> = {
 };
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleString("es-MX", {
-    day: "2-digit",
+  return new Date(iso).toLocaleString(APP_LOCALE, {
+    timeZone: APP_TIME_ZONE, day: "2-digit",
     month: "short",
     year: "numeric",
     hour: "2-digit",
@@ -162,6 +163,7 @@ export default function CandidateDetailClient({
                 <InputField
                   label="Contraseña"
                   type="password"
+                  autoComplete="new-password"
                   value={form.password}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
                 />

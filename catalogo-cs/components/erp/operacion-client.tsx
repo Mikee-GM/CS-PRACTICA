@@ -510,7 +510,7 @@ export default function OperacionClient({
           flush
           action={
             <div className="flex flex-wrap items-center gap-2">
-              <input
+              <input aria-label="Buscar servicio, empleada o cliente"
                 type="search"
                 value={busqueda}
                 onChange={(event) => setBusqueda(event.target.value)}

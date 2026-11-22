@@ -10,6 +10,7 @@ import {
 } from "@/lib/data/services";
 import type { PresetServiceLocation } from "@/lib/types";
 import LocationPickerMapDynamic from "@/components/admin/LocationPickerMapDynamic";
+import { useModalAccesible } from "@/hooks/useModalAccesible";
 
 type Pestana = "registrados" | "direccion";
 
@@ -58,6 +59,10 @@ export default function ServiceLocationDialog({
   );
 
   const [guardando, setGuardando] = useState(false);
+  const panel = useModalAccesible<HTMLElement>({
+    bloqueado: guardando,
+    onCerrar: onClose,
+  });
 
   useEffect(() => {
     let vigente = true;
@@ -112,6 +117,7 @@ export default function ServiceLocationDialog({
       }
     >
       <section
+        ref={panel}
         role="dialog"
         aria-modal="true"
         aria-labelledby="ubicacion-titulo"

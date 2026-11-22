@@ -143,6 +143,7 @@ export default function CalificarEmpleada() {
                 </div>
 
                 <textarea
+                  aria-label="Comentario sobre la empleada"
                   value={comentario}
                   onChange={(evento) => setComentario(evento.target.value)}
                   rows={3}

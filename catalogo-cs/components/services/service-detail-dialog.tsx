@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import {
   Ban,
   Calendar,
@@ -34,6 +34,7 @@ import {
   updateCancellationAction,
   updateServiceAction,
 } from "@/lib/data/services";
+import { useModalAccesible } from "@/hooks/useModalAccesible";
 import CancelServiceDialog from "./cancel-service-dialog";
 import ServiceRescheduleDialog from "./service-reschedule-dialog";
 import ServiceLocationDialog from "./service-location-dialog";
@@ -44,6 +45,7 @@ import {
   cancellationReasonLabel,
   type CancellationReason,
 } from "@/lib/cancellation-reasons";
+import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 
 interface ServiceDetailDialogProps {
   service: Service | null;
@@ -58,6 +60,7 @@ export default function ServiceDetailDialog({
   onClose,
   onUpdated,
 }: ServiceDetailDialogProps) {
+  const idsCampos = useId();
   const [service, setService] = useState<Service | null>(initialService);
   const [activeTab, setActiveTab] = useState<
     "detalles" | "transporte"
@@ -70,6 +73,11 @@ export default function ServiceDetailDialog({
   const [editingCancellation, setEditingCancellation] = useState(false);
   const [pendingAction, setPendingAction] = useState(false);
   const [externalReturnOpen, setExternalReturnOpen] = useState(false);
+  const tituloId = useId();
+  const panel = useModalAccesible<HTMLDivElement>({
+    bloqueado: pendingAction,
+    onCerrar: onClose,
+  });
 
   // Edit form state
   const [duracion, setDuracion] = useState<number | string>(1);
@@ -298,7 +306,13 @@ export default function ServiceDetailDialog({
           onChanged={reloadCurrentService}
         />
       )}
-      <div className="w-full max-w-3xl bg-zinc-950 border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden my-auto flex flex-col max-h-[90vh]">
+      <div
+        ref={panel}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={tituloId}
+        className="w-full max-w-3xl bg-zinc-950 border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden my-auto flex flex-col max-h-[90vh]"
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-zinc-800 bg-black/40">
           <div>
@@ -314,16 +328,17 @@ export default function ServiceDetailDialog({
                 </span>
               )}
             </div>
-            <h2 className="text-xl font-heading font-semibold text-white mt-1">
+            <h2 id={tituloId} className="text-xl font-heading font-semibold text-white mt-1">
               {service.empleada?.nombreArtistico || "Sin empleada asignada"}
             </h2>
           </div>
           <button
             type="button"
             onClick={onClose}
+            aria-label="Cerrar"
             className="p-2 text-zinc-500 hover:text-white rounded-xl hover:bg-zinc-900 transition-colors"
           >
-            <X size={20} />
+            <X size={20} aria-hidden="true" />
           </button>
         </div>
 
@@ -509,10 +524,10 @@ export default function ServiceDetailDialog({
                     </button>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#C5A55A] mb-1">
+                    <label htmlFor={`${idsCampos}-c1`} className="block text-xs font-semibold uppercase tracking-wider text-[#C5A55A] mb-1">
                       Notas Internas para la Empleada (Opcional)
                     </label>
-                    <textarea
+                    <textarea id={`${idsCampos}-c1`}
                       rows={2}
                       value={bossNotes}
                       onChange={(e) => setBossNotes(e.target.value)}
@@ -544,10 +559,10 @@ export default function ServiceDetailDialog({
                   </h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-[#C5A55A] mb-1">
+                      <label htmlFor={`${idsCampos}-c2`} className="block text-xs font-semibold uppercase tracking-wider text-[#C5A55A] mb-1">
                         Duración Pactada (Horas)
                       </label>
-                      <input
+                      <input id={`${idsCampos}-c2`}
                         type="number"
                         min={1}
                         max={24}
@@ -563,10 +578,10 @@ export default function ServiceDetailDialog({
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wider text-[#C5A55A] mb-1">
+                      <label htmlFor={`${idsCampos}-c3`} className="block text-xs font-semibold uppercase tracking-wider text-[#C5A55A] mb-1">
                         Método de Pago
                       </label>
-                      <select
+                      <select id={`${idsCampos}-c3`}
                         value={metodoPago}
                         onChange={(e) => setMetodoPago(e.target.value as any)}
                         className="w-full bg-black border border-zinc-800 px-4 py-2.5 rounded-xl text-white outline-none focus:border-[#C5A55A]"
@@ -579,10 +594,10 @@ export default function ServiceDetailDialog({
                     </div>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#C5A55A] mb-1">
+                    <label htmlFor={`${idsCampos}-c4`} className="block text-xs font-semibold uppercase tracking-wider text-[#C5A55A] mb-1">
                       Notas / Instrucciones del Cliente
                     </label>
-                    <textarea
+                    <textarea id={`${idsCampos}-c4`}
                       rows={2}
                       value={notas}
                       onChange={(e) => setNotas(e.target.value)}
@@ -591,10 +606,10 @@ export default function ServiceDetailDialog({
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-[#C5A55A] mb-1">
+                    <label htmlFor={`${idsCampos}-c5`} className="block text-xs font-semibold uppercase tracking-wider text-[#C5A55A] mb-1">
                       Notas Internas de Administración / Jefe
                     </label>
-                    <textarea
+                    <textarea id={`${idsCampos}-c5`}
                       rows={2}
                       value={notasJefe}
                       onChange={(e) => setNotasJefe(e.target.value)}
@@ -663,8 +678,8 @@ export default function ServiceDetailDialog({
                           />
                           Cita pactada:{" "}
                           {new Date(service.fechaProgramada).toLocaleString(
-                            "es-MX",
-                            { dateStyle: "short", timeStyle: "short" },
+                            APP_LOCALE,
+                            { timeZone: APP_TIME_ZONE, dateStyle: "short", timeStyle: "short" },
                           )}
                         </p>
                       )}
@@ -707,7 +722,7 @@ export default function ServiceDetailDialog({
                     <div className="flex justify-between">
                       <span className="text-zinc-500">Tarifa Base:</span>
                       <span className="text-zinc-200">
-                        ${parseFloat(service.totalBase || "0").toLocaleString()}
+                        ${parseFloat(service.totalBase || "0").toLocaleString(APP_LOCALE)}
                       </span>
                     </div>
                     {parseFloat(service.totalExtras || "0") > 0 && (
@@ -717,7 +732,7 @@ export default function ServiceDetailDialog({
                           $
                           {parseFloat(
                             service.totalExtras || "0",
-                          ).toLocaleString()}
+                          ).toLocaleString(APP_LOCALE)}
                         </span>
                       </div>
                     )}
@@ -730,7 +745,7 @@ export default function ServiceDetailDialog({
                           $
                           {parseFloat(
                             service.totalTransporte || "0",
-                          ).toLocaleString()}
+                          ).toLocaleString(APP_LOCALE)}
                         </span>
                       </div>
                     )}
@@ -738,7 +753,7 @@ export default function ServiceDetailDialog({
                       <span className="font-bold text-white">Total Final:</span>
                       <span className="text-base font-bold text-[#E8D5A3]">
                         $
-                        {parseFloat(service.totalFinal || "0").toLocaleString()}
+                        {parseFloat(service.totalFinal || "0").toLocaleString(APP_LOCALE)}
                       </span>
                     </div>
                   </div>
@@ -1058,14 +1073,14 @@ function AdminTripCard({
               Transporte externo
             </p>
             <div className="grid grid-cols-2 gap-2">
-              <input
+              <input aria-label="Uber, DiDi"
                 value={externalPlatform}
                 onChange={(event) => setExternalPlatform(event.target.value)}
                 placeholder="Uber, DiDi…"
                 maxLength={50}
                 className="rounded-lg border border-zinc-800 bg-black px-3 py-2 text-xs text-white outline-none focus:border-[#C5A55A]"
               />
-              <input
+              <input aria-label="Costo manual"
                 type="number"
                 min="0.01"
                 step="0.01"
@@ -1075,7 +1090,7 @@ function AdminTripCard({
                 className="rounded-lg border border-zinc-800 bg-black px-3 py-2 text-xs text-white outline-none focus:border-[#C5A55A]"
               />
             </div>
-            <input
+            <input aria-label="Pega aquí el enlace compartido del viaje"
               type="url"
               value={externalLink}
               onChange={(event) => setExternalLink(event.target.value)}
@@ -1096,7 +1111,7 @@ function AdminTripCard({
           {/* Sección de Tarifa Uber */}
           {editingFare ? (
             <div className="flex gap-2">
-              <input
+              <input aria-label="Monto Uber"
                 type="number"
                 value={fare}
                 onChange={(e) => setFare(e.target.value)}
@@ -1194,6 +1209,7 @@ function CancellationEditor({
   return (
     <div className="mt-3 space-y-3">
       <select
+        aria-label="Motivo de la cancelación"
         value={reason}
         onChange={(e) => setReason(e.target.value as CancellationReason)}
         className="w-full rounded-xl border border-zinc-800 bg-black px-3 py-2.5 text-sm text-white outline-none focus:border-[#C5A55A]"
@@ -1206,7 +1222,7 @@ function CancellationEditor({
         ))}
       </select>
 
-      <input
+      <input aria-label="Detalle, opcional"
         value={note}
         maxLength={500}
         onChange={(e) => setNote(e.target.value)}

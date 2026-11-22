@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useId } from "react";
 import { useRouter } from "next/navigation";
 import { ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
@@ -63,6 +63,7 @@ export default function ReportarConducta({
   /** Quien lee el reporte, para no prometer un jefe cuando lo ve administracion. */
   revisor?: string;
 }) {
+  const idsCampos = useId();
   const router = useRouter();
   const [abierto, setAbierto] = useState(false);
   const [categoria, setCategoria] = useState<string>(CATEGORIAS[0].valor);
@@ -120,10 +121,10 @@ export default function ReportarConducta({
         concreto con lo que pasó.
       </p>
 
-      <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-gray-500">
+      <label htmlFor={`${idsCampos}-c1`} className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-gray-500">
         Qué ocurrió
       </label>
-      <select
+      <select id={`${idsCampos}-c1`}
         value={categoria}
         onChange={(evento) => setCategoria(evento.target.value)}
         className="mb-3 w-full rounded-lg border border-zinc-800 bg-black/60 px-3 py-2.5 text-xs text-zinc-200 outline-none focus:border-[#C5A55A]"
@@ -135,7 +136,7 @@ export default function ReportarConducta({
         ))}
       </select>
 
-      <textarea
+      <textarea aria-label="Cuenta qué pasó, con el detalle que recuerdes"
         value={descripcion}
         onChange={(evento) => setDescripcion(evento.target.value)}
         rows={4}

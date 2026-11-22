@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import Link from "next/link";
 import { User, Lock, Mail, CheckCircle2, RefreshCw, X } from "lucide-react";
 import { toast } from "sonner";
 import { updateMyProfileAction } from "@/lib/actions/auth";
+import { useModalAccesible } from "@/hooks/useModalAccesible";
 
 interface EditProfileModalProps {
   isOpen: boolean;
@@ -23,10 +24,17 @@ export default function EditProfileModal({
   currentUser,
   onProfileUpdated,
 }: EditProfileModalProps) {
+  const idsCampos = useId();
   const [nombre, setNombre] = useState(currentUser?.nombre || "");
   const [apellido, setApellido] = useState(currentUser?.apellido || "");
   const email = currentUser?.email || "";
   const [saving, setSaving] = useState(false);
+  const tituloId = useId();
+  const panel = useModalAccesible<HTMLDivElement>({
+    activo: isOpen,
+    bloqueado: saving,
+    onCerrar: onClose,
+  });
 
   if (!isOpen) return null;
 
@@ -59,32 +67,39 @@ export default function EditProfileModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-3xl border border-zinc-800 bg-[#0c0c0c] p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+      <div
+        ref={panel}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={tituloId}
+        className="w-full max-w-md rounded-3xl border border-zinc-800 bg-[#0c0c0c] p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200"
+      >
         <div className="flex items-center justify-between border-b border-zinc-800/80 pb-4">
           <div className="flex items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#C5A55A]/30 bg-[#C5A55A]/10 text-[#C5A55A]">
               <User className="h-5 w-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-white">Mi Perfil (Admin)</h3>
+              <h3 id={tituloId} className="text-base font-bold text-white">Mi Perfil (Admin)</h3>
               <p className="text-xs text-zinc-400">Actualiza tu nombre y apellido</p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
+            aria-label="Cerrar"
             className="rounded-xl p-1.5 text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors"
           >
-            <X className="h-4 w-4" />
+            <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="mt-5 space-y-4 text-xs">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-zinc-300 font-semibold">Nombre</label>
+              <label htmlFor={`${idsCampos}-c1`} className="text-zinc-300 font-semibold">Nombre</label>
               <div className="relative mt-1">
-                <input
+                <input id={`${idsCampos}-c1`} autoComplete="given-name"
                   type="text"
                   placeholder="Ej: Carlos"
                   value={nombre}
@@ -94,9 +109,9 @@ export default function EditProfileModal({
               </div>
             </div>
             <div>
-              <label className="text-zinc-300 font-semibold">Apellido</label>
+              <label htmlFor={`${idsCampos}-c2`} className="text-zinc-300 font-semibold">Apellido</label>
               <div className="relative mt-1">
-                <input
+                <input id={`${idsCampos}-c2`} autoComplete="family-name"
                   type="text"
                   placeholder="Ej: Gomez"
                   value={apellido}
@@ -108,12 +123,12 @@ export default function EditProfileModal({
           </div>
 
           <div>
-            <label className="text-zinc-300 font-semibold">Correo Electrónico</label>
+            <label htmlFor={`${idsCampos}-c3`} className="text-zinc-300 font-semibold">Correo Electrónico</label>
             <div className="relative mt-1">
               <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-zinc-500">
                 <Mail className="h-4 w-4" />
               </div>
-              <input
+              <input id={`${idsCampos}-c3`} autoComplete="email"
                 type="email"
                 value={email}
                 readOnly

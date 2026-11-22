@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, useId } from "react";
 import { AlertCircle, Ban, Car, ChevronLeft, CheckCircle2, Clock3, ExternalLink, FileCheck2, ImageIcon, Loader2, MapPin, Plus, Send, Smartphone, Trash2, UsersRound } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -157,7 +157,7 @@ export default function GroupServiceOrganizer({
 
   return (
     <section className="grid items-start gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
-      <aside className={`space-y-3 lg:sticky lg:top-4 lg:block lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto ${vistaMovil === "detalle" ? "hidden" : ""}`}>
+      <aside className={`space-y-3 lg:sticky lg:top-4 lg:block lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto ${vistaMovil === "detalle" ? "hidden" : ""}`}>
         <header className="rounded-2xl border border-zinc-800 bg-zinc-950 px-4 py-3.5">
           <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#C5A55A]">
             Solicitudes grupales
@@ -441,8 +441,8 @@ function GroupRequestEditor({
           <p className="mt-4 flex items-center gap-2 text-xs text-zinc-500">
             <Clock3 size={14} />
             Reserva hasta{" "}
-            {new Date(request.holdExpiresAt).toLocaleTimeString("es-MX", {
-              hour: "2-digit",
+            {new Date(request.holdExpiresAt).toLocaleTimeString(APP_LOCALE, {
+              timeZone: APP_TIME_ZONE, hour: "2-digit",
               minute: "2-digit",
             })}
           </p>
@@ -574,7 +574,7 @@ function GroupRequestEditor({
                 aria-label="Longitud"
               />
             </div>
-            <input
+            <input aria-label="Referencia de ubicación"
               className={`${inputClass} mt-3`}
               value={reference}
               onChange={(event) => setReference(event.target.value)}
@@ -670,6 +670,7 @@ function GroupRequestEditor({
           <section className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 sm:p-6">
             <h3 className="font-heading text-2xl">Responsable y transporte</h3>
             <select
+              aria-label="Responsable del servicio"
               className={`${inputClass} mt-4`}
               value={responsibleId}
               onChange={(event) => setResponsibleId(event.target.value)}
@@ -695,6 +696,7 @@ function GroupRequestEditor({
                     </p>
                     <div className="flex gap-2">
                       <select
+                        aria-label={`Proveedor de la unidad de ida ${unit.unitNumber}`}
                         className="rounded-lg border border-zinc-800 bg-zinc-950 px-2 py-2 text-xs"
                         value={unit.provider}
                         onChange={(event) =>
@@ -938,7 +940,7 @@ function GroupRequestChat({ requestId }: { requestId: string }) {
         )}
       </div>
       <div className="mt-3 flex gap-2">
-        <textarea
+        <textarea aria-label="Escribe al cliente"
           className={`${inputClass} min-h-12 resize-none`}
           maxLength={4000}
           value={text}
@@ -977,6 +979,7 @@ function ActiveGroupEditor({
     success: string,
   ) => void;
 }) {
+  const idsCampos = useId();
   const service = request.service!;
   const active = service.participantes?.filter(
     (item) => !["retirada", "cancelada"].includes(item.status),
@@ -1177,6 +1180,7 @@ function ActiveGroupEditor({
           <h3 className="font-heading text-2xl">Horas comunes</h3>
           <div className="mt-4 flex gap-2">
             <input
+              aria-label="Horas comunes"
               className={inputClass}
               type="number"
               min={1}
@@ -1204,6 +1208,7 @@ function ActiveGroupEditor({
         <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5">
           <h3 className="font-heading text-2xl">Agregar participante</h3>
           <select
+            aria-label="Empleada a agregar"
             className={`${inputClass} mt-4`}
             value={newEmployeeId}
             onChange={(event) => setNewEmployeeId(event.target.value)}
@@ -1233,6 +1238,7 @@ function ActiveGroupEditor({
           </label>
           {needsTransport && (
             <select
+              aria-label="Proveedor del transporte"
               className={`${inputClass} mt-3`}
               value={provider}
               onChange={(event) =>
@@ -1283,6 +1289,7 @@ function ActiveGroupEditor({
                   Unidad {unit.unitNumber}
                 </span>
                 <select
+                  aria-label={`Proveedor de la unidad ${unit.unitNumber}`}
                   className={`${inputClass} ml-auto max-w-36`}
                   value={unit.provider}
                   onChange={(event) =>
@@ -1388,14 +1395,14 @@ function ActiveGroupEditor({
           Cargo manual de transporte
         </h3>
         <div className="mt-4 grid gap-3 sm:grid-cols-[160px_1fr_auto]">
-          <input
+          <input aria-label="Monto"
             className={inputClass}
             inputMode="decimal"
             value={charge}
             onChange={(event) => setCharge(event.target.value)}
             placeholder="Monto"
           />
-          <input
+          <input aria-label="Motivo obligatorio"
             className={inputClass}
             value={chargeReason}
             onChange={(event) => setChargeReason(event.target.value)}
@@ -1435,8 +1442,8 @@ function ActiveGroupEditor({
 
             <div className="mt-4 space-y-3 text-xs">
               <div>
-                <label className="text-zinc-300 font-bold">Motivo del retiro (requerido)</label>
-                <textarea
+                <label htmlFor={`${idsCampos}-c1`} className="text-zinc-300 font-bold">Motivo del retiro (requerido)</label>
+                <textarea id={`${idsCampos}-c1`}
                   rows={3}
                   value={removeReason}
                   onChange={(e) => setRemoveReason(e.target.value)}
@@ -1463,8 +1470,8 @@ function ActiveGroupEditor({
                 </div>
               </div>
               <div>
-                <label className="text-zinc-300 font-bold">Cargo manual de transporte ($ MXN, si aplica)</label>
-                <input
+                <label htmlFor={`${idsCampos}-c2`} className="text-zinc-300 font-bold">Cargo manual de transporte ($ MXN, si aplica)</label>
+                <input id={`${idsCampos}-c2`}
                   type="number"
                   min="0"
                   value={removeTransportAmount}

@@ -49,7 +49,7 @@ export default async function DriverPortalPage({ searchParams }: PageProps) {
 
   if (!result.success || !result.data) {
     return (
-      <div className="min-h-screen bg-[#0d0f12] text-white flex flex-col items-center justify-center p-6 text-center">
+      <div className="min-h-dvh bg-[#0d0f12] text-white flex flex-col items-center justify-center p-6 text-center">
         <div className="w-16 h-16 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400 mb-4">
           <AlertTriangle size={28} />
         </div>

@@ -282,10 +282,14 @@ export default function AdminLayoutClient({
           </span>
         </div>
         <button
+          type="button"
           onClick={() => setMenuOpen(!menuOpen)}
+          aria-label="Menú de navegación"
+          aria-expanded={menuOpen}
           className="text-[#C5A55A] p-2"
         >
           <svg
+            aria-hidden="true"
             width="24"
             height="24"
             viewBox="0 0 24 24"

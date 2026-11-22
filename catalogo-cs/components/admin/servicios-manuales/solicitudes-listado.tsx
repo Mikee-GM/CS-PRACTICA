@@ -8,6 +8,7 @@ import {
   rechazarSolicitudManual,
 } from "@/lib/actions/servicios-manuales";
 import type { SolicitudServicioManual } from "@/lib/types";
+import { APP_LOCALE } from "@/lib/locale";
 
 const ESTADOS = [
   { valor: "pendiente", etiqueta: "Pendientes" },
@@ -66,7 +67,7 @@ export default function SolicitudesListado({
   };
 
   const fechaHora = (valor: string) =>
-    new Date(valor).toLocaleString("es-MX", {
+    new Date(valor).toLocaleString(APP_LOCALE, {
       timeZone: "America/Mexico_City",
       day: "2-digit",
       month: "short",
@@ -220,7 +221,7 @@ export default function SolicitudesListado({
 
             {solicitud.estado === "pendiente" ? (
               <div className="mt-4 flex flex-wrap items-center gap-3">
-                <input
+                <input aria-label="Nota para la empleada (obligatoria al rechazar)"
                   type="text"
                   value={notas[solicitud.id] ?? ""}
                   onChange={(evento) =>

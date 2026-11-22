@@ -4,6 +4,7 @@ import { getEmployee } from "@/lib/data/employees";
 import { getEmployeeRatingComments } from "@/lib/actions/discipline";
 import { optionalSource } from "@/lib/optional-source";
 import Image from "next/image";
+import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -75,7 +76,7 @@ export default async function EmployeeDetailPage({ params }: Props) {
                         {"☆".repeat(5 - rating.stars)}
                       </span>
                       <span className="text-xs text-zinc-500">
-                        {new Date(rating.createdAt).toLocaleDateString("es-MX")}
+                        {new Date(rating.createdAt).toLocaleDateString(APP_LOCALE, { timeZone: APP_TIME_ZONE })}
                       </span>
                     </div>
                     <p className="mt-2 text-sm text-zinc-300">

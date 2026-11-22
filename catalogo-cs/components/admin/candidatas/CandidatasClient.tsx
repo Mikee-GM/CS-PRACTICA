@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useId } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import PageHeader from "@/components/ui/page-header";
@@ -13,6 +13,7 @@ import {
 } from "@/lib/actions/candidate-screening";
 import { enlaceDeEvaluacion } from "@/lib/candidata";
 import type { CandidateScreening, ScreeningQuestion } from "@/lib/types";
+import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 
 const STATUS_LABEL: Record<CandidateScreening["status"], string> = {
   pendiente: "Pendiente",
@@ -27,8 +28,8 @@ const STATUS_CLASS: Record<CandidateScreening["status"], string> = {
 };
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleString("es-MX", {
-    day: "2-digit",
+  return new Date(iso).toLocaleString(APP_LOCALE, {
+    timeZone: APP_TIME_ZONE, day: "2-digit",
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
@@ -42,6 +43,7 @@ export default function CandidatasClient({
   initialScreenings: CandidateScreening[];
   initialQuestions: ScreeningQuestion[];
 }) {
+  const idsCampos = useId();
   const [screenings, setScreenings] = useState(initialScreenings);
   const [questions, setQuestions] = useState(initialQuestions);
   const [newQuestionText, setNewQuestionText] = useState("");
@@ -331,7 +333,7 @@ export default function CandidatasClient({
         {/* Formulario para agregar nueva pregunta con soporte de opciones */}
         <div className="mt-6 border-t border-zinc-800/80 pt-5 space-y-4">
           <div className="flex items-center justify-between">
-            <label className="text-xs font-bold uppercase tracking-widest text-[#C5A55A]">
+            <label htmlFor={`${idsCampos}-c1`} className="text-xs font-bold uppercase tracking-widest text-[#C5A55A]">
               Agregar Nueva Pregunta al Banco
             </label>
             <button
@@ -348,7 +350,7 @@ export default function CandidatasClient({
           </div>
 
           <div className="space-y-3">
-            <input
+            <input id={`${idsCampos}-c1`}
               value={newQuestionText}
               onChange={(e) => setNewQuestionText(e.target.value)}
               placeholder="Escribe la pregunta para la candidata..."
@@ -376,12 +378,13 @@ export default function CandidatasClient({
                       <input
                         type="radio"
                         name="correct-new-question"
+                        aria-label={`Marcar la opción ${oIdx + 1} como correcta`}
                         checked={opt.isCorrect}
                         onChange={() => handleSetCorrectNewOption(oIdx)}
                         className="w-4 h-4 text-[#C5A55A] bg-zinc-950 border-zinc-700 focus:ring-[#C5A55A] cursor-pointer"
                         title="Marcar como respuesta correcta"
                       />
-                      <input
+                      <input aria-label={`Opción ${oIdx + 1}`}
                         type="text"
                         value={opt.text}
                         onChange={(e) => handleNewOptionChange(oIdx, e.target.value)}

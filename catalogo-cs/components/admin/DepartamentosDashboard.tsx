@@ -222,7 +222,7 @@ export default function DepartamentosDashboard({
         {/* Buscador */}
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500 pointer-events-none" />
-          <input
+          <input aria-label="Buscar departamento, dirección o modelo"
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -231,10 +231,12 @@ export default function DepartamentosDashboard({
           />
           {searchQuery && (
             <button
+              type="button"
               onClick={() => setSearchQuery("")}
+              aria-label="Limpiar búsqueda"
               className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white p-0.5"
             >
-              <X className="h-3.5 w-3.5" />
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           )}
         </div>
@@ -391,8 +393,9 @@ export default function DepartamentosDashboard({
                           rel="noopener noreferrer"
                           className="p-1.5 rounded-lg text-zinc-500 hover:text-[#C5A55A] hover:bg-zinc-900 transition-colors"
                           title="Abrir en Google Maps"
+                          aria-label="Abrir en Google Maps"
                         >
-                          <ExternalLink className="h-4 w-4" />
+                          <ExternalLink className="h-4 w-4" aria-hidden="true" />
                         </a>
                       )}
                     </div>

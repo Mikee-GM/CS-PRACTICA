@@ -5,6 +5,7 @@ import { useEffect, useState, useTransition } from "react";
 
 import { getClientes } from "@/lib/actions/clientes";
 import type { ClienteResumen } from "@/lib/types";
+import { APP_LOCALE } from "@/lib/locale";
 
 /**
  * Listado de clientes con buscador.
@@ -39,7 +40,7 @@ export default function ClientesListado({
   }, [busqueda]);
 
   const fecha = (valor: string) =>
-    new Date(valor).toLocaleDateString("es-MX", {
+    new Date(valor).toLocaleDateString(APP_LOCALE, {
       timeZone: "America/Mexico_City",
       day: "2-digit",
       month: "short",
@@ -57,7 +58,7 @@ export default function ClientesListado({
             {totalActual} registrados
           </p>
         </div>
-        <input
+        <input aria-label="Buscar por nombre"
           type="search"
           value={busqueda}
           onChange={(evento) => setBusqueda(evento.target.value)}

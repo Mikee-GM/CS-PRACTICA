@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner";
 import { pedirConSesion } from "@/lib/client-fetch";
 import { usePwa } from "@/components/pwa/PwaProvider";
+import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 
 type Estado =
   | "cargando"
@@ -222,8 +223,8 @@ export default function AvisosPush() {
                 label="Última notificación"
                 value={
                   pwa?.lastNotificationAt
-                    ? new Intl.DateTimeFormat("es-MX", {
-                        dateStyle: "short",
+                    ? new Intl.DateTimeFormat(APP_LOCALE, {
+                        timeZone: APP_TIME_ZONE, dateStyle: "short",
                         timeStyle: "short",
                       }).format(new Date(pwa.lastNotificationAt))
                     : "Sin registro"

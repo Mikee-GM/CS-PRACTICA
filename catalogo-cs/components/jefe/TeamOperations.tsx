@@ -6,7 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
-  useTransition,
+  useTransition, useId,
 } from "react";
 import type {
   ButtonHTMLAttributes,
@@ -1019,6 +1019,7 @@ function CashDeliveryPanel({
 
             <div className="mt-3 flex gap-2">
               <input
+                aria-label="Monto recibido"
                 disabled={hasProvisional}
                 value={amounts[employeeId] || ""}
                 onChange={(event) =>
@@ -1361,7 +1362,7 @@ function ServiceCard({
           <CalendarClock size={15} className="shrink-0" />
           Cita pactada:{" "}
           {new Date(service.fechaProgramada).toLocaleString(APP_LOCALE, {
-            dateStyle: "short",
+            timeZone: APP_TIME_ZONE, dateStyle: "short",
             timeStyle: "short",
           })}
         </p>
@@ -1672,6 +1673,7 @@ export function EditPendingServiceDialog({
   onClose: () => void;
   onSaved: (service: Service) => void;
 }) {
+  const idsCampos = useId();
   const [duracion, setDuracion] = useState<number | string>(
     Number(service.duracionPactadaHoras) || 1,
   );
@@ -1716,17 +1718,18 @@ export function EditPendingServiceDialog({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Cerrar"
             className="text-zinc-500 hover:text-white"
           >
-            <X size={18} />
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-[#C5A55A] mb-1">
+            <label htmlFor={`${idsCampos}-c1`} className="block text-xs font-semibold uppercase tracking-wider text-[#C5A55A] mb-1">
               Duración (Horas)
             </label>
-            <input
+            <input id={`${idsCampos}-c1`}
               type="number"
               min={1}
               max={24}
@@ -1742,10 +1745,10 @@ export function EditPendingServiceDialog({
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-[#C5A55A] mb-1">
+            <label htmlFor={`${idsCampos}-c2`} className="block text-xs font-semibold uppercase tracking-wider text-[#C5A55A] mb-1">
               Método de Pago
             </label>
-            <select
+            <select id={`${idsCampos}-c2`}
               value={metodoPago}
               onChange={(e) => setMetodoPago(e.target.value as any)}
               className="w-full bg-black border border-zinc-800 px-4 py-2.5 rounded-xl text-white outline-none focus:border-[#C5A55A]"
@@ -1757,10 +1760,10 @@ export function EditPendingServiceDialog({
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-[#C5A55A] mb-1">
+            <label htmlFor={`${idsCampos}-c3`} className="block text-xs font-semibold uppercase tracking-wider text-[#C5A55A] mb-1">
               Notas / Instrucciones del Cliente
             </label>
-            <textarea
+            <textarea id={`${idsCampos}-c3`}
               rows={3}
               value={notas}
               onChange={(e) => setNotas(e.target.value)}
@@ -2891,9 +2894,10 @@ function ExclusivePhotosPanel({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Cerrar"
             className="rounded-lg border border-zinc-800 p-2 text-zinc-500 hover:text-white"
           >
-            <X size={18} />
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
 

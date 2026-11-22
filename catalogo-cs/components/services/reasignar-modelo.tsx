@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useId } from "react";
 import { useRouter } from "next/navigation";
 import { UserRoundCog } from "lucide-react";
 import { toast } from "sonner";
@@ -48,6 +48,7 @@ export default function ReasignarModelo({
   ) => Promise<{ success: boolean; error?: string }>;
   onReasignado?: () => void;
 }) {
+  const idsCampos = useId();
   const router = useRouter();
   const [abierto, setAbierto] = useState(false);
   const [destino, setDestino] = useState("");
@@ -113,10 +114,10 @@ export default function ReasignarModelo({
         </p>
       ) : (
         <>
-          <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-gray-500">
+          <label htmlFor={`${idsCampos}-c1`} className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-gray-500">
             Pasa a
           </label>
-          <select
+          <select id={`${idsCampos}-c1`}
             value={destino}
             onChange={(evento) => setDestino(evento.target.value)}
             className="mb-3 w-full rounded-lg border border-zinc-800 bg-black/60 px-3 py-2.5 text-xs text-zinc-200 outline-none focus:border-[#C5A55A]"
@@ -131,7 +132,7 @@ export default function ReasignarModelo({
         </>
       )}
 
-      <textarea
+      <textarea aria-label="Por qué se cambia de modelo"
         value={motivo}
         onChange={(evento) => setMotivo(evento.target.value)}
         rows={3}

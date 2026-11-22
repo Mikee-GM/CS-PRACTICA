@@ -22,7 +22,12 @@ import {
 import PromptDialog from "@/components/ui/PromptDialog";
 import { bloquearClienteAction } from "@/lib/actions/clientes";
 import { formatCurrency } from "@/lib/calculations";
-import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
+import {
+  APP_LOCALE,
+  APP_TIME_ZONE,
+  desdeHoraDelNegocio,
+  paraInputDeFechaHora,
+} from "@/lib/locale";
 import type { Directorio } from "@/lib/types";
 import {
   closeConductReport,
@@ -547,6 +552,11 @@ export default function DisciplinaClient({
       return;
     }
 
+    // Los inputs no llevan zona: se leen como hora de Mexico, no del telefono.
+    const inicio = desdeHoraDelNegocio(customStartsAt);
+    const fin = desdeHoraDelNegocio(customEndsAt);
+    if (!inicio || !fin) return;
+
     const { subjectType, subjectId } = customSuspensionDossier;
     startTransition(async () => {
       try {
@@ -555,8 +565,8 @@ export default function DisciplinaClient({
           subjectId,
           type: "suspension",
           reason: customReason.trim(),
-          startsAt: new Date(customStartsAt).toISOString(),
-          endsAt: new Date(customEndsAt).toISOString(),
+          startsAt: inicio.toISOString(),
+          endsAt: fin.toISOString(),
         });
         toast.success("Suspension programada");
         setCustomSuspensionDossier(null);
@@ -719,7 +729,7 @@ export default function DisciplinaClient({
         flush
         action={
           <div className="flex flex-wrap items-center gap-2">
-            <input
+            <input aria-label="Buscar persona, motivo o servicio"
               type="search"
               value={busqueda}
               onChange={(event) => setBusqueda(event.target.value)}
@@ -1125,7 +1135,7 @@ export default function DisciplinaClient({
                 type="button"
                 onClick={() => {
                   setCustomSuspensionDossier(selected);
-                  setCustomStartsAt(new Date().toISOString().slice(0, 16));
+                  setCustomStartsAt(paraInputDeFechaHora(new Date()));
                   setCustomEndsAt("");
                   setCustomReason("");
                 }}

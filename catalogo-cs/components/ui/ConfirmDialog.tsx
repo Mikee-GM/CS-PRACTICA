@@ -1,6 +1,9 @@
 "use client";
 
+import { useId } from "react";
 import { motion } from "framer-motion";
+
+import { useModalAccesible } from "@/hooks/useModalAccesible";
 
 interface ConfirmDialogProps {
   title: string;
@@ -17,6 +20,10 @@ export default function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const tituloId = useId();
+  const descripcionId = useId();
+  const panel = useModalAccesible<HTMLDivElement>({ onCerrar: onCancel });
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -27,6 +34,11 @@ export default function ConfirmDialog({
       onClick={(e) => e.target === e.currentTarget && onCancel()}
     >
       <motion.div
+        ref={panel}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby={tituloId}
+        aria-describedby={descripcionId}
         initial={{ opacity: 0, scale: 0.97, y: 8 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.97, y: 8 }}
@@ -35,8 +47,8 @@ export default function ConfirmDialog({
       >
         <div className="px-8 pt-8 pb-6 border-b border-zinc-800/60">
           <p className="text-[10px] font-bold tracking-[0.2em] text-red-500 uppercase mb-3">Accion irreversible</p>
-          <h3 className="font-heading text-xl font-semibold text-white tracking-tight leading-snug">{title}</h3>
-          <p className="text-xs text-zinc-500 font-light mt-2 leading-relaxed">{description}</p>
+          <h3 id={tituloId} className="font-heading text-xl font-semibold text-white tracking-tight leading-snug">{title}</h3>
+          <p id={descripcionId} className="text-xs text-zinc-500 font-light mt-2 leading-relaxed">{description}</p>
         </div>
         <div className="flex">
           <button

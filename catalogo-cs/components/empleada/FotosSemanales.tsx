@@ -300,6 +300,7 @@ export default function SubirFotosSemanales({
         <input
           ref={inputRef}
           type="file"
+          aria-label="Elegir fotos"
           accept="image/jpeg,image/png,image/webp"
           multiple
           onChange={(evento) => elegir(evento.target.files)}

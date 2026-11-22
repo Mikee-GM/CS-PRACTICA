@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useId, useRef } from "react";
 
 interface TextareaFieldProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
   label: string;
@@ -14,9 +14,13 @@ export default function TextareaField({
   value,
   onChange,
   rows = 4,
+  id,
   ...props
 }: TextareaFieldProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Ver InputField: el rotulo tiene que estar asociado al control para nombrarlo.
+  const idGenerado = useId();
+  const idCampo = id ?? idGenerado;
 
   const adjustHeight = useCallback(() => {
     const textarea = textareaRef.current;
@@ -39,10 +43,14 @@ export default function TextareaField({
 
   return (
     <div>
-      <label className="block text-xs font-bold tracking-widest text-[#C5A55A] uppercase mb-2">
+      <label
+        htmlFor={idCampo}
+        className="block text-xs font-bold tracking-widest text-[#C5A55A] uppercase mb-2"
+      >
         {label}
       </label>
       <textarea
+        id={idCampo}
         ref={textareaRef}
         rows={rows}
         value={value}

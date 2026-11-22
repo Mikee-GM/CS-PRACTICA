@@ -84,6 +84,7 @@ export default function LiquidationRecordEditor({
         </div>
         <input
           type="range"
+          aria-label="Porcentaje de la empresa"
           min={0}
           max={100}
           step={1}
@@ -96,6 +97,7 @@ export default function LiquidationRecordEditor({
 
       <div className="flex items-center gap-2">
         <select
+          aria-label="Método de pago"
           value={paymentMethod}
           disabled={locked || savingMethod}
           onChange={(event) =>

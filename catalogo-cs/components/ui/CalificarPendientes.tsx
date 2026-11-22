@@ -157,6 +157,7 @@ export default function CalificarPendientes<T>({
                   </div>
 
                   <textarea
+                    aria-label="Comentario de la calificación"
                     value={comentario}
                     onChange={(evento) => setComentario(evento.target.value)}
                     rows={3}

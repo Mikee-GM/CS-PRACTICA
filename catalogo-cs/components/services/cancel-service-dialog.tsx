@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
 
+import { useModalAccesible } from "@/hooks/useModalAccesible";
 import SelectField from "@/components/ui/SelectField";
 import TextareaField from "@/components/ui/TextareaField";
 import {
@@ -34,6 +35,10 @@ export default function CancelServiceDialog({
 }: CancelServiceDialogProps) {
   const [reason, setReason] = useState<CancellationReason | "">("");
   const [note, setNote] = useState("");
+  const panel = useModalAccesible<HTMLElement>({
+    bloqueado: disabled,
+    onCerrar: onCancel,
+  });
 
   return (
     <motion.div
@@ -45,6 +50,7 @@ export default function CancelServiceDialog({
       onMouseDown={(e) => e.target === e.currentTarget && onCancel()}
     >
       <motion.section
+        ref={panel}
         role="dialog"
         aria-modal="true"
         aria-labelledby="cancel-service-title"

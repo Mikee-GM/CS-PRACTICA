@@ -53,7 +53,7 @@ import {
   useEffect,
   useState,
   useTransition,
-  type ReactNode,
+  type ReactNode, useId,
 } from "react";
 import { useRouter } from "next/navigation";
 import type { NombreDeSeccion } from "./secciones";
@@ -78,6 +78,7 @@ import {
 import { getServiceByIdAction } from "@/lib/data/services";
 import ServiceDetailDialog from "@/components/services/service-detail-dialog";
 import type { Service } from "@/lib/types";
+import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 
 interface Props {
   initialOverview: GodEyeOverview;
@@ -309,6 +310,7 @@ export default function GodEyeDashboard({
   initialAppeals,
   children,
 }: Props & { children?: ReactNode }) {
+  const idsCampos = useId();
   const router = useRouter();
   const [overview, setOverview] = useState<GodEyeOverview>(initialOverview);
   const [actors, setActors] = useState<GodEyeActorSummary>(initialActors);
@@ -699,7 +701,7 @@ export default function GodEyeDashboard({
             <Banknote className="h-4 w-4 text-emerald-400" />
           </div>
           <p className="mt-2 text-2xl sm:text-3xl font-extrabold text-emerald-400">
-            ${metrics.cashInStreet.toLocaleString()}
+            ${metrics.cashInStreet.toLocaleString(APP_LOCALE)}
           </p>
           <span className="text-xs text-zinc-400 font-medium group-hover:text-zinc-300">
             Por liquidar →
@@ -717,7 +719,7 @@ export default function GodEyeDashboard({
             <Banknote className="h-4 w-4 text-[#C5A55A]" />
           </div>
           <p className="mt-2 text-2xl sm:text-3xl font-extrabold text-[#C5A55A]">
-            ${metrics.revenueToday.toLocaleString()}
+            ${metrics.revenueToday.toLocaleString(APP_LOCALE)}
           </p>
           <span className="text-xs text-zinc-400 font-medium group-hover:text-zinc-300">
             Servicios finalizados →
@@ -925,6 +927,7 @@ export default function GodEyeDashboard({
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400 pointer-events-none" />
               <input
                 type="text"
+                aria-label="Buscar en la lista"
                 placeholder={
                   actorTab === "employee"
                     ? "Buscar empleada..."
@@ -1228,7 +1231,7 @@ export default function GodEyeDashboard({
                           dossier.finances.totalOwed > 0 ? (
                             <span className="flex items-center gap-1.5 rounded-lg bg-red-950/80 border border-red-500/50 px-2.5 py-1 font-bold text-red-300">
                               <AlertTriangle className="h-3.5 w-3.5 text-red-400" />
-                              Debe ${dossier.finances.totalOwed.toLocaleString()} MXN
+                              Debe ${dossier.finances.totalOwed.toLocaleString(APP_LOCALE)} MXN
                             </span>
                           ) : (
                             <span className="flex items-center gap-1.5 rounded-lg bg-emerald-950/80 border border-emerald-500/40 px-2.5 py-1 font-bold text-emerald-300">
@@ -1416,8 +1419,8 @@ export default function GodEyeDashboard({
                                     </div>
                                     <div className="flex items-center gap-3">
                                       <span className="text-xs text-zinc-400 font-medium">
-                                        {new Date(s.createdAt).toLocaleString("es-MX", {
-                                          month: "short",
+                                        {new Date(s.createdAt).toLocaleString(APP_LOCALE, {
+                                          timeZone: APP_TIME_ZONE, month: "short",
                                           day: "numeric",
                                           hour: "2-digit",
                                           minute: "2-digit",
@@ -1488,7 +1491,7 @@ export default function GodEyeDashboard({
                                       {/* Solo el monto: aqui no se dice que se hizo, solo cuanto se cobro por ello. */}
                                       {s.extrasServicio && s.extrasServicio.length > 0 && (
                                         <p className="text-xs text-zinc-300">
-                                          Extras: +${s.extrasServicio.reduce((suma: number, e: any) => suma + Number(e.precio || 0), 0).toLocaleString()}
+                                          Extras: +${s.extrasServicio.reduce((suma: number, e: any) => suma + Number(e.precio || 0), 0).toLocaleString(APP_LOCALE)}
                                         </p>
                                       )}
                                     </div>
@@ -1531,7 +1534,7 @@ export default function GodEyeDashboard({
                               Deuda Consolidada
                             </span>
                             <p className="mt-1 text-lg sm:text-xl font-extrabold text-red-300">
-                              ${dossier.finances?.totalOwed?.toLocaleString() || 0} MXN
+                              ${dossier.finances?.totalOwed?.toLocaleString(APP_LOCALE) || 0} MXN
                             </p>
                           </div>
                           <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-3.5">
@@ -1539,7 +1542,7 @@ export default function GodEyeDashboard({
                               Efectivo en Calle
                             </span>
                             <p className="mt-1 text-lg sm:text-xl font-extrabold text-[#C5A55A]">
-                              ${dossier.finances?.totalCashDue?.toLocaleString() || 0} MXN
+                              ${dossier.finances?.totalCashDue?.toLocaleString(APP_LOCALE) || 0} MXN
                             </p>
                           </div>
                           <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-3.5">
@@ -1547,7 +1550,7 @@ export default function GodEyeDashboard({
                               Deuda Liquidación
                             </span>
                             <p className="mt-1 text-lg sm:text-xl font-extrabold text-amber-400">
-                              ${dossier.finances?.totalDebt?.toLocaleString() || 0} MXN
+                              ${dossier.finances?.totalDebt?.toLocaleString(APP_LOCALE) || 0} MXN
                             </p>
                           </div>
                         </div>
@@ -1590,7 +1593,7 @@ export default function GodEyeDashboard({
                                     </span>
                                   </div>
                                   <span className="text-xs text-zinc-400 font-medium">
-                                    {new Date(o.createdAt).toLocaleDateString()}
+                                    {new Date(o.createdAt).toLocaleDateString(APP_LOCALE, { timeZone: APP_TIME_ZONE })}
                                   </span>
                                 </div>
                               ))
@@ -1623,7 +1626,7 @@ export default function GodEyeDashboard({
                                     </span>
                                   </div>
                                   <span className="text-xs text-zinc-400 font-medium">
-                                    {new Date(d.createdAt).toLocaleDateString()}
+                                    {new Date(d.createdAt).toLocaleDateString(APP_LOCALE, { timeZone: APP_TIME_ZONE })}
                                   </span>
                                 </div>
                               ))
@@ -1717,7 +1720,7 @@ export default function GodEyeDashboard({
                                     </div>
                                     <p className="text-xs text-zinc-300 mt-1">
                                       Aciertos: {att.correctAnswers} / {att.totalQuestions} preguntas
-                                      {att.completedAt ? ` · ${new Date(att.completedAt).toLocaleDateString()}` : ""}
+                                      {att.completedAt ? ` · ${new Date(att.completedAt).toLocaleDateString(APP_LOCALE, { timeZone: APP_TIME_ZONE })}` : ""}
                                     </p>
                                   </div>
                                   <div className="text-right">
@@ -2386,8 +2389,8 @@ export default function GodEyeDashboard({
                           Duración: {srv.duracionPactadaHoras}h · ${srv.totalFinal} ({srv.metodoPago})
                         </span>
                         <span className="text-[11px] text-zinc-500">
-                          {new Date(srv.createdAt).toLocaleTimeString([], {
-                            hour: "2-digit",
+                          {new Date(srv.createdAt).toLocaleTimeString(APP_LOCALE, {
+                            timeZone: APP_TIME_ZONE, hour: "2-digit",
                             minute: "2-digit",
                           })}
                         </span>
@@ -2543,7 +2546,7 @@ export default function GodEyeDashboard({
                       {"★".repeat(app.stars)} ({app.direction})
                     </span>
                     <span className="text-xs text-zinc-400 font-medium">
-                      {new Date(app.createdAt).toLocaleDateString()}
+                      {new Date(app.createdAt).toLocaleDateString(APP_LOCALE, { timeZone: APP_TIME_ZONE })}
                     </span>
                   </div>
                   {app.comment && (
@@ -2622,8 +2625,8 @@ export default function GodEyeDashboard({
 
             <div className="mt-4 flex flex-col gap-3.5 text-xs sm:text-sm">
               <div>
-                <label className="text-zinc-300 font-bold">Tipo de Sanción</label>
-                <select
+                <label htmlFor={`${idsCampos}-c1`} className="text-zinc-300 font-bold">Tipo de Sanción</label>
+                <select id={`${idsCampos}-c1`}
                   value={sanctionType}
                   onChange={(e) => setSanctionType(e.target.value as any)}
                   className="mt-1.5 w-full rounded-xl border border-zinc-800 bg-zinc-950 p-3 text-sm text-white focus:border-[#C5A55A] focus:outline-none"
@@ -2636,8 +2639,8 @@ export default function GodEyeDashboard({
 
               {sanctionType === "suspension" && (
                 <div>
-                  <label className="text-zinc-300 font-bold">Duración en Horas</label>
-                  <input
+                  <label htmlFor={`${idsCampos}-c2`} className="text-zinc-300 font-bold">Duración en Horas</label>
+                  <input id={`${idsCampos}-c2`}
                     type="number"
                     value={sanctionHours}
                     onChange={(e) => setSanctionHours(Number(e.target.value))}
@@ -2648,8 +2651,8 @@ export default function GodEyeDashboard({
 
               {sanctionType === "fine" && (
                 <div>
-                  <label className="text-zinc-200 font-bold">Monto de la Multa ($ MXN)</label>
-                  <input
+                  <label htmlFor={`${idsCampos}-c3`} className="text-zinc-200 font-bold">Monto de la Multa ($ MXN)</label>
+                  <input id={`${idsCampos}-c3`}
                     type="number"
                     min="1"
                     step="50"
@@ -2665,10 +2668,10 @@ export default function GodEyeDashboard({
               )}
 
               <div>
-                <label className="text-zinc-300 font-bold">
+                <label htmlFor={`${idsCampos}-c4`} className="text-zinc-300 font-bold">
                   Motivo detallado de la sanción
                 </label>
-                <textarea
+                <textarea id={`${idsCampos}-c4`}
                   rows={3}
                   value={sanctionReason}
                   onChange={(e) => setSanctionReason(e.target.value)}
@@ -2749,10 +2752,10 @@ export default function GodEyeDashboard({
 
             <div className="mt-4 flex flex-col gap-3 text-xs sm:text-sm">
               <div>
-                <label className="text-zinc-300 font-bold">
+                <label htmlFor={`${idsCampos}-c5`} className="text-zinc-300 font-bold">
                   Motivo de la revocación (requerido)
                 </label>
-                <textarea
+                <textarea id={`${idsCampos}-c5`}
                   rows={3}
                   value={revokeReason}
                   onChange={(e) => setRevokeReason(e.target.value)}
@@ -2847,9 +2850,10 @@ export default function GodEyeDashboard({
               <button
                 type="button"
                 onClick={() => setSelectedSanctionDetail(null)}
+                aria-label="Cerrar"
                 className="rounded-xl p-2 text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors"
               >
-                <X size={18} />
+                <X size={18} aria-hidden="true" />
               </button>
             </div>
 
@@ -2919,8 +2923,8 @@ export default function GodEyeDashboard({
                 <span>Fecha de aplicación:</span>
                 <span className="font-semibold text-zinc-200">
                   {selectedSanctionDetail.createdAt
-                    ? new Date(selectedSanctionDetail.createdAt).toLocaleString("es-MX", {
-                      dateStyle: "medium",
+                    ? new Date(selectedSanctionDetail.createdAt).toLocaleString(APP_LOCALE, {
+                      timeZone: APP_TIME_ZONE, dateStyle: "medium",
                       timeStyle: "short",
                     })
                     : "No registrada"}
@@ -2930,8 +2934,8 @@ export default function GodEyeDashboard({
                 <div className="flex justify-between items-center text-zinc-400">
                   <span>Inicio de vigencia:</span>
                   <span className="font-semibold text-zinc-200">
-                    {new Date(selectedSanctionDetail.startsAt).toLocaleString("es-MX", {
-                      dateStyle: "medium",
+                    {new Date(selectedSanctionDetail.startsAt).toLocaleString(APP_LOCALE, {
+                      timeZone: APP_TIME_ZONE, dateStyle: "medium",
                       timeStyle: "short",
                     })}
                   </span>
@@ -2941,8 +2945,8 @@ export default function GodEyeDashboard({
                 <div className="flex justify-between items-center text-zinc-400">
                   <span>Fin de vigencia:</span>
                   <span className="font-semibold text-zinc-200">
-                    {new Date(selectedSanctionDetail.endsAt).toLocaleString("es-MX", {
-                      dateStyle: "medium",
+                    {new Date(selectedSanctionDetail.endsAt).toLocaleString(APP_LOCALE, {
+                      timeZone: APP_TIME_ZONE, dateStyle: "medium",
                       timeStyle: "short",
                     })}
                   </span>
@@ -2972,8 +2976,8 @@ export default function GodEyeDashboard({
                 {selectedSanctionDetail.revokedAt && (
                   <p className="text-[11px] text-zinc-400 pt-1">
                     Revocada el:{" "}
-                    {new Date(selectedSanctionDetail.revokedAt).toLocaleString("es-MX", {
-                      dateStyle: "medium",
+                    {new Date(selectedSanctionDetail.revokedAt).toLocaleString(APP_LOCALE, {
+                      timeZone: APP_TIME_ZONE, dateStyle: "medium",
                       timeStyle: "short",
                     })}
                   </p>

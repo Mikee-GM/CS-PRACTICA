@@ -7,6 +7,7 @@ import { getEvidence, reviewGroupReceipt } from "@/lib/actions/evidence";
 import { formatCurrency } from "@/lib/calculations";
 import type { EvidenceItem, EvidencePage } from "@/lib/types";
 import ReceiptVerification from "@/components/services/receipt-verification";
+import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 
 const inputClass =
   "rounded-xl border border-zinc-800 bg-black px-4 py-3 text-sm text-white outline-none focus:border-[#C5A55A]";
@@ -127,7 +128,7 @@ function EvidenceCard({
           <span className="rounded-xl bg-[#C5A55A]/10 p-3 text-[#C5A55A]"><Icon size={20} /></span>
           <div>
             <p className="text-sm font-semibold">{item.kind === "uber" ? `Uber de ${item.tripType ?? "viaje"}` : "Comprobante de transferencia"}</p>
-            <p className="mt-1 text-xs text-zinc-500">{new Date(item.createdAt).toLocaleString("es-MX")}</p>
+            <p className="mt-1 text-xs text-zinc-500">{new Date(item.createdAt).toLocaleString(APP_LOCALE, { timeZone: APP_TIME_ZONE })}</p>
           </div>
         </div>
         <span className="rounded-full border border-zinc-700 px-2.5 py-1 text-[10px] uppercase tracking-wider text-zinc-400">{item.status.replaceAll("_", " ")}</span>

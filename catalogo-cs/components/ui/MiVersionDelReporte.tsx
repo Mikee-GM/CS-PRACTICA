@@ -147,7 +147,7 @@ export default function MiVersionDelReporte({
 
               {editando ? (
                 <div className="mt-2.5 space-y-2">
-                  <textarea
+                  <textarea aria-label="Cuenta lo que pasó desde tu lado"
                     value={texto}
                     onChange={(evento) => setTexto(evento.target.value)}
                     rows={4}

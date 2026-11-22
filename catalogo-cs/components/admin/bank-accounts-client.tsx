@@ -168,13 +168,13 @@ export default function BankAccountsClient({
           {editingId ? "Editar cuenta" : "Nueva cuenta"}
         </h2>
         <div className="mt-5 space-y-3">
-          <input
+          <input aria-label="Banco"
             className={inputClass}
             value={form.banco}
             onChange={(event) => setForm({ ...form, banco: event.target.value })}
             placeholder="Banco"
           />
-          <input
+          <input aria-label="Titular"
             className={inputClass}
             value={form.titular}
             onChange={(event) =>
@@ -182,7 +182,7 @@ export default function BankAccountsClient({
             }
             placeholder="Titular"
           />
-          <input
+          <input aria-label="Número de cuenta o tarjeta"
             className={inputClass}
             value={form.cuenta || ""}
             onChange={(event) =>
@@ -190,7 +190,7 @@ export default function BankAccountsClient({
             }
             placeholder="Número de cuenta o tarjeta"
           />
-          <input
+          <input aria-label="CLABE (18 dígitos)"
             className={inputClass}
             value={form.clabe || ""}
             onChange={(event) => setForm({ ...form, clabe: event.target.value })}
@@ -198,7 +198,7 @@ export default function BankAccountsClient({
             inputMode="numeric"
             placeholder="CLABE (18 dígitos)"
           />
-          <input
+          <input aria-label="Alias interno, opcional"
             className={inputClass}
             value={form.alias || ""}
             onChange={(event) => setForm({ ...form, alias: event.target.value })}

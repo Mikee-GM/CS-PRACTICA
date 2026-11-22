@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+
+import { useModalAccesible } from "@/hooks/useModalAccesible";
 
 export interface PromptDialogProps {
   isOpen: boolean;
@@ -38,6 +40,12 @@ export default function PromptDialog({
   onCancel,
 }: PromptDialogProps) {
   const [value, setValue] = useState(defaultValue);
+  const tituloId = useId();
+  const panel = useModalAccesible<HTMLDivElement>({
+    activo: isOpen,
+    bloqueado: isLoading,
+    onCerrar: onCancel,
+  });
 
   useEffect(() => {
     if (isOpen) {
@@ -96,6 +104,10 @@ export default function PromptDialog({
         }}
       >
         <motion.div
+          ref={panel}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={tituloId}
           initial={{ opacity: 0, scale: 0.97, y: 8 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.97, y: 8 }}
@@ -103,7 +115,7 @@ export default function PromptDialog({
           className="w-full max-w-md bg-[#0c0c0c] border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden"
         >
           <div className="p-6">
-            <h3 className="font-heading text-lg font-bold text-white flex items-center gap-2">
+            <h3 id={tituloId} className="font-heading text-lg font-bold text-white flex items-center gap-2">
               {title}
             </h3>
             {description && (
@@ -117,6 +129,7 @@ export default function PromptDialog({
                 {inputType === "textarea" ? (
                   <textarea
                     autoFocus
+                    aria-label={title}
                     rows={3}
                     value={value}
                     maxLength={maxLength}
@@ -127,6 +140,7 @@ export default function PromptDialog({
                 ) : (
                   <input
                     autoFocus
+                    aria-label={title}
                     type={inputType}
                     value={value}
                     maxLength={maxLength}

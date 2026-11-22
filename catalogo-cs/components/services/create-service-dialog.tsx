@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import {
   Calendar,
   Clock,
@@ -22,6 +22,7 @@ import {
 import type { Client, Employee, PresetServiceLocation, Service } from "@/lib/types";
 import { formatCurrency } from "@/lib/calculations";
 import { desdeHoraDelNegocio } from "@/lib/locale";
+import { useModalAccesible } from "@/hooks/useModalAccesible";
 
 interface CreateServiceDialogProps {
   open: boolean;
@@ -40,11 +41,18 @@ export default function CreateServiceDialog({
   preselectedClientId,
   preselectedEmployeeId,
 }: CreateServiceDialogProps) {
+  const idsCampos = useId();
   const [clients, setClients] = useState<Client[]>([]);
   const [employees, setEmployees] = useState<Employee[]>(initialEmployees);
   const [locations, setLocations] = useState<PresetServiceLocation[]>([]);
   const [loadingInitial, setLoadingInitial] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const tituloId = useId();
+  const panel = useModalAccesible<HTMLDivElement>({
+    activo: open,
+    bloqueado: submitting,
+    onCerrar: onClose,
+  });
 
   // Form states
   const [clientMode, setClientMode] = useState<"registered" | "custom" | "anonymous">(
@@ -238,7 +246,13 @@ export default function CreateServiceDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-2xl max-h-[90vh] flex flex-col bg-zinc-950 border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden text-zinc-100">
+      <div
+        ref={panel}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={tituloId}
+        className="relative w-full max-w-2xl max-h-[90vh] flex flex-col bg-zinc-950 border border-zinc-800 rounded-3xl shadow-2xl overflow-hidden text-zinc-100"
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-5 border-b border-zinc-800/80 bg-zinc-900/50">
           <div className="flex items-center gap-3">
@@ -246,7 +260,7 @@ export default function CreateServiceDialog({
               <Sparkles size={20} />
             </div>
             <div>
-              <h2 className="text-base font-bold text-white tracking-wide">
+              <h2 id={tituloId} className="text-base font-bold text-white tracking-wide">
                 Crear Servicio Manual
               </h2>
               <p className="text-xs text-zinc-400">
@@ -255,10 +269,12 @@ export default function CreateServiceDialog({
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
+            aria-label="Cerrar"
             className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800/60 transition-colors"
           >
-            <X size={18} />
+            <X size={18} aria-hidden="true" />
           </button>
         </div>
 
@@ -273,7 +289,7 @@ export default function CreateServiceDialog({
             <>
               {/* Cliente */}
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                <label htmlFor={`${idsCampos}-c1`} className="text-xs font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
                   <User size={14} className="text-[#C5A55A]" /> Cliente
                 </label>
 
@@ -316,7 +332,7 @@ export default function CreateServiceDialog({
 
                 {clientMode === "registered" && (
                   <div className="space-y-2">
-                    <input
+                    <input aria-label="Filtrar clientes por nombre o teléfono"
                       type="text"
                       placeholder="Filtrar por nombre o telefono..."
                       value={clientSearch}
@@ -324,6 +340,7 @@ export default function CreateServiceDialog({
                       className="w-full px-3.5 py-2 bg-zinc-900/90 border border-zinc-800 rounded-xl text-xs text-white placeholder:text-zinc-500 focus:border-[#C5A55A] outline-none"
                     />
                     <select
+                      id={`${idsCampos}-c1`}
                       value={selectedClientId}
                       onChange={(e) => setSelectedClientId(e.target.value)}
                       className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white focus:border-[#C5A55A] outline-none"
@@ -341,7 +358,7 @@ export default function CreateServiceDialog({
 
                 {clientMode === "custom" && (
                   <div className="space-y-1">
-                    <input
+                    <input aria-label="Nombre o alias del cliente (ej. Juan Pérez)"
                       type="text"
                       placeholder="Nombre o alias del cliente (ej. Juan Pérez)..."
                       value={clientFreeName}
@@ -364,10 +381,10 @@ export default function CreateServiceDialog({
 
               {/* Empleada */}
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                <label htmlFor={`${idsCampos}-c2`} className="text-xs font-semibold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
                   <Sparkles size={14} className="text-[#C5A55A]" /> Empleada
                 </label>
-                <select
+                <select id={`${idsCampos}-c2`}
                   value={selectedEmployeeId}
                   onChange={(e) => setSelectedEmployeeId(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white focus:border-[#C5A55A] outline-none"
@@ -410,7 +427,7 @@ export default function CreateServiceDialog({
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <input
+                    <input aria-label="Otra cantidad de horas"
                       type="number"
                       min={0.5}
                       max={24}
@@ -513,7 +530,7 @@ export default function CreateServiceDialog({
                 </div>
 
                 {locationType === "preset" ? (
-                  <select
+                  <select aria-label="Lugar registrado"
                     value={presetLocationId}
                     onChange={(e) => setPresetLocationId(e.target.value)}
                     className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-xs text-white focus:border-[#C5A55A] outline-none"
@@ -527,7 +544,7 @@ export default function CreateServiceDialog({
                   </select>
                 ) : (
                   <div className="space-y-2">
-                    <input
+                    <input aria-label="Dirección o punto de encuentro"
                       type="text"
                       placeholder="Dirección o punto de encuentro..."
                       value={customAddress}
@@ -536,21 +553,21 @@ export default function CreateServiceDialog({
                       required
                     />
                     <div className="grid grid-cols-2 gap-2 text-xs">
-                      <input
+                      <input aria-label="Latitud"
                         type="number"
                         step="any"
                         placeholder="Latitud"
                         value={customLat}
                         onChange={(e) => setCustomLat(parseFloat(e.target.value) || 0)}
-                        className="px-3 py-1.5 bg-zinc-900/80 border border-zinc-800 rounded-lg text-zinc-300 outline-none"
+                        className="px-3 py-1.5 bg-zinc-900/80 border border-zinc-800 rounded-lg text-zinc-300 outline-none focus:border-[#C5A55A]"
                       />
-                      <input
+                      <input aria-label="Longitud"
                         type="number"
                         step="any"
                         placeholder="Longitud"
                         value={customLng}
                         onChange={(e) => setCustomLng(parseFloat(e.target.value) || 0)}
-                        className="px-3 py-1.5 bg-zinc-900/80 border border-zinc-800 rounded-lg text-zinc-300 outline-none"
+                        className="px-3 py-1.5 bg-zinc-900/80 border border-zinc-800 rounded-lg text-zinc-300 outline-none focus:border-[#C5A55A]"
                       />
                     </div>
                   </div>
@@ -591,7 +608,7 @@ export default function CreateServiceDialog({
 
                 {agendaType === "programado" && (
                   <div className="pt-2 animate-in fade-in duration-150">
-                    <input
+                    <input aria-label="Fecha y hora de la cita"
                       type="datetime-local"
                       value={scheduledDateTime}
                       onChange={(e) => setScheduledDateTime(e.target.value)}
@@ -604,10 +621,10 @@ export default function CreateServiceDialog({
 
               {/* Notas */}
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">
+                <label htmlFor={`${idsCampos}-c6`} className="text-xs font-semibold text-zinc-300 uppercase tracking-wider">
                   Notas / Observaciones
                 </label>
-                <textarea
+                <textarea id={`${idsCampos}-c6`}
                   rows={2}
                   placeholder="Detalles adicionales, referencias de llegada o peticiones especiales..."
                   value={notes}

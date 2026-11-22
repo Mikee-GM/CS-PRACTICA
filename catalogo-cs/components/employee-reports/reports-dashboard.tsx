@@ -24,6 +24,7 @@ import type {
   EmployeeTolerance,
 } from "@/lib/types";
 import PageHeader from "@/components/ui/page-header";
+import { desdeHoraDelNegocio } from "@/lib/locale";
 import ReportDetailSheet from "./report-detail-sheet";
 import {
   categoryLabels,
@@ -180,8 +181,8 @@ export default function ReportsDashboard({
             <div className="divide-y divide-zinc-900 md:hidden">{reports.items.map((report) => <ReportCard key={report.id} report={report} onClick={() => setSelectedId(report.id)} />)}</div>
             {!reports.items.length && <div className="flex min-h-52 flex-col items-center justify-center gap-3 p-8 text-center text-zinc-600"><CircleAlert size={28} /><p className="text-sm">No hay reportes que coincidan con los filtros.</p></div>}
             <footer className="flex flex-col items-center justify-between gap-3 border-t border-zinc-800 px-5 py-4 text-xs text-zinc-600 sm:flex-row"><span>{reports.total} reporte{reports.total === 1 ? "" : "s"} · Página {reports.page} de {Math.max(reports.pages, 1)}</span><div className="flex gap-2"><button disabled={pending || reports.page <= 1}
- aria-busy={pending} onClick={() => changePage(reports.page - 1)} className="border border-zinc-800 p-2 text-zinc-400 disabled:opacity-30"><ChevronLeft size={16} /></button><button disabled={pending || reports.page >= reports.pages}
- aria-busy={pending} onClick={() => changePage(reports.page + 1)} className="border border-zinc-800 p-2 text-zinc-400 disabled:opacity-30"><ChevronRight size={16} /></button></div></footer>
+ aria-busy={pending} onClick={() => changePage(reports.page - 1)} aria-label="Página anterior" className="border border-zinc-800 p-2 text-zinc-400 disabled:opacity-30"><ChevronLeft size={16} aria-hidden="true" /></button><button disabled={pending || reports.page >= reports.pages}
+ aria-busy={pending} onClick={() => changePage(reports.page + 1)} aria-label="Página siguiente" className="border border-zinc-800 p-2 text-zinc-400 disabled:opacity-30"><ChevronRight size={16} aria-hidden="true" /></button></div></footer>
           </section>
         </div>
       )}
@@ -214,11 +215,18 @@ export default function ReportsDashboard({
   );
 }
 
+/**
+ * Los limites del dia en la hora del negocio. Sin zona, el servidor leia
+ * "2026-11-01T00:00" en la suya y el filtro dejaba fuera o metia de mas los
+ * reportes de las primeras horas del dia en Ciudad de Mexico.
+ */
 function normalizeDates(filters: EmployeeReportFilters): EmployeeReportFilters {
+  const limite = (dia: string | undefined, hora: string) =>
+    dia ? (desdeHoraDelNegocio(`${dia}T${hora}`)?.toISOString() ?? undefined) : undefined;
   return {
     ...filters,
-    from: filters.from ? `${filters.from}T00:00:00.000` : undefined,
-    to: filters.to ? `${filters.to}T23:59:59.999` : undefined,
+    from: limite(filters.from, "00:00:00"),
+    to: limite(filters.to, "23:59:59"),
   };
 }
 
@@ -241,7 +249,7 @@ function DateFilter({ label, value, onChange }: { label: string; value: string; 
 
 function ReportRow({ report, onClick }: { report: EmployeeReport; onClick: () => void }) {
   const reporter = report.origin === "cliente" ? report.client?.nombre || "Cliente" : report.driver?.nombre || "Chofer";
-  return <tr onClick={onClick} className="cursor-pointer border-b border-zinc-900 text-sm transition hover:bg-zinc-900/60"><td className="px-5 py-4 text-xs text-zinc-500">{formatReportDate(report.createdAt)}</td><td className="px-5 py-4 font-medium text-zinc-200">{report.employee?.nombreArtistico || "—"}</td><td className="px-5 py-4"><p className="text-zinc-300">{reporter}</p><p className="text-[10px] uppercase tracking-wider text-zinc-600">{originLabels[report.origin]}</p></td><td className="px-5 py-4 text-zinc-400">{categoryLabels[report.category]}</td><td className="px-5 py-4"><Pill className={priorityClass(report.priority)}>{priorityLabels[report.priority]}</Pill></td><td className="px-5 py-4"><Pill className={statusClass(report.status)}>{statusLabels[report.status]}</Pill></td><td className="px-5 py-4 text-xs text-zinc-500">{report.assignedAdmin?.email || "Sin asignar"}</td></tr>;
+  return <tr onClick={onClick} tabIndex={0} onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); onClick(); } }} className="cursor-pointer border-b border-zinc-900 text-sm transition hover:bg-zinc-900/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C5A55A]/60"><td className="px-5 py-4 text-xs text-zinc-500">{formatReportDate(report.createdAt)}</td><td className="px-5 py-4 font-medium text-zinc-200">{report.employee?.nombreArtistico || "—"}</td><td className="px-5 py-4"><p className="text-zinc-300">{reporter}</p><p className="text-[10px] uppercase tracking-wider text-zinc-600">{originLabels[report.origin]}</p></td><td className="px-5 py-4 text-zinc-400">{categoryLabels[report.category]}</td><td className="px-5 py-4"><Pill className={priorityClass(report.priority)}>{priorityLabels[report.priority]}</Pill></td><td className="px-5 py-4"><Pill className={statusClass(report.status)}>{statusLabels[report.status]}</Pill></td><td className="px-5 py-4 text-xs text-zinc-500">{report.assignedAdmin?.email || "Sin asignar"}</td></tr>;
 }
 
 function ReportCard({ report, onClick }: { report: EmployeeReport; onClick: () => void }) {

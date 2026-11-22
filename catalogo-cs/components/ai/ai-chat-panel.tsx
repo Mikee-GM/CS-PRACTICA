@@ -101,7 +101,7 @@ export default function AIChatPanel() {
     border-zinc-800
     "
    >
-    <input
+    <input aria-label="Escribe un mensaje"
      placeholder="Escribe un mensaje..."
      className="
      w-full

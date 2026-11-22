@@ -4,6 +4,7 @@ import type {
   EmployeeReportPriority,
   EmployeeReportStatus,
 } from "@/lib/types";
+import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
 
 export const categoryLabels: Record<EmployeeReportCategory, string> = {
   trato_inadecuado: "Trato inadecuado",
@@ -54,8 +55,8 @@ export function statusClass(status: EmployeeReportStatus) {
 }
 
 export function formatReportDate(value: string) {
-  return new Intl.DateTimeFormat("es-MX", {
-    dateStyle: "medium",
+  return new Intl.DateTimeFormat(APP_LOCALE, {
+    timeZone: APP_TIME_ZONE, dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
 }
