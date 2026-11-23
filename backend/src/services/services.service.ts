@@ -162,6 +162,18 @@ export interface AddServiceExtraResult {
   totalExtras: number;
 }
 
+/**
+ * Un servicio que aun no empezo no "ya no esta activo": falta aceptarlo o
+ * iniciarlo. Con el mismo texto para todo, el equipo no sabia que paso.
+ */
+function servicioNoEnCurso(estado: string): ConflictException {
+  return new ConflictException(
+    estado === 'pendiente' || estado === 'agendado'
+      ? 'Este servicio todavia no ha empezado'
+      : 'Este servicio ya no está activo',
+  );
+}
+
 @Injectable()
 export class ServicesService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ServicesService.name);
@@ -1672,6 +1684,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     const estadoPrevio = service.estado;
 
     service.estado = 'cancelado';
+    // Sin esto el servicio cancelado conservaba el estado operativo anterior
+    // (por ejemplo `esperando_transporte_ida`) y las pantallas lo mostraban vivo.
+    service.operationalState = 'cancelado';
     service.motivoCancelacion = dto.reason;
     service.notaCancelacion = dto.note?.trim() || null;
     service.canceladoPorUserId = actor.id;
@@ -2543,7 +2558,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       throw new ForbiddenException('Este servicio no es tuyo');
     }
     if (servicio.estado !== 'en_curso') {
-      throw new ConflictException('Este servicio ya no está activo');
+      throw servicioNoEnCurso(servicio.estado);
     }
     if (servicio.transporteAgendado !== 'uber') {
       throw new ConflictException(
@@ -3096,7 +3111,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       throw new ForbiddenException('No puedes extender este servicio');
     }
     if (servicio.estado !== 'en_curso') {
-      throw new ConflictException('Este servicio ya no está activo');
+      throw servicioNoEnCurso(servicio.estado);
     }
 
     const montoSugerido = Number(servicio.precioBaseHoraPactado ?? 0) * horas;
@@ -4531,7 +4546,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     });
     if (!servicio) throw new NotFoundException('Servicio no encontrado');
     if (servicio.estado !== 'en_curso') {
-      throw new ConflictException('Este servicio ya no está activo');
+      throw servicioNoEnCurso(servicio.estado);
     }
 
     const { employeeId } = await this.resolveExtrasActor(
@@ -4589,7 +4604,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     });
     if (!servicio) throw new NotFoundException('Servicio no encontrado');
     if (servicio.estado !== 'en_curso') {
-      throw new ConflictException('Este servicio ya no está activo');
+      throw servicioNoEnCurso(servicio.estado);
     }
 
     const { employeeId, participantId } = await this.resolveExtrasActor(
@@ -4868,7 +4883,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     servicio: Servicios,
   ): Promise<FinishByEmployeeResult> {
     if (servicio.estado !== 'en_curso') {
-      throw new ConflictException('Este servicio ya no está activo');
+      throw servicioNoEnCurso(servicio.estado);
     }
 
     const fin = new Date();

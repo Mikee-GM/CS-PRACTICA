@@ -8,7 +8,7 @@ con los datos de demostración (`pnpm local:demo`), navegador Chrome y `curl`.
 
 | Medida | Resultado |
 |---|---|
-| Tests unitarios del backend | 1.820 en 170 suites, todos en verde |
+| Tests unitarios del backend | 1.825 en 171 suites, todos en verde |
 | Tests unitarios del frontend | 502 en 34 suites, todos en verde |
 | Tests e2e contra Postgres real | 21 en 3 suites, en verde (primera vez que se ejecutan) |
 | Tipos (`tsc`) | Limpio en backend y frontend |
@@ -17,8 +17,8 @@ con los datos de demostración (`pnpm local:demo`), navegador Chrome y `curl`.
 | Vista móvil (390 px), 16 páginas | 0 con desbordamiento horizontal |
 | Matriz de permisos (85 GET x 5 identidades) | Coherente; 1 fallo (500) corregido |
 | Barrido de rutas que escriben (220 x 2 cuerpos) | 1 fallo (500) corregido |
-| Hallazgos corregidos | 8 |
-| Hallazgos abiertos | 9 (ninguno crítico) |
+| Hallazgos corregidos | 11 |
+| Hallazgos abiertos | 6 (ninguno crítico) |
 
 El lint no se pudo usar como señal: en Windows da 27.028 errores, todos de
 `prettier` por los saltos de línea CRLF, ninguno de código.
@@ -38,20 +38,21 @@ producción (`origin/main`).
 | 6 | Baja | `PATCH /users/:id` con cuerpo vacío daba 500 (mismo error que el 1). | No ejecutar el update vacío; pruebas. |
 | 7 | Baja | `DELETE /users/:id` de un usuario inexistente respondía `deleted: true`. | 404; pruebas. |
 | 8 | Baja | Una prueba de `finalizarViaje` consagraba el comportamiento del hallazgo 1. | Corregida junto con el 1. |
+| 9 | Baja | Un servicio cancelado conservaba el estado operativo anterior (`esperando_transporte_ida`). | Se fija `cancelado` en la misma transacción; prueba. |
+| 10 | Baja (UX) | «Este servicio ya no está activo» para un servicio que aún no empezó. | «Todavía no ha empezado» para pendiente y agendado; el resto igual; pruebas. |
+| 11 | Informativa | El mensaje del `ParseUUIDPipe` de `cash-payments` salía en inglés. | Mensaje en español. |
 
 ## Hallazgos abiertos
 
 | # | Gravedad | Hallazgo | Sugerencia |
 |---|---|---|---|
 | A | Media (negocio) | Una modelo puede registrar un extra con tarjeta a **cualquier precio** (probé 500.000 por un extra de catálogo de 1.500) sin tope ni cotejo con el catálogo; infla el total del servicio. | Decidir un tope o exigir validación del jefe. |
-| B | Baja | Si `/auth/me` responde 429 (más de 100 peticiones por minuto en una sesión), el frontend lo toma por «sin sesión» y manda a `/ingresar`. La sesión no se pierde: al pasar el minuto vuelve a funcionar. | Distinguir 429 y 5xx de 401 en `getCurrentUser`. |
-| C | Baja | Asignar un chofer a mano con `reasignar-chofer` a un viaje que nunca se ofreció deja el servicio en `esperando_transporte_ida`. Después `picked-up` responde 409 pero el viaje queda `en_curso`: las escrituras del viaje y del servicio no son atómicas. | Envolver las transiciones en una transacción. |
-| D | Baja | Un servicio cancelado conserva `operationalState = esperando_transporte_ida` aunque `estado = cancelado`. | Llevar el estado operativo a `cancelado`. |
+| B | Baja (no se toca a propósito) | Si `/auth/me` responde 429 (más de 100 peticiones por minuto en una sesión), el frontend lo toma por «sin sesión» y manda a `/ingresar`. La sesión no se pierde: al pasar el minuto vuelve a funcionar. | Distinguir 429 y 5xx de 401 en `getCurrentUser` rompería el catálogo público si el backend cae un momento, porque esa página solo lo usa para mostrar «Mi panel»; haría falta un parámetro por página. |
+| C | Baja | Asignar un chofer a mano con `reasignar-chofer` a un viaje que nunca se ofreció deja el servicio en `esperando_transporte_ida`. Después `picked-up` responde 409 pero el viaje queda `en_curso`: las escrituras del viaje y del servicio no son atómicas. | Envolver las transiciones en una transacción; es una refactorización mayor y se deja aparte. |
 | E | Baja | El despacho no reintenta solo cuando el chofer actualiza su ubicación; hay que volver a pedir el transporte. Al chofer que no recibió la oferta se le dice «Otro chofer tomó este viaje primero». | Reintentar al llegar una ubicación nueva; mensaje más preciso. |
-| F | Baja (UX) | Marcar «lista» un servicio todavía pendiente dice «Este servicio ya no está activo». | Mensaje que indique que falta la aceptación. |
 | G | Baja | Registrar un correo existente responde 409 «Ya existe una cuenta con ese correo», lo que revela qué correos tienen cuenta (el login sí es genérico). | Decisión de producto. |
 | H | Baja | El límite de login por cuenta (5 por minuto) permite a un tercero impedir la entrada de una cuenta durante un minuto repitiendo intentos. | Aceptable por diseño; documentarlo o añadir un retardo progresivo. |
-| I | Informativa | El campo de contraseña del formulario de nueva modelo es de tipo texto (visible). El mensaje del `ParseUUIDPipe` sale en inglés. | Decidir si la contraseña inicial debe verse; traducir el mensaje. |
+| I | Informativa | El campo de contraseña del formulario de nueva modelo es de tipo texto (visible). | Decidir si la contraseña inicial debe verse. |
 
 ## Qué se probó
 

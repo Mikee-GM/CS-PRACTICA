@@ -125,6 +125,8 @@ describe('ServicesService cancel', () => {
 
     const guardado = serviciosRepository.save.mock.calls[0][0];
     expect(guardado.estado).toBe('cancelado');
+    // El estado operativo tambien: antes se quedaba en el anterior.
+    expect(guardado.operationalState).toBe('cancelado');
     expect(guardado.motivoCancelacion).toBe('cliente_desistio');
     expect(guardado.notaCancelacion).toBe('se arrepintio al llegar');
     expect(guardado.canceladoPorUserId).toBe('user-1');

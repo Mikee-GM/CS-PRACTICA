@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -119,7 +120,14 @@ export class TransportOperationsController {
   @Get('cash-payments') @Roles('admin', 'jefe') cashPaymentsOf(
     // Sin el pipe, un employeeId ausente llegaba como undefined al where de
     // TypeORM y la peticion terminaba en 500 en vez de 400.
-    @Query('employeeId', ParseUUIDPipe) employeeId: string,
+    @Query(
+      'employeeId',
+      new ParseUUIDPipe({
+        exceptionFactory: () =>
+          new BadRequestException('employeeId debe ser un UUID valido'),
+      }),
+    )
+    employeeId: string,
     @Req() req: any,
   ) {
     return this.settlements.cashPayments(employeeId, req.user);
