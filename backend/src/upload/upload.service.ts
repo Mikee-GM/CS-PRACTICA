@@ -146,6 +146,9 @@ export class UploadService {
     this.s3Client = new S3Client({
       region: 'auto',
       endpoint: this.configService.getOrThrow<string>('R2_ENDPOINT'),
+      // Almacenamiento S3 local exige rutas con el bucket en el path; R2 no.
+      forcePathStyle:
+        this.configService.get<string>('R2_FORCE_PATH_STYLE') === 'true',
       credentials: {
         accessKeyId: this.configService.getOrThrow<string>('R2_ACCESS_KEY_ID'),
         secretAccessKey: this.configService.getOrThrow<string>(

@@ -21,6 +21,9 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true,
   },
   images: {
+    // Entorno local: el almacenamiento local es http://localhost y el optimizador,
+    // que corre dentro del contenedor, no lo alcanza; se sirven las imagenes tal cual.
+    unoptimized: process.env.NEXT_IMAGE_UNOPTIMIZED === "true",
     remotePatterns: [
       {
         protocol: "https",

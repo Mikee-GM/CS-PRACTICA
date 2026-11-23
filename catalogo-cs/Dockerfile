@@ -15,6 +15,8 @@ RUN pnpm install --frozen-lockfile
 FROM deps AS builder
 COPY catalogo-cs ./catalogo-cs
 ENV NEXT_TELEMETRY_DISABLED=1
+ARG NEXT_IMAGE_UNOPTIMIZED=false
+ENV NEXT_IMAGE_UNOPTIMIZED=$NEXT_IMAGE_UNOPTIMIZED
 RUN pnpm --filter catalogo-cs build
 
 FROM node:22-alpine AS runner

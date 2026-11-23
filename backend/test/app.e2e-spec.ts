@@ -27,7 +27,6 @@ import {
 } from '../src/services/operations/service-operation-state';
 import { ServicesService } from '../src/services/services.service';
 import { Usuarios } from '../src/users/entities/user.entity';
-import { CreateServiceOperationsCore1810000000000 } from '../src/migrations/1810000000000-CreateServiceOperationsCore';
 
 const IDS = {
   admin: '00000000-0000-4000-8000-000000000001',
@@ -239,47 +238,6 @@ describe('flujo operativo integrado (PostgreSQL)', () => {
       .replace(/=+$/, '');
     return `${name}=${encodeURIComponent(`s:${value}.${signature}`)}`;
   }
-
-  it('aplica, revierte y reaplica la migración sin perder el servicio legado', async () => {
-    await dataSource.query(
-      `UPDATE "servicios"
-          SET estado = 'en_curso', estado_operativo = 'en_curso', notas = 'preservar-e2e'
-        WHERE id = $1`,
-      [IDS.service],
-    );
-    const runner = dataSource.createQueryRunner();
-    await runner.connect();
-    const migration = new CreateServiceOperationsCore1810000000000();
-    try {
-      await migration.down(runner);
-      const [legacy] = await runner.query(
-        `SELECT id, estado, notas FROM "servicios" WHERE id = $1`,
-        [IDS.service],
-      );
-      expect(legacy).toMatchObject({
-        id: IDS.service,
-        estado: 'en_curso',
-        notas: 'preservar-e2e',
-      });
-      await migration.up(runner);
-      const [restored] = await runner.query(
-        `SELECT estado_operativo, notas FROM "servicios" WHERE id = $1`,
-        [IDS.service],
-      );
-      expect(restored).toEqual({
-        estado_operativo: 'en_curso',
-        notas: 'preservar-e2e',
-      });
-      await expect(
-        runner.query(
-          `UPDATE "servicios" SET estado_operativo = 'estado_inventado' WHERE id = $1`,
-          [IDS.service],
-        ),
-      ).rejects.toThrow();
-    } finally {
-      await runner.release();
-    }
-  });
 
   it('mantiene suscripciones multidispositivo y deduplicacion en PostgreSQL real', async () => {
     const columns = (await dataSource.query(

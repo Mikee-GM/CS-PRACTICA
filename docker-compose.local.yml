@@ -1,0 +1,126 @@
+# Entorno local completo, un solo comando:
+#
+#   docker compose -f docker-compose.local.yml up --build
+#
+# Levanta PostgreSQL, el almacenamiento de archivos (SeaweedFS, compatible con R2),
+# el backend (aplica las migraciones al arrancar y crea el administrador) y el
+# frontend. No necesita .env ni ningun archivo previo.
+#
+#   Web:        http://localhost:3000
+#   API:        http://localhost:4000   (Swagger en /api/docs si esta habilitado)
+#   Archivos:   http://localhost:9000   (SeaweedFS, API compatible con S3)
+#   Postgres:   localhost:5434  usuario/clave/base: colombia_sexys
+#
+#   Administrador inicial:  admin@example.com  /  Admin-Local-2026!
+#
+# Para empezar de cero: docker compose -f docker-compose.local.yml down -v
+# (solo aqui: este compose usa sus propios volumenes `local_*`).
+# Para activar la IA, exporta XAI_API_KEY antes de levantar.
+
+name: colombia-sexys-local
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: colombia_sexys
+      POSTGRES_PASSWORD: colombia_sexys
+      POSTGRES_DB: colombia_sexys
+      PGTZ: UTC
+    ports:
+      - "127.0.0.1:${LOCAL_DB_PORT:-5434}:5432"
+    volumes:
+      - local_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U colombia_sexys -d colombia_sexys"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Almacenamiento compatible con S3 (sustituye a Cloudflare R2). Sin identidades
+  # configuradas SeaweedFS acepta cualquier clave y sirve los archivos en lectura
+  # publica, que es lo que el catalogo espera de R2.
+  storage:
+    image: chrislusf/seaweedfs:latest
+    command: server -s3 -s3.port=9000 -dir=/data
+    ports:
+      - "127.0.0.1:${LOCAL_STORAGE_PORT:-9000}:9000"
+    volumes:
+      - local_storage:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9000/ || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  storage-init:
+    image: curlimages/curl:latest
+    depends_on:
+      storage:
+        condition: service_healthy
+    # 200 al crearlo y 409 si ya existe (reinicios): ambos son exito.
+    entrypoint:
+      - sh
+      - -c
+      - 'c=$$(curl -s -o /dev/null -w "%{http_code}" -X PUT http://storage:9000/colombia-sexys); [ "$$c" = 200 ] || [ "$$c" = 409 ]'
+    restart: "no"
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+      storage-init:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+      WEB_URL: http://localhost:3000
+      DATABASE_HOST: db
+      DATABASE_PORT: 5432
+      DATABASE_USER: colombia_sexys
+      DATABASE_PASSWORD: colombia_sexys
+      DATABASE_NAME: colombia_sexys
+      JWT_SECRET: local-jwt-secret-no-usar-en-produccion-0123456789
+      JWT_REFRESH_SECRET: local-refresh-secret-no-usar-en-produccion-9876543210
+      COOKIE_SECRET: local-cookie-secret-no-usar-en-produccion-abcdef
+      DEFAULT_ADMIN_EMAIL: admin@example.com
+      DEFAULT_ADMIN_PASSWORD: Admin-Local-2026!
+      R2_ENDPOINT: http://storage:9000
+      R2_ACCESS_KEY_ID: local-access-key
+      R2_SECRET_ACCESS_KEY: local-secret-key-1234
+      R2_BUCKET_NAME: colombia-sexys
+      R2_PUBLIC_URL: http://localhost:9000/colombia-sexys
+      R2_FORCE_PATH_STYLE: "true"
+      XAI_API_KEY: ${XAI_API_KEY:-}
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+    ports:
+      - "127.0.0.1:${LOCAL_API_PORT:-4000}:4000"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1:4000/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: catalogo-cs/Dockerfile
+      args:
+        NEXT_IMAGE_UNOPTIMIZED: "true"
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      BACKEND_API_URL: http://backend:4000
+    ports:
+      - "127.0.0.1:${LOCAL_WEB_PORT:-3000}:3000"
+
+volumes:
+  local_postgres:
+  local_storage:

@@ -35,4 +35,5 @@ COPY --from=builder --chown=nestjs:nodejs /app/backend/package.json ./backend/pa
 WORKDIR /app/backend
 USER nestjs
 EXPOSE 4000
-CMD ["node", "dist/main"]
+# Aplica las migraciones pendientes y arranca; en local no hay paso aparte.
+CMD ["sh", "-c", "node node_modules/typeorm/cli.js migration:run -d dist/data-source.js && node dist/main"]

@@ -81,6 +81,7 @@ import { ServiceFeedbackModule } from './service-feedback/service-feedback.modul
         R2_SECRET_ACCESS_KEY: Joi.string().required(),
         R2_BUCKET_NAME: Joi.string().required(),
         R2_PUBLIC_URL: Joi.string().uri().required(),
+        R2_FORCE_PATH_STYLE: Joi.string().valid('true', 'false').optional(),
         GROQ_API_KEY: Joi.string().allow('').optional(),
         // Modelos y temperatura configurables: cuando el proveedor retira una
         // version del modelo hay que poder cambiarla sin tocar el codigo.
