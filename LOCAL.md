@@ -44,6 +44,32 @@ Si un puerto esta ocupado, cambialo con variables: `LOCAL_WEB_PORT`,
 
 La IA del chat queda apagada salvo que exportes `XAI_API_KEY` antes de levantar.
 
+## Datos de prueba
+
+Con el entorno arriba, un solo comando siembra una operacion completa de
+demostracion (modelos, jefes, choferes, clientes y servicios en todos sus
+estados):
+
+```bash
+bash scripts/local-demo.sh        # o: pnpm local:demo
+```
+
+Se puede repetir: limpia lo sembrado antes de volver a sembrar. Deja a los
+usuarios demo con la clave `Demo-Local-2026!`:
+
+| Correo | Rol |
+|---|---|
+| `demo.admin@ejemplo.local` | admin |
+| `demo.jefe1@ejemplo.local`, `demo.jefe2@ejemplo.local` | jefe |
+| `demo.modelo1@ejemplo.local` a `demo.modelo3@ejemplo.local` | empleada |
+| `demo.chofer1@ejemplo.local`, `demo.chofer2@ejemplo.local` | chofer |
+
+Para borrar solo lo sembrado, sin tocar el resto:
+
+```bash
+docker compose -f docker-compose.local.yml exec backend   node dist/scripts/sembrar-datos-demo.js --limpiar --confirmar
+```
+
 ## Cambios respecto a `main`
 
 - Las 96 migraciones historicas se sustituyen por un esquema base unico,

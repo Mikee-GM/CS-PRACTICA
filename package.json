@@ -27,7 +27,8 @@
     "local:up": "docker compose -f docker-compose.local.yml up --build",
     "local:down": "docker compose -f docker-compose.local.yml down",
     "local:reset": "docker compose -f docker-compose.local.yml down -v",
-    "local:logs": "docker compose -f docker-compose.local.yml logs -f"
+    "local:logs": "docker compose -f docker-compose.local.yml logs -f",
+    "local:demo": "bash scripts/local-demo.sh"
   },
   "pnpm": {
     "overrides": {
