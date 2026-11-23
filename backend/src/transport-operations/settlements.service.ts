@@ -60,6 +60,21 @@ export class SettlementsService {
    * `T00:00:00Z` el periodo empezaba a las seis de la tarde del dia anterior.
    */
   private ventanaDeSemana(startDate: string, endDate: string) {
+    // Solo `AAAA-MM-DD` y una fecha que exista: con una fecha ISO completa o con
+    // `2026-02-31`, `toISOString` lanzaba RangeError y la ruta respondia 500.
+    // Ademas, JavaScript convierte `2026-02-31` en el 3 de marzo sin avisar: se
+    // comprueba que la fecha vuelva igual, para no desplazar un corte de dinero.
+    const esFechaReal = (fecha: string) => {
+      const d = new Date(`${fecha}T12:00:00.000Z`);
+      return (
+        /^\d{4}-\d{2}-\d{2}$/.test(fecha) &&
+        !Number.isNaN(d.getTime()) &&
+        d.toISOString().slice(0, 10) === fecha
+      );
+    };
+    if (!esFechaReal(startDate) || !esFechaReal(endDate)) {
+      throw new BadRequestException('El periodo no es válido');
+    }
     const siguiente = new Date(`${endDate}T12:00:00.000Z`);
     siguiente.setUTCDate(siguiente.getUTCDate() + 1);
     const desde = desdeHoraDelNegocio(`${startDate}T00:00:00`);

@@ -6,6 +6,7 @@ import {
   IsString,
   IsUUID,
   Length,
+  Matches,
   Min,
   MinLength,
   MaxLength,
@@ -23,9 +24,12 @@ export class CashPaymentDto {
 export class RevertCashPaymentDto {
   @IsOptional() @IsString() @Length(1, 240) reason?: string;
 }
+const SOLO_FECHA = {
+  message: 'La fecha debe tener el formato AAAA-MM-DD',
+};
 export class SettlementPeriodDto {
-  @IsDateString() startDate: string;
-  @IsDateString() endDate: string;
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, SOLO_FECHA) startDate: string;
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, SOLO_FECHA) endDate: string;
 }
 export class DriverReportQueryDto extends SettlementPeriodDto {
   @IsUUID() driverId: string;

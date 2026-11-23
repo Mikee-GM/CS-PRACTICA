@@ -162,6 +162,9 @@ export interface AddServiceExtraResult {
   totalExtras: number;
 }
 
+/** Mismo tope que `CreateServiceDto.duracionPactadaHoras`. */
+const DURACION_MAXIMA_HORAS = 24;
+
 /**
  * Un servicio que aun no empezo no "ya no esta activo": falta aceptarlo o
  * iniciarlo. Con el mismo texto para todo, el equipo no sabia que paso.
@@ -2224,18 +2227,49 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       throw new ForbiddenException('Este servicio no es tuyo');
     }
     const startedAt = new Date();
-    const started = await this.serviceOperations.transition(
-      service.id,
-      'iniciar_servicio',
-      { userId: actorUserId, type: 'empleada' },
-      {
-        eventType: 'SERVICE_STARTED',
-        patch: {
-          estado: 'en_curso',
-          horaInicioServicio: startedAt,
-          horaInicioEstimada: startedAt,
-          servicioPrevioId: null,
-        },
+    /*
+     * Una empleada no atiende dos servicios a la vez. `aceptar` ya lo comprueba
+     * bajo el bloqueo de su fila, pero el inicio desde el portal no pasaba por
+     * ahi: con dos servicios listos, los dos se podian iniciar --a la vez o uno
+     * despues del otro-- y quedaba con dos en curso, cada uno con su chofer.
+     * Se usa el mismo bloqueo, para que dos inicios simultaneos no se crucen.
+     */
+    const started = await this.serviciosRepository.manager.transaction(
+      async (manager) => {
+        await manager
+          .getRepository(Empleadas)
+          .createQueryBuilder('employee')
+          .setLock('pessimistic_write')
+          .where('employee.id = :id', { id: service.empleadaId })
+          .getOneOrFail();
+        const yaEnCurso = await manager.findOne(Servicios, {
+          where: {
+            empleadaId: service.empleadaId,
+            estado: 'en_curso',
+            id: Not(service.id),
+          },
+          select: { id: true },
+        });
+        if (yaEnCurso) {
+          throw new ConflictException(
+            'Ya estás atendiendo otro servicio. Termínalo antes de iniciar este.',
+          );
+        }
+        return this.serviceOperations.transition(
+          service.id,
+          'iniciar_servicio',
+          { userId: actorUserId, type: 'empleada' },
+          {
+            eventType: 'SERVICE_STARTED',
+            patch: {
+              estado: 'en_curso',
+              horaInicioServicio: startedAt,
+              horaInicioEstimada: startedAt,
+              servicioPrevioId: null,
+            },
+            manager,
+          },
+        );
       },
     );
     this.realtimeEventsService.emitToBoss(service.jefeId, {
@@ -3112,6 +3146,13 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     }
     if (servicio.estado !== 'en_curso') {
       throw servicioNoEnCurso(servicio.estado);
+    }
+    // Crear un servicio topa en 24 horas, pero extenderlo no: de +12 en +12 una
+    // empleada llegaba a 53 horas y 79.500 de total sin que nadie lo aprobara.
+    if (Number(servicio.duracionPactadaHoras ?? 0) + horas > DURACION_MAXIMA_HORAS) {
+      throw new ConflictException(
+        `La duración total no puede superar ${DURACION_MAXIMA_HORAS} horas`,
+      );
     }
 
     const montoSugerido = Number(servicio.precioBaseHoraPactado ?? 0) * horas;
