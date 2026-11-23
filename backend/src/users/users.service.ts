@@ -1,4 +1,8 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
@@ -121,12 +125,20 @@ export class UsersService {
       if (actor.id !== id) updateData.debeCambiarPassword = true;
     }
 
-    await this.usuariosRepository.update(id, updateData);
+    // TypeORM rechaza un UPDATE sin valores (`UpdateValuesMissingError`): un
+    // PATCH con cuerpo vacio terminaba en 500 en vez de devolver el usuario.
+    if (Object.keys(updateData).length > 0) {
+      await this.usuariosRepository.update(id, updateData);
+    }
     return this.findOne(id);
   }
 
   async remove(id: string) {
-    await this.usuariosRepository.delete(id);
+    const resultado = await this.usuariosRepository.delete(id);
+    // Antes respondia `deleted: true` aunque el usuario no existiera.
+    if (!resultado.affected) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
     return { deleted: true };
   }
 }

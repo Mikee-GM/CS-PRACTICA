@@ -1,8 +1,36 @@
 import type { NextConfig } from "next";
 import path from "node:path";
 
+/*
+ * Cabeceras de seguridad de las paginas. El backend ya manda las suyas con
+ * helmet, pero las paginas las sirve Next y salian sin ninguna: se podian
+ * incrustar en un iframe ajeno (clickjacking) y el navegador adivinaba tipos.
+ *
+ * No hay Content-Security-Policy a proposito: Next inyecta scripts en linea y
+ * el mapa carga teselas de otros hosts, asi que una politica estricta pide
+ * nonces y una prueba aparte para no romper el panel.
+ */
+const cabecerasDeSeguridad = [
+  { key: "X-Frame-Options", value: "SAMEORIGIN" },
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  {
+    key: "Strict-Transport-Security",
+    value: "max-age=31536000; includeSubDomains",
+  },
+  // La ubicacion la piden los portales; camara y microfono no se usan.
+  {
+    key: "Permissions-Policy",
+    value: "geolocation=(self), camera=(self), microphone=()",
+  },
+];
+
 const nextConfig: NextConfig = {
   output: "standalone",
+  poweredByHeader: false,
+  async headers() {
+    return [{ source: "/:path*", headers: cabecerasDeSeguridad }];
+  },
   outputFileTracingRoot: path.join(__dirname, ".."),
   experimental: {
     serverActions: {
