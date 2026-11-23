@@ -3751,6 +3751,9 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     const result = await query
       .select([
         'chofer.id',
+        // Sin `usuarioId` el aviso push de la oferta se mandaba a `undefined` y
+        // nunca llegaba al chofer: `.select` sustituye al join con el usuario.
+        'chofer.usuarioId',
         'chofer.nombre',
         'chofer.telefono',
         'chofer.ubicacionLat',

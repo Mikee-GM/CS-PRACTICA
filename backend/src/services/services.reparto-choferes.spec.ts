@@ -67,7 +67,7 @@ describe('ServicesService.dispatchViaje: a quien se le ofrece el viaje', () => {
       .spyOn(service as any, 'notifyNoDriversAvailable')
       .mockResolvedValue(undefined);
 
-    return { service, condiciones, sinChoferes };
+    return { service, condiciones, sinChoferes, consulta };
   }
 
   it('no filtra por modo_bot', async () => {
@@ -76,6 +76,18 @@ describe('ServicesService.dispatchViaje: a quien se le ofrece el viaje', () => {
     await service.dispatchViaje('viaje');
 
     expect(condiciones.join('\n')).not.toContain('modo_bot');
+  });
+
+  it('trae el usuario del chofer: sin el, el aviso push de la oferta no tiene a quien llegar', async () => {
+    const { service, consulta } = crear();
+
+    await service.dispatchViaje('viaje');
+
+    // `.select` sustituye al join con el usuario; si falta `usuarioId`, el push
+    // se mandaba a `undefined` y fallaba al reservar el evento.
+    expect(consulta.select).toHaveBeenCalledWith(
+      expect.arrayContaining(['chofer.usuarioId']),
+    );
   });
 
   it('exige una ubicacion de los ultimos quince minutos', async () => {

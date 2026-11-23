@@ -405,12 +405,17 @@ export class DriverTripsService {
           : 'cerrada';
       }
 
-      escrituras.push(
-        this.servicios.update(
-          trip.servicio.id,
-          cambios as QueryDeepPartialEntity<Servicios>,
-        ),
-      );
+      // En la ida no hay nada que escribir en el servicio: TypeORM rechaza un
+      // UPDATE sin valores (`UpdateValuesMissingError`) y el viaje quedaba
+      // finalizado con la peticion en 500 y el servicio sin avanzar.
+      if (Object.keys(cambios).length > 0) {
+        escrituras.push(
+          this.servicios.update(
+            trip.servicio.id,
+            cambios as QueryDeepPartialEntity<Servicios>,
+          ),
+        );
+      }
     }
 
     await Promise.all(escrituras);

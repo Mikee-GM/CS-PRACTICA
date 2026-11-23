@@ -332,7 +332,8 @@ describe('DriverTripsService.finalizarViaje', () => {
 
     await service.finalizarViaje('viaje-1', CHOFER);
 
-    expect(serviciosUpdate).toHaveBeenCalledWith('servicio-1', {});
+    // Un UPDATE sin valores revienta en TypeORM: en la ida no se escribe nada.
+    expect(serviciosUpdate).not.toHaveBeenCalled();
     expect(markEmployeeTripProgress).toHaveBeenCalledWith(
       'servicio-1',
       'ida',

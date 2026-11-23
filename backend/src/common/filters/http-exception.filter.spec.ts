@@ -192,6 +192,28 @@ describe('HttpExceptionFilter', () => {
     expect(loggerErrorSpy).not.toHaveBeenCalled();
   });
 
+  it('traduce un cuerpo demasiado grande (body-parser) a 413 en lugar de 500', () => {
+    const grande = Object.assign(new Error('request entity too large'), {
+      status: 413,
+      statusCode: 413,
+      expose: true,
+      type: 'entity.too.large',
+    });
+
+    filter.catch(grande, mockArgumentsHost);
+
+    expect(mockResponse.status).toHaveBeenCalledWith(413);
+    expect(loggerErrorSpy).not.toHaveBeenCalled();
+  });
+
+  it('un error con status pero sin expose sigue siendo 500', () => {
+    const interno = Object.assign(new Error('fallo interno'), { status: 400 });
+
+    filter.catch(interno, mockArgumentsHost);
+
+    expect(mockResponse.status).toHaveBeenCalledWith(500);
+  });
+
   it('deja subir la excepcion en contextos que no son HTTP', () => {
     // Un contexto que no es HTTP no trae respuesta: si el filtro intentara
     // escribirla, el error real quedaria tapado por un TypeError.

@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -116,7 +117,9 @@ export class TransportOperationsController {
     return this.settlements.revertCashPayment(id, req.user, dto.reason);
   }
   @Get('cash-payments') @Roles('admin', 'jefe') cashPaymentsOf(
-    @Query('employeeId') employeeId: string,
+    // Sin el pipe, un employeeId ausente llegaba como undefined al where de
+    // TypeORM y la peticion terminaba en 500 en vez de 400.
+    @Query('employeeId', ParseUUIDPipe) employeeId: string,
     @Req() req: any,
   ) {
     return this.settlements.cashPayments(employeeId, req.user);

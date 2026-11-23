@@ -20,6 +20,22 @@ function esErrorDeMulter(
   );
 }
 
+/**
+ * Errores de `body-parser` (http-errors): traen su propio `status` 4xx y
+ * `expose: true`. El caso real es `entity.too.large`: sin reconocerlos, un
+ * cuerpo de mas de 100 KB llegaba como 500 y se registraba como fallo del
+ * servidor.
+ */
+function esErrorDeCliente(
+  exception: unknown,
+): exception is Error & { status: number } {
+  if (!(exception instanceof Error)) return false;
+  const { status, expose } = exception as { status?: unknown; expose?: unknown };
+  return (
+    typeof status === 'number' && status >= 400 && status < 500 && expose === true
+  );
+}
+
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(HttpExceptionFilter.name);
@@ -64,6 +80,13 @@ export class HttpExceptionFilter implements ExceptionFilter {
         status === 413
           ? 'El archivo supera el tamano maximo permitido.'
           : 'La subida de archivos no es valida: revisa los campos y la cantidad de archivos.';
+    } else if (esErrorDeCliente(exception)) {
+      status = exception.status;
+      error = status === 413 ? 'Payload Too Large' : 'Bad Request';
+      message =
+        status === 413
+          ? 'La peticion supera el tamano maximo permitido.'
+          : 'La peticion no es valida.';
     } else if (exception instanceof QueryFailedError) {
       // Safely catch database constraint violations without leaking raw query details to the client
       const dbError = exception as unknown as { code?: string };
