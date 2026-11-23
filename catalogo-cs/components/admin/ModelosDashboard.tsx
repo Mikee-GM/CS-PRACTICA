@@ -62,13 +62,16 @@ export default function ModelosDashboard({
 
   const handleSaveModelo = async (payload: ModeloPayload, id?: string) => {
     try {
-      if (id) {
-        await updateModelo(id, payload);
-        showNotification("Modelo actualizada correctamente.", "success");
-      } else {
-        await createModelo(payload);
-        showNotification("Modelo creada correctamente.", "success");
-      }
+      const resultado = id
+        ? await updateModelo(id, payload)
+        : await createModelo(payload);
+      // El motivo llega como valor: una excepcion de Server Action se oculta
+      // en produccion y el usuario solo veia un texto generico en ingles.
+      if (!resultado.ok) throw new Error(resultado.error);
+      showNotification(
+        id ? "Modelo actualizada correctamente." : "Modelo creada correctamente.",
+        "success",
+      );
       await fetchData();
     } catch (err: any) {
       showNotification(`Error: ${err.message || "No se pudo guardar."}`, "error");
@@ -79,7 +82,8 @@ export default function ModelosDashboard({
   const confirmDeleteHandler = async (modelo: Modelo) => {
     setConfirmDelete(null);
     try {
-      await deleteModelo(modelo._id);
+      const resultado = await deleteModelo(modelo._id);
+      if (!resultado.ok) throw new Error(resultado.error);
       showNotification("Modelo eliminada.", "success");
       await fetchData();
     } catch (err: any) {

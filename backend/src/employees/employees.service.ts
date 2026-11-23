@@ -689,7 +689,11 @@ export class EmployeesService {
             ? Number(camposAActualizar.ubicacionLng)
             : null;
       }
-      await manager.update(Empleadas, id, updateData);
+      // Con solo `fotosExtra` o `extras` no queda ningun campo de la fila, y
+      // TypeORM rechaza un UPDATE sin valores: el PATCH terminaba en 500.
+      if (Object.keys(updateData).length > 0) {
+        await manager.update(Empleadas, id, updateData);
+      }
 
       // 1.b Credenciales, que viven en la fila de usuario de esta empleada.
       if ((email || password) && empleada.usuarioId) {

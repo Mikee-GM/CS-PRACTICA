@@ -63,7 +63,10 @@ export class ClientsService {
 
   async update(id: string, updateClientDto: UpdateClientDto) {
     await this.findOne(id);
-    await this.clientesRepository.update(id, updateClientDto);
+    // Un PATCH vacio no tiene nada que escribir: TypeORM lo rechaza con 500.
+    if (Object.keys(updateClientDto).length > 0) {
+      await this.clientesRepository.update(id, updateClientDto);
+    }
     return this.findOne(id);
   }
 

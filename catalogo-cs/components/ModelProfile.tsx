@@ -9,6 +9,7 @@ import FichaModelo, { estadoDeContacto } from "@/components/FichaModelo";
 import { rutaDelPerfil } from "@/lib/posts";
 import BotonChatear from "@/components/cliente/BotonChatear";
 import { useModalAccesible } from "@/hooks/useModalAccesible";
+import { urlWebSegura } from "@/lib/url-segura";
 
 interface ModelProfileProps {
   modelo: Modelo;
@@ -236,9 +237,9 @@ export default function ModelProfile({ modelo, onClose }: ModelProfileProps) {
             )}
 
             {/* Link de X */}
-            {modelo.linkX && (
+            {urlWebSegura(modelo.linkX) && (
               <a
-                href={modelo.linkX}
+                href={urlWebSegura(modelo.linkX) ?? undefined}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-3 w-full px-5 py-4 border border-zinc-800 hover:border-[#C5A55A]/40 bg-zinc-900/30 hover:bg-zinc-900/60 transition-all duration-300 group rounded-lg"

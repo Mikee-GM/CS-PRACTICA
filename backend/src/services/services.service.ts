@@ -4644,15 +4644,17 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       relations: { empleada: { usuario: true } },
     });
     if (!servicio) throw new NotFoundException('Servicio no encontrado');
-    if (servicio.estado !== 'en_curso') {
-      throw servicioNoEnCurso(servicio.estado);
-    }
 
+    // Primero quien eres y despues el estado: al reves, otra empleada que
+    // conociera el id veia 409 o 403 y sabia si el servicio seguia en curso.
     const { employeeId, participantId } = await this.resolveExtrasActor(
       servicio,
       input.actorUserId,
       input.forceByBoss,
     );
+    if (servicio.estado !== 'en_curso') {
+      throw servicioNoEnCurso(servicio.estado);
+    }
 
     const extra = input.extraCatalogoId
       ? await this.extrasCatalogoRepository.findOne({

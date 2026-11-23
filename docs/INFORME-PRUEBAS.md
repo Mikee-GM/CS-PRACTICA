@@ -8,8 +8,8 @@ con los datos de demostración (`pnpm local:demo`), navegador Chrome y `curl`.
 
 | Medida | Resultado |
 |---|---|
-| Tests unitarios del backend | 1.825 en 171 suites, todos en verde |
-| Tests unitarios del frontend | 502 en 34 suites, todos en verde |
+| Tests unitarios del backend | 1.842 en 175 suites, todos en verde |
+| Tests unitarios del frontend | 511 en 35 suites, todos en verde |
 | Tests e2e contra Postgres real | 21 en 3 suites, en verde (primera vez que se ejecutan) |
 | Tipos (`tsc`) | Limpio en backend y frontend |
 | Rutas de admin cargadas en navegador | 49 de 49 con 200, la más lenta 157 ms |
@@ -17,8 +17,8 @@ con los datos de demostración (`pnpm local:demo`), navegador Chrome y `curl`.
 | Vista móvil (390 px), 16 páginas | 0 con desbordamiento horizontal |
 | Matriz de permisos (85 GET x 5 identidades) | Coherente; 1 fallo (500) corregido |
 | Barrido de rutas que escriben (220 x 2 cuerpos) | 1 fallo (500) corregido |
-| Hallazgos corregidos | 11 |
-| Hallazgos abiertos | 6 (ninguno crítico) |
+| Hallazgos corregidos | 18 |
+| Hallazgos abiertos | 8 (ninguno crítico) |
 
 El lint no se pudo usar como señal: en Windows da 27.028 errores, todos de
 `prettier` por los saltos de línea CRLF, ninguno de código.
@@ -53,6 +53,50 @@ producción (`origin/main`).
 | G | Baja | Registrar un correo existente responde 409 «Ya existe una cuenta con ese correo», lo que revela qué correos tienen cuenta (el login sí es genérico). | Decisión de producto. |
 | H | Baja | El límite de login por cuenta (5 por minuto) permite a un tercero impedir la entrada de una cuenta durante un minuto repitiendo intentos. | Aceptable por diseño; documentarlo o añadir un retardo progresivo. |
 | I | Informativa | El campo de contraseña del formulario de nueva modelo es de tipo texto (visible). | Decidir si la contraseña inicial debe verse. |
+
+## Segunda pasada: análisis más profundo
+
+Se repitió la prueba con foco en lo que la primera dejó sin tocar: carreras de
+concurrencia, dinero, acceso a recursos ajenos por identificador, contenido
+que se pinta como enlace y validación con ids reales.
+
+### Corregidos en la segunda pasada
+
+| # | Gravedad | Hallazgo | Corrección |
+|---|---|---|---|
+| 12 | Alta | **Una empleada podía tener dos servicios en curso a la vez.** `startByEmployee` (el inicio desde el portal) no comprobaba que ya hubiera uno en curso; solo lo hacía `aceptar`. Con dos servicios listos, los dos se iniciaban, a la vez o uno tras otro, cada uno con su chofer. | Misma comprobación bajo el bloqueo de la fila de la empleada; una carrera de dos inicios da ahora un 200 y un 409. |
+| 13 | Media | Una empleada podía **extender un servicio sin límite** y sin aprobación (llegué a 53 horas y 79.500 de total), saltándose el tope de 24 horas de la creación. | Tope de 24 horas sobre la duración total, también para el jefe. |
+| 14 | Media | `linkX`, `fotoPerfilUrl` y `fotosExtra` aceptaban `javascript:` y `data:`, y la ficha pública pintaba `linkX` como `href`. | Solo `http` y `https` en el DTO (admite `localhost`), y la ficha filtra con `urlWebSegura`. |
+| 15 | Baja | El reporte de liquidaciones de choferes daba 500 con una fecha ISO completa, y una fecha imposible (`2026-02-31`) se convertía en silencio en el 3 de marzo, desplazando el periodo de un corte de dinero. | Validación `AAAA-MM-DD` real en el DTO y en el servicio; 400. |
+| 16 | Baja | `PATCH /clients/:id` y `PATCH /employees/:id` con cuerpo vacío (o solo `fotosExtra`) daban 500: mismo error de TypeORM que el hallazgo 1. | No ejecutar el update vacío. |
+| 17 | Baja | Registrar un extra en el servicio de otra empleada daba 409 o 403 según el estado del servicio, lo que revelaba si estaba en curso. | Se comprueba primero quién eres. |
+| 18 | Media (UX) | Un error del backend al guardar una modelo mostraba «An error occurred in the Server Components render…» en inglés y sin decir qué campo falló: Next oculta el texto de las excepciones de Server Actions en producción. | `create`, `update` y `delete` de modelos devuelven `{ ok, error }`; el usuario ve el motivo en español y el modal sigue abierto. |
+
+### Resultados que salieron bien
+
+- **Concurrencia:** aceptar un servicio 6 veces a la vez da un solo 201; la
+  empleada acepta 4 veces, una sola vale; pedir chofer 4 veces crea un solo
+  viaje; dos choferes aceptando el mismo viaje, solo uno lo toma; terminar 5
+  veces, una sola; 3 abonos del saldo completo, uno solo y los saldos cuadran
+  (6.800 contra 6.800); 3 reversiones, todas rechazadas tras la primera; 6
+  prórrogas dejan exactamente 3.
+- **Invariantes de dinero en la base:** `total_final` igual a base más extras
+  más transporte en todos los servicios, `total_extras` igual a la suma de sus
+  extras, sin importes negativos, sin pagado mayor que el total, sin viajes
+  duplicados, sin choferes en estado incoherente.
+- **Acceso a recursos ajenos:** 17 casos entre empleadas, choferes, jefe y
+  cliente, todos con 403 o 404.
+- **Candidata por enlace público:** tokens de 72 bits, 404 con token falso, con
+  SQL y con 5.000 caracteres, y 60 intentos por minuto.
+- **Interfaz:** no hay `dangerouslySetInnerHTML` ni inserciones de HTML.
+- **Servicio manual:** rechaza fecha basura, fecha futura y de más de 60 días.
+
+### Abiertos nuevos
+
+| # | Gravedad | Hallazgo | Sugerencia |
+|---|---|---|---|
+| J | Baja | `montoCobrado` de una solicitud de servicio manual no tiene tope (acepté 99.999.999). Pasa por aprobación del jefe. | Un máximo razonable. |
+| K | Media (UX) | Nueve archivos de acciones del frontend (unas 35 acciones: disciplina, candidatas, evidencias, onboarding, posts, retos, candidata pública, directorio y diseño del panel) siguen lanzando excepciones, y mostrarán el mismo texto genérico en inglés que tenía el hallazgo 18. | Migrarlas al patrón `{ ok, error }` como ya hicieron 24 de 36. |
 
 ## Qué se probó
 

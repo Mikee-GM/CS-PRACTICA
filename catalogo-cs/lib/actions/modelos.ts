@@ -3,7 +3,7 @@
 import { isRedirectError } from "@/lib/auth";
 import type { Modelo, ModeloPayload } from "@/types";
 import { revalidatePath, revalidateTag } from "next/cache";
-import { apiFetch } from "@/lib/api-server";
+import { ApiError, apiFetch } from "@/lib/api-server";
 import { mapToModelo } from "@/lib/data/modelos-mapper";
 import { CATALOG_CACHE_TAG } from "@/lib/data/catalog";
 
@@ -11,6 +11,28 @@ import { CATALOG_CACHE_TAG } from "@/lib/data/catalog";
 // Components (ver lib/data/catalog.ts). No se expone como Server Action:
 // serian POST secuenciales, no cacheables, y cada export "use server" publica
 // un endpoint aunque nadie lo llame.
+
+/**
+ * Resultado de crear, editar o borrar una modelo.
+ *
+ * Next oculta el texto de cualquier excepcion lanzada desde una Server Action en
+ * produccion: el usuario veia "An error occurred in the Server Components
+ * render" en ingles, sin saber que campo fallo. Por eso el motivo se devuelve
+ * como valor, igual que en el resto de acciones.
+ */
+export type ResultadoModelo =
+  | { ok: true; modelo?: Modelo }
+  | { ok: false; error: string };
+
+function motivoDelFallo(error: unknown, porDefecto: string): string {
+  if (error instanceof ApiError) {
+    const mensaje = (error.body as { message?: unknown } | undefined)?.message;
+    if (Array.isArray(mensaje)) return mensaje.join(". ");
+    if (typeof mensaje === "string" && mensaje) return mensaje;
+    return error.message || porDefecto;
+  }
+  return porDefecto;
+}
 
 export async function getModelosAction(
   onlyAvailable = false,
@@ -39,7 +61,7 @@ export async function getModeloAction(id: string): Promise<Modelo> {
 
 export async function createModeloAction(
   payload: ModeloPayload,
-): Promise<Modelo> {
+): Promise<ResultadoModelo> {
   const slug = `${payload.nombreArtistico.toLowerCase().replace(/[^a-z0-9]/g, "-")}-${Date.now().toString().slice(-4)}`;
 
   /*
@@ -77,22 +99,27 @@ export async function createModeloAction(
     })),
   };
 
-  const data = await apiFetch<any>("/employees", {
-    method: "POST",
-    body: JSON.stringify(createDto),
-    authenticated: true,
-  });
+  try {
+    const data = await apiFetch<any>("/employees", {
+      method: "POST",
+      body: JSON.stringify(createDto),
+      authenticated: true,
+    });
 
-  revalidateTag(CATALOG_CACHE_TAG);
-  revalidatePath("/");
-  revalidatePath("/admin/modelos");
-  return mapToModelo(data);
+    revalidateTag(CATALOG_CACHE_TAG);
+    revalidatePath("/");
+    revalidatePath("/admin/modelos");
+    return { ok: true, modelo: mapToModelo(data) };
+  } catch (error) {
+    if (isRedirectError(error)) throw error;
+    return { ok: false, error: motivoDelFallo(error, "No se pudo crear la modelo.") };
+  }
 }
 
 export async function updateModeloAction(
   id: string,
   payload: ModeloPayload,
-): Promise<Modelo> {
+): Promise<ResultadoModelo> {
   const updateDto = {
     // El correo siempre; la contraseña solo si se escribio una nueva, para no
     // pisar la que ya tiene cada vez que se edita otra cosa.
@@ -123,27 +150,38 @@ export async function updateModeloAction(
     })),
   };
 
-  const data = await apiFetch<any>(`/employees/${id}`, {
-    method: "PATCH",
-    body: JSON.stringify(updateDto),
-    authenticated: true,
-  });
+  try {
+    const data = await apiFetch<any>(`/employees/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(updateDto),
+      authenticated: true,
+    });
 
-  revalidateTag(CATALOG_CACHE_TAG);
-  revalidatePath("/");
-  revalidatePath("/admin/modelos");
-  return mapToModelo(data);
+    revalidateTag(CATALOG_CACHE_TAG);
+    revalidatePath("/");
+    revalidatePath("/admin/modelos");
+    return { ok: true, modelo: mapToModelo(data) };
+  } catch (error) {
+    if (isRedirectError(error)) throw error;
+    return { ok: false, error: motivoDelFallo(error, "No se pudo guardar la modelo.") };
+  }
 }
 
-export async function deleteModeloAction(id: string): Promise<void> {
-  await apiFetch<void>(`/employees/${id}`, {
-    method: "DELETE",
-    authenticated: true,
-  });
+export async function deleteModeloAction(id: string): Promise<ResultadoModelo> {
+  try {
+    await apiFetch<void>(`/employees/${id}`, {
+      method: "DELETE",
+      authenticated: true,
+    });
 
-  revalidateTag(CATALOG_CACHE_TAG);
-  revalidatePath("/");
-  revalidatePath("/admin/modelos");
+    revalidateTag(CATALOG_CACHE_TAG);
+    revalidatePath("/");
+    revalidatePath("/admin/modelos");
+    return { ok: true };
+  } catch (error) {
+    if (isRedirectError(error)) throw error;
+    return { ok: false, error: motivoDelFallo(error, "No se pudo eliminar la modelo.") };
+  }
 }
 
 // TODO: verificar si GET /users?rol=jefe existe en el backend o si hay un endpoint especifico para listar jefes

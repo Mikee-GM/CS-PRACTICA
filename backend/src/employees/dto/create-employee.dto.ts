@@ -10,8 +10,20 @@ import {
   IsNumber,
   IsArray,
   IsEnum,
+  IsUrl,
   ValidateNested,
 } from 'class-validator';
+
+/**
+ * Solo http y https: el enlace de X y las fotos se pintan como `href` o `src` en
+ * la ficha publica, y `javascript:` o `data:` ejecutarian codigo en el navegador
+ * de quien las abra. `require_tld: false` deja pasar `localhost` del entorno local.
+ */
+const URL_WEB = {
+  protocols: ['http', 'https'],
+  require_protocol: true,
+  require_tld: false,
+};
 import { Type } from 'class-transformer';
 
 export class CreateExtraDto {
@@ -130,6 +142,7 @@ export class CreateEmployeeDto {
   @IsString({
     message: 'La URL de la foto de perfil debe ser una cadena de texto',
   })
+  @IsUrl(URL_WEB, { message: 'La foto de perfil debe ser una URL http o https' })
   @IsOptional()
   readonly fotoPerfilUrl?: string;
 
@@ -240,6 +253,7 @@ export class CreateEmployeeDto {
     example: 'https://x.com/usuario',
   })
   @IsString({ message: 'El enlace de X debe ser una cadena de texto' })
+  @IsUrl(URL_WEB, { message: 'El enlace de X debe ser una URL http o https' })
   @IsOptional()
   readonly linkX?: string;
 
@@ -260,6 +274,10 @@ export class CreateEmployeeDto {
   @IsString({
     each: true,
     message: 'Cada foto extra debe ser una cadena de texto con la URL',
+  })
+  @IsUrl(URL_WEB, {
+    each: true,
+    message: 'Cada foto extra debe ser una URL http o https',
   })
   @IsOptional()
   readonly fotosExtra?: string[];
