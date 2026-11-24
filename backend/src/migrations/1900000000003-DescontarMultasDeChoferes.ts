@@ -10,9 +10,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * El timestamp es mayor que el del esquema base unico del entorno local, para que
  * en una base nueva corra despues de el.
  */
-export class DescontarMultasDeChoferes1900000000003
-  implements MigrationInterface
-{
+export class DescontarMultasDeChoferes1900000000003 implements MigrationInterface {
   name = 'DescontarMultasDeChoferes1900000000003';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

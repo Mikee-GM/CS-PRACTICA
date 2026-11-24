@@ -122,7 +122,9 @@ export function normalizarEstado(guardado: unknown): BookingState {
       : { failureCount: 0 };
   const descuento = numeroONulo(crudo.descuentoPorcentaje);
   estado.descuentoPorcentaje =
-    descuento !== null && descuento > 0 && descuento <= 100 ? descuento : undefined;
+    descuento !== null && descuento > 0 && descuento <= 100
+      ? descuento
+      : undefined;
   estado.fallosIaSeguidos = numeroONulo(crudo.fallosIaSeguidos) ?? 0;
   estado.aplazamientosSeguidos = numeroONulo(crudo.aplazamientosSeguidos) ?? 0;
   if (

@@ -1,4 +1,10 @@
-import { fromCents, multiplyMoney, roundMoney, sumMoney, toCents } from '../common/money';
+import {
+  fromCents,
+  multiplyMoney,
+  roundMoney,
+  sumMoney,
+  toCents,
+} from '../common/money';
 import type { MetodoPagoReserva } from './extractores-de-reserva';
 
 /**

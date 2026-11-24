@@ -1016,7 +1016,12 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
    * abierta, de modo que lo ya pagado no cambia y el neto vuelve a cero.
    */
   private async deshacerDescuentoDeMulta(
-    sanction: { id: string; subjectId: string; fineAmount: unknown; reason: string },
+    sanction: {
+      id: string;
+      subjectId: string;
+      fineAmount: unknown;
+      reason: string;
+    },
     adminId: string,
   ): Promise<void> {
     const registros: Array<{

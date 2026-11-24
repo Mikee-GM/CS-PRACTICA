@@ -3183,7 +3183,10 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
     }
     // Crear un servicio topa en 24 horas, pero extenderlo no: de +12 en +12 una
     // empleada llegaba a 53 horas y 79.500 de total sin que nadie lo aprobara.
-    if (Number(servicio.duracionPactadaHoras ?? 0) + horas > DURACION_MAXIMA_HORAS) {
+    if (
+      Number(servicio.duracionPactadaHoras ?? 0) + horas >
+      DURACION_MAXIMA_HORAS
+    ) {
       throw new ConflictException(
         `La duración total no puede superar ${DURACION_MAXIMA_HORAS} horas`,
       );

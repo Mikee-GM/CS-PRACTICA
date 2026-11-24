@@ -6,7 +6,9 @@ import { SettlementsService } from './settlements.service';
  * fecha imposible y respondia 500 (`Invalid time value`). Tiene que ser 400.
  */
 describe('SettlementsService.ventanaDeSemana: periodo invalido', () => {
-  const service = Object.create(SettlementsService.prototype) as SettlementsService;
+  const service = Object.create(
+    SettlementsService.prototype,
+  ) as SettlementsService;
   const ventana = (a: string, b: string) =>
     (
       service as unknown as {

@@ -20,13 +20,16 @@ function armar(opciones: {
     findOne: jest.fn((_entidad: unknown, args: { where: { id: string } }) =>
       Promise.resolve(servicios[args.where.id] ?? null),
     ),
-    findOneOrFail: jest.fn((_entidad: unknown, args: { where: { id: string } }) =>
-      Promise.resolve({ id: args.where.id, recargado: true }),
+    findOneOrFail: jest.fn(
+      (_entidad: unknown, args: { where: { id: string } }) =>
+        Promise.resolve({ id: args.where.id, recargado: true }),
     ),
-    update: jest.fn((entidad: unknown, id: string, datos: Record<string, unknown>) => {
-      actualizaciones.push([entidad, id, datos]);
-      return Promise.resolve();
-    }),
+    update: jest.fn(
+      (entidad: unknown, id: string, datos: Record<string, unknown>) => {
+        actualizaciones.push([entidad, id, datos]);
+        return Promise.resolve();
+      },
+    ),
     getRepository: jest.fn(() => ({
       createQueryBuilder: () => {
         const qb: Record<string, unknown> = {};
@@ -34,7 +37,12 @@ function armar(opciones: {
         qb.getOne = () =>
           Promise.resolve(
             opciones.beneficio
-              ? ({ id: 'b1', porcentaje: 10, caducaAt: enDias(30), ...opciones.beneficio } as BeneficioDeCliente)
+              ? ({
+                  id: 'b1',
+                  porcentaje: 10,
+                  caducaAt: enDias(30),
+                  ...opciones.beneficio,
+                } as BeneficioDeCliente)
               : null,
           );
         return qb;
@@ -45,14 +53,25 @@ function armar(opciones: {
     manager,
     findOne: jest.fn().mockResolvedValue(
       opciones.beneficio
-        ? { id: 'b1', porcentaje: 10, caducaAt: enDias(30), servicioId: null, ...opciones.beneficio }
+        ? {
+            id: 'b1',
+            porcentaje: 10,
+            caducaAt: enDias(30),
+            servicioId: null,
+            ...opciones.beneficio,
+          }
         : null,
     ),
   };
   const repoClientes = {
-    findOne: jest.fn().mockResolvedValue(opciones.cliente === false ? null : { id: 'c1' }),
+    findOne: jest
+      .fn()
+      .mockResolvedValue(opciones.cliente === false ? null : { id: 'c1' }),
   };
-  const servicio = new ClientBenefitsService(repoBeneficios as never, repoClientes as never);
+  const servicio = new ClientBenefitsService(
+    repoBeneficios as never,
+    repoClientes as never,
+  );
   return { servicio, manager, actualizaciones };
 }
 
@@ -68,7 +87,9 @@ describe('ClientBenefitsService.estadoDeInstalacion', () => {
 
   it('otorgado y sin servicio esta disponible', async () => {
     const { servicio } = armar({ beneficio: { servicioId: null } });
-    expect((await servicio.estadoDeInstalacion('u1')).estado).toBe('disponible');
+    expect((await servicio.estadoDeInstalacion('u1')).estado).toBe(
+      'disponible',
+    );
   });
 
   it('con un servicio vivo esta usado y con uno cancelado se devuelve', async () => {
@@ -76,23 +97,31 @@ describe('ClientBenefitsService.estadoDeInstalacion', () => {
       beneficio: { servicioId: 's1' },
       servicios: { s1: { id: 's1', estado: 'finalizado' } },
     });
-    expect((await vivo.servicio.estadoDeInstalacion('u1')).estado).toBe('usado');
+    expect((await vivo.servicio.estadoDeInstalacion('u1')).estado).toBe(
+      'usado',
+    );
 
     const cancelado = armar({
       beneficio: { servicioId: 's1' },
       servicios: { s1: { id: 's1', estado: 'cancelado' } },
     });
-    expect((await cancelado.servicio.estadoDeInstalacion('u1')).estado).toBe('disponible');
+    expect((await cancelado.servicio.estadoDeInstalacion('u1')).estado).toBe(
+      'disponible',
+    );
   });
 
   it('pasado el plazo esta caducado', async () => {
-    const { servicio } = armar({ beneficio: { servicioId: null, caducaAt: enDias(-1) } });
+    const { servicio } = armar({
+      beneficio: { servicioId: null, caducaAt: enDias(-1) },
+    });
     expect((await servicio.estadoDeInstalacion('u1')).estado).toBe('caducado');
   });
 
   it('una cuenta sin ficha de cliente se rechaza', async () => {
     const { servicio } = armar({ cliente: false });
-    await expect(servicio.estadoDeInstalacion('u1')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(servicio.estadoDeInstalacion('u1')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });
 
@@ -101,12 +130,16 @@ describe('ClientBenefitsService.aplicarAlServicio', () => {
 
   it('sin beneficio devuelve el servicio tal cual', async () => {
     const { servicio, manager, actualizaciones } = armar({ beneficio: null });
-    await expect(servicio.aplicarAlServicio(manager as never, nuevo)).resolves.toBe(nuevo);
+    await expect(
+      servicio.aplicarAlServicio(manager as never, nuevo),
+    ).resolves.toBe(nuevo);
     expect(actualizaciones).toHaveLength(0);
   });
 
   it('aplica el porcentaje al servicio y registra cual lo uso', async () => {
-    const { servicio, manager, actualizaciones } = armar({ beneficio: { servicioId: null } });
+    const { servicio, manager, actualizaciones } = armar({
+      beneficio: { servicioId: null },
+    });
     const resultado = await servicio.aplicarAlServicio(manager as never, nuevo);
     expect(actualizaciones).toEqual([
       [expect.anything(), 'nuevo', { descuentoClientePorcentaje: 10 }],
@@ -120,7 +153,9 @@ describe('ClientBenefitsService.aplicarAlServicio', () => {
       beneficio: { servicioId: 's1' },
       servicios: { s1: { id: 's1', estado: 'pendiente' } },
     });
-    await expect(servicio.aplicarAlServicio(manager as never, nuevo)).resolves.toBe(nuevo);
+    await expect(
+      servicio.aplicarAlServicio(manager as never, nuevo),
+    ).resolves.toBe(nuevo);
     expect(actualizaciones).toHaveLength(0);
   });
 
@@ -140,7 +175,9 @@ describe('ClientBenefitsService.aplicarAlServicio', () => {
   it('un servicio sin cliente no recibe nada', async () => {
     const { servicio, manager } = armar({ beneficio: { servicioId: null } });
     const sinCliente = { id: 'x', clienteId: null } as never;
-    await expect(servicio.aplicarAlServicio(manager as never, sinCliente)).resolves.toBe(sinCliente);
+    await expect(
+      servicio.aplicarAlServicio(manager as never, sinCliente),
+    ).resolves.toBe(sinCliente);
   });
 });
 

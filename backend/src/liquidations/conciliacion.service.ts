@@ -130,6 +130,11 @@ export function periodoDeConciliacion(
   return { from: inicio, to: fin, desde, hasta };
 }
 
+/** Una columna de texto de una verificacion; vacia si no vino. */
+function textoDe(valor: unknown): string {
+  return typeof valor === 'string' ? valor : '';
+}
+
 @Injectable()
 export class ConciliacionService {
   private readonly logger = new Logger(ConciliacionService.name);
@@ -188,7 +193,10 @@ export class ConciliacionService {
       desde,
       new Date(hasta.getTime() - 1),
     );
-    const corte = calculateCut(registrosDelPeriodo, DEFAULT_CARD_EXTRA_COMMISSION);
+    const corte = calculateCut(
+      registrosDelPeriodo,
+      DEFAULT_CARD_EXTRA_COMMISSION,
+    );
     const resumen = this.armarResumen(
       resumenSql,
       corte,
@@ -222,7 +230,11 @@ export class ConciliacionService {
       [servicioId],
     );
     if (!servicio) throw new NotFoundException('Servicio no encontrado');
-    if (servicio.estado !== 'finalizado' || !servicio.fin || !servicio.empleada_id) {
+    if (
+      servicio.estado !== 'finalizado' ||
+      !servicio.fin ||
+      !servicio.empleada_id
+    ) {
       throw new ConflictException(
         'Solo se puede regenerar el registro de un servicio terminado',
       );
@@ -257,12 +269,12 @@ export class ConciliacionService {
       const esperado = toCents(Number(fila.esperado ?? 0));
       const real = toCents(Number(fila.real ?? 0));
       return {
-        referencia: String(fila.referencia ?? ''),
+        referencia: textoDe(fila.referencia),
         servicioId: (fila.servicio_id as string | null) ?? null,
         esperado: fromCents(esperado),
         real: fromCents(real),
         diferencia: fromCents(real - esperado),
-        detalle: String(fila.detalle ?? ''),
+        detalle: textoDe(fila.detalle),
       };
     });
     const total = casos.reduce(
@@ -324,7 +336,8 @@ export class ConciliacionService {
     }
     return {
       id: 'corte-recalculado',
-      titulo: 'Cortes confirmados: lo pagado coincide con los registros de la semana',
+      titulo:
+        'Cortes confirmados: lo pagado coincide con los registros de la semana',
       descripcion:
         'Se vuelve a calcular cada corte confirmado con los registros actuales de su semana y se compara con lo que se le pago a la empleada.',
       estado: casos.length === 0 ? 'ok' : 'discrepancia',
@@ -467,7 +480,8 @@ export class ConciliacionService {
     corte: ReturnType<typeof calculateCut>,
     porConfirmar: { cantidad: number; importe: number },
   ): ResumenDeDinero {
-    const n = (valor: string | number | undefined) => toCents(Number(valor ?? 0));
+    const n = (valor: string | number | undefined) =>
+      toCents(Number(valor ?? 0));
     const choferes = n(sql.choferes.total);
     const uber = n(sql.uber.total);
     const resultado =

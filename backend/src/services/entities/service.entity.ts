@@ -206,7 +206,10 @@ export class Servicios {
     default: () => '0',
     transformer: new ColumnNumericTransformer(),
   })
-  @ApiProperty({ description: 'Porcentaje de descuento al cliente', example: 10 })
+  @ApiProperty({
+    description: 'Porcentaje de descuento al cliente',
+    example: 10,
+  })
   descuentoClientePorcentaje: number;
 
   /** Importe del descuento al cliente; lo calcula el trigger sobre `total_base`. */
@@ -217,7 +220,10 @@ export class Servicios {
     default: () => '0',
     transformer: new ColumnNumericTransformer(),
   })
-  @ApiProperty({ description: 'Importe del descuento al cliente', example: 120.0 })
+  @ApiProperty({
+    description: 'Importe del descuento al cliente',
+    example: 120.0,
+  })
   descuentoCliente: number;
 
   /** Importe original pactado, antes de extensiones, conservado historicamente. */

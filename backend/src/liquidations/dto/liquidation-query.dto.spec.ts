@@ -37,7 +37,10 @@ describe('LiquidationPeriodQueryDto: periodo en fechas planas o en instantes', (
 
   it('las dos formas dan la misma semana, y el corte se busca por el lunes correcto', () => {
     const plano = periodo('2026-11-23', '2026-11-29');
-    const instante = periodo('2026-11-23T06:00:00.000Z', '2026-11-30T05:59:59.999Z');
+    const instante = periodo(
+      '2026-11-23T06:00:00.000Z',
+      '2026-11-30T05:59:59.999Z',
+    );
 
     expect(plano.startDate.getTime()).toBe(instante.startDate.getTime());
     expect(plano.endDate.getTime()).toBe(instante.endDate.getTime());

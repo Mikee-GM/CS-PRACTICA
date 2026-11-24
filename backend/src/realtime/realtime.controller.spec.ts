@@ -63,7 +63,10 @@ describe('RealtimeController.sseChofer', () => {
     'niega el canal del chofer al rol %s',
     async (rol) => {
       await expect(
-        controller.sseChofer({ user: { id: 'user-3', rol } as Usuarios }, SESION),
+        controller.sseChofer(
+          { user: { id: 'user-3', rol } as Usuarios },
+          SESION,
+        ),
       ).rejects.toBeInstanceOf(ForbiddenException);
       expect(choferesRepository.findOne).not.toHaveBeenCalled();
       expect(realtimeEventsService.getDriverStream).not.toHaveBeenCalled();
@@ -132,9 +135,9 @@ describe('RealtimeController: canal del cliente y separacion de roles', () => {
   it.each(['jefe', 'admin', 'empleada', 'chofer'] as const)(
     'niega el canal del cliente al rol %s',
     async (rol) => {
-      await expect(controller.sseCliente(peticion(rol), SESION)).rejects.toBeInstanceOf(
-        ForbiddenException,
-      );
+      await expect(
+        controller.sseCliente(peticion(rol), SESION),
+      ).rejects.toBeInstanceOf(ForbiddenException);
       expect(clientesRepository.findOne).not.toHaveBeenCalled();
       expect(realtimeEventsService.getClientStream).not.toHaveBeenCalled();
     },

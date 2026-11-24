@@ -30,9 +30,15 @@ function esErrorDeCliente(
   exception: unknown,
 ): exception is Error & { status: number } {
   if (!(exception instanceof Error)) return false;
-  const { status, expose } = exception as { status?: unknown; expose?: unknown };
+  const { status, expose } = exception as {
+    status?: unknown;
+    expose?: unknown;
+  };
   return (
-    typeof status === 'number' && status >= 400 && status < 500 && expose === true
+    typeof status === 'number' &&
+    status >= 400 &&
+    status < 500 &&
+    expose === true
   );
 }
 

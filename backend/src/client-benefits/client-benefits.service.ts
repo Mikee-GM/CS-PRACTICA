@@ -11,7 +11,8 @@ export const PORCENTAJE_INSTALACION_APP = 10;
 /** Dias que el cliente tiene para usarlo desde que se otorga. */
 export const DIAS_DE_VIGENCIA = 60;
 
-export type EstadoDelBeneficio = 'sin_reclamar' | 'disponible' | 'usado' | 'caducado';
+export type EstadoDelBeneficio =
+  'sin_reclamar' | 'disponible' | 'usado' | 'caducado';
 
 export type BeneficioDeInstalacion = {
   estado: EstadoDelBeneficio;
@@ -37,7 +38,9 @@ export class ClientBenefitsService {
     private readonly clientes: Repository<Clientes>,
   ) {}
 
-  async estadoDeInstalacion(usuarioId: string): Promise<BeneficioDeInstalacion> {
+  async estadoDeInstalacion(
+    usuarioId: string,
+  ): Promise<BeneficioDeInstalacion> {
     const clienteId = await this.clienteDe(usuarioId);
     return this.estadoDe(
       await this.beneficios.findOne({
@@ -50,7 +53,10 @@ export class ClientBenefitsService {
    * Porcentaje que se le descontaria hoy a este cliente en un servicio nuevo, o 0.
    * Lo usa la reserva por chat para decirle cuanto transferir.
    */
-  async porcentajeDisponible(clienteId: string, ahora = new Date()): Promise<number> {
+  async porcentajeDisponible(
+    clienteId: string,
+    ahora = new Date(),
+  ): Promise<number> {
     const beneficio = await this.beneficios.findOne({
       where: { clienteId, tipo: BENEFICIO_INSTALACION_APP },
     });

@@ -32,7 +32,10 @@ describe('montoEsperadoDeTransferencia con descuento', () => {
   it('descuenta solo la base y deja el transporte entero', () => {
     expect(montoEsperadoDeTransferencia(borrador, 1000)).toBe(2180);
     expect(
-      montoEsperadoDeTransferencia({ ...borrador, descuentoPorcentaje: 10 }, 1000),
+      montoEsperadoDeTransferencia(
+        { ...borrador, descuentoPorcentaje: 10 },
+        1000,
+      ),
     ).toBe(1980);
   });
 

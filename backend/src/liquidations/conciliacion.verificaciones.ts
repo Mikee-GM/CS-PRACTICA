@@ -66,7 +66,8 @@ export function consultaDeVerificacion(sql: string): string {
 export const VERIFICACIONES: DefinicionDeVerificacion[] = [
   {
     id: 'total-del-servicio',
-    titulo: 'Total del servicio igual a base, extras y transporte menos el descuento',
+    titulo:
+      'Total del servicio igual a base, extras y transporte menos el descuento',
     descripcion:
       'El total que se cobra al cliente tiene que ser exactamente la suma de sus tres partes menos el descuento del cliente, si lo tiene.',
     sql: `
@@ -82,7 +83,8 @@ export const VERIFICACIONES: DefinicionDeVerificacion[] = [
   },
   {
     id: 'descuento-del-cliente',
-    titulo: 'Descuento del cliente: importe del porcentaje y un solo servicio por beneficio',
+    titulo:
+      'Descuento del cliente: importe del porcentaje y un solo servicio por beneficio',
     descripcion:
       'El descuento es el porcentaje de la base, y solo lo lleva un servicio que su beneficio tiene registrado: un descuento sin beneficio, o un beneficio usado en dos servicios, es dinero que se regala.',
     sql: `
@@ -130,7 +132,8 @@ export const VERIFICACIONES: DefinicionDeVerificacion[] = [
   {
     id: 'extras-del-servicio',
     titulo: 'Extras del servicio igual a la suma de sus extras',
-    descripcion: 'El total de extras tiene que ser la suma de cada extra cobrado.',
+    descripcion:
+      'El total de extras tiene que ser la suma de cada extra cobrado.',
     sql: `
       SELECT 'servicio ' || left(s.id::text, 8), s.id,
              COALESCE((SELECT SUM(e.precio_cobrado) FROM extras_servicio e WHERE e.servicio_id = s.id), 0),
@@ -144,7 +147,8 @@ export const VERIFICACIONES: DefinicionDeVerificacion[] = [
   {
     id: 'pagos-del-servicio',
     titulo: 'Pagado igual a la suma de pagos aprobados',
-    descripcion: 'Lo que el servicio dice haber cobrado tiene que ser la suma de sus pagos aprobados.',
+    descripcion:
+      'Lo que el servicio dice haber cobrado tiene que ser la suma de sus pagos aprobados.',
     sql: `
       SELECT 'servicio ' || left(s.id::text, 8), s.id,
              COALESCE((SELECT SUM(p.amount) FROM service_payments p WHERE p.service_id = s.id AND p.status = 'aprobado'), 0),
@@ -177,7 +181,8 @@ export const VERIFICACIONES: DefinicionDeVerificacion[] = [
   {
     id: 'neto-extras-empleada',
     titulo: 'Neto de la empleada en cada extra',
-    descripcion: 'Lo que le queda a la empleada de un extra es el importe menos la comision.',
+    descripcion:
+      'Lo que le queda a la empleada de un extra es el importe menos la comision.',
     sql: `
       SELECT 'extra ' || left(e.id::text, 8), e.servicio_id,
              e.precio_cobrado - e.company_commission_snapshot,
@@ -206,7 +211,8 @@ export const VERIFICACIONES: DefinicionDeVerificacion[] = [
   {
     id: 'registro-duplicado',
     titulo: 'Servicios con mas de un registro de liquidacion',
-    descripcion: 'Un registro repetido cuenta dos veces el mismo servicio en el corte.',
+    descripcion:
+      'Un registro repetido cuenta dos veces el mismo servicio en el corte.',
     sql: `
       SELECT 'servicio ' || left(r.service_id::text, 8), r.service_id, 1::numeric, count(*)::numeric,
              count(*) || ' registros de la misma empleada para un servicio'
@@ -219,7 +225,8 @@ export const VERIFICACIONES: DefinicionDeVerificacion[] = [
   {
     id: 'registro-base',
     titulo: 'Registro de liquidacion: base del servicio',
-    descripcion: 'El importe del servicio en el corte tiene que ser el del servicio.',
+    descripcion:
+      'El importe del servicio en el corte tiene que ser el del servicio.',
     sql: `
       SELECT 'servicio ' || left(s.id::text, 8), s.id, s.total_base, r.service_total,
              'el registro quedo con otro importe que el servicio'
@@ -243,7 +250,8 @@ export const VERIFICACIONES: DefinicionDeVerificacion[] = [
   {
     id: 'registro-transporte-cliente',
     titulo: 'Registro de liquidacion: transporte cobrado al cliente',
-    descripcion: 'Lo que se cobro al cliente por transporte tiene que coincidir con el servicio.',
+    descripcion:
+      'Lo que se cobro al cliente por transporte tiene que coincidir con el servicio.',
     sql: `
       SELECT 'servicio ' || left(s.id::text, 8), s.id,
              COALESCE(s.customer_transport_charge, s.total_transporte, 0), r.customer_transport_charge,
@@ -287,7 +295,8 @@ export const VERIFICACIONES: DefinicionDeVerificacion[] = [
   {
     id: 'obligacion-efectivo-faltante',
     titulo: 'Servicios en efectivo sin obligacion de efectivo',
-    descripcion: 'Si la empleada cobro en efectivo, tiene que existir lo que debe entregar.',
+    descripcion:
+      'Si la empleada cobro en efectivo, tiene que existir lo que debe entregar.',
     sql: `
       SELECT 'servicio ' || left(s.id::text, 8), s.id, ${EFECTIVO_DEBIDO}, 0::numeric,
              'no existe la obligacion de efectivo'
@@ -298,7 +307,8 @@ export const VERIFICACIONES: DefinicionDeVerificacion[] = [
   {
     id: 'obligacion-efectivo-importe',
     titulo: 'Importe de la obligacion de efectivo',
-    descripcion: 'La obligacion de efectivo tiene que ser lo que la empleada cobro menos los Uber que adelanto.',
+    descripcion:
+      'La obligacion de efectivo tiene que ser lo que la empleada cobro menos los Uber que adelanto.',
     sql: `
       SELECT 'servicio ' || left(s.id::text, 8), s.id, ${EFECTIVO_DEBIDO}, o.amount,
              'obligacion ' || left(o.id::text, 8) || ' (' || o.status || ')'
@@ -310,7 +320,8 @@ export const VERIFICACIONES: DefinicionDeVerificacion[] = [
   {
     id: 'obligacion-abonos',
     titulo: 'Obligaciones: pagado igual a lo repartido en abonos',
-    descripcion: 'Lo que una obligacion dice tener pagado tiene que ser la suma de los abonos que se le asignaron.',
+    descripcion:
+      'Lo que una obligacion dice tener pagado tiene que ser la suma de los abonos que se le asignaron.',
     sql: `
       SELECT 'obligacion ' || left(o.id::text, 8), o.service_id, o.paid_amount,
              COALESCE((SELECT SUM(a.amount) FROM employee_cash_payment_allocations a
@@ -326,7 +337,8 @@ export const VERIFICACIONES: DefinicionDeVerificacion[] = [
   {
     id: 'obligacion-estado',
     titulo: 'Obligaciones: estado coherente con lo pagado',
-    descripcion: 'Una obligacion esta pagada si y solo si lo pagado alcanza su importe, y nunca se paga de mas.',
+    descripcion:
+      'Una obligacion esta pagada si y solo si lo pagado alcanza su importe, y nunca se paga de mas.',
     sql: `
       SELECT 'obligacion ' || left(o.id::text, 8), o.service_id, o.amount, o.paid_amount,
              'estado ' || o.status || ', pagado ' || o.paid_amount || ' de ' || o.amount
@@ -339,7 +351,8 @@ export const VERIFICACIONES: DefinicionDeVerificacion[] = [
   {
     id: 'abono-aplicado',
     titulo: 'Abonos de efectivo aplicados por completo',
-    descripcion: 'Cada abono vigente tiene que estar repartido entre obligaciones: ni dinero sin aplicar ni aplicado de mas.',
+    descripcion:
+      'Cada abono vigente tiene que estar repartido entre obligaciones: ni dinero sin aplicar ni aplicado de mas.',
     sql: `
       SELECT 'abono ' || left(p.id::text, 8), NULL::uuid, p.amount,
              COALESCE((SELECT SUM(a.amount) FROM employee_cash_payment_allocations a WHERE a.payment_id = p.id), 0),
@@ -413,8 +426,10 @@ export const VERIFICACIONES: DefinicionDeVerificacion[] = [
   },
   {
     id: 'corte-semanal-empleada',
-    titulo: 'Cortes semanales confirmados: neto igual a bruto menos compensacion',
-    descripcion: 'Lo que se le paga a la empleada es lo que gano menos el efectivo que se le compenso.',
+    titulo:
+      'Cortes semanales confirmados: neto igual a bruto menos compensacion',
+    descripcion:
+      'Lo que se le paga a la empleada es lo que gano menos el efectivo que se le compenso.',
     sql: `
       SELECT 'corte ' || left(w.id::text, 8), NULL::uuid, w.gross_employee_pay - w.cash_offset, w.net_employee_pay,
              'semana ' || w.week_start || ' de la empleada ' || left(w.employee_id::text, 8)

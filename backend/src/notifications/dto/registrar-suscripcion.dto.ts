@@ -47,7 +47,8 @@ export class RegistrarSuscripcionDto {
   @IsNotEmpty()
   @MaxLength(1000)
   @Matches(ENDPOINT_PUSH_PERMITIDO, {
-    message: 'El endpoint no pertenece a un servicio push de navegador conocido',
+    message:
+      'El endpoint no pertenece a un servicio push de navegador conocido',
   })
   endpoint: string;
 

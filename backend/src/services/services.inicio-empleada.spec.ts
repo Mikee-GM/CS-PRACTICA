@@ -33,7 +33,10 @@ describe('ServicesService.startByEmployee: un solo servicio en curso', () => {
     Object.assign(service, {
       serviciosRepository,
       serviceOperations: { transition },
-      realtimeEventsService: { emitToBoss: jest.fn(), emitToEmployee: jest.fn() },
+      realtimeEventsService: {
+        emitToBoss: jest.fn(),
+        emitToEmployee: jest.fn(),
+      },
     });
     return { service, transition, manager };
   }
@@ -52,9 +55,9 @@ describe('ServicesService.startByEmployee: un solo servicio en curso', () => {
   it('rechaza iniciarlo si ya atiende otro y no toca el estado', async () => {
     const { service, transition } = crear({ id: 'svc-1' });
 
-    await expect(service.startByEmployee('svc-2', 'user-1')).rejects.toBeInstanceOf(
-      ConflictException,
-    );
+    await expect(
+      service.startByEmployee('svc-2', 'user-1'),
+    ).rejects.toBeInstanceOf(ConflictException);
     expect(transition).not.toHaveBeenCalled();
   });
 
@@ -72,8 +75,8 @@ describe('ServicesService.startByEmployee: un solo servicio en curso', () => {
   it('sigue negando a quien no es la empleada del servicio', async () => {
     const { service } = crear(null);
 
-    await expect(service.startByEmployee('svc-2', 'otra')).rejects.toBeInstanceOf(
-      ForbiddenException,
-    );
+    await expect(
+      service.startByEmployee('svc-2', 'otra'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 });

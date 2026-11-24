@@ -15,9 +15,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * El timestamp es mayor que el del esquema base unico del entorno local, para que
  * en una base nueva corra despues de el.
  */
-export class DescuentoPorInstalarLaApp1900000000004
-  implements MigrationInterface
-{
+export class DescuentoPorInstalarLaApp1900000000004 implements MigrationInterface {
   name = 'DescuentoPorInstalarLaApp1900000000004';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

@@ -12,9 +12,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * una semana bien guardada termina en inicio mas seis y no se modifica, de modo
  * que repetir la migracion no hace nada.
  */
-export class CorregirFinDeCorteSemanal1900000000002
-  implements MigrationInterface
-{
+export class CorregirFinDeCorteSemanal1900000000002 implements MigrationInterface {
   name = 'CorregirFinDeCorteSemanal1900000000002';
 
   public async up(queryRunner: QueryRunner): Promise<void> {

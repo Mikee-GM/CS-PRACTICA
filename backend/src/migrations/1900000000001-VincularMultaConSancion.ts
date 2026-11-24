@@ -11,9 +11,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  * El timestamp es mayor que el del esquema base unico del entorno local, para que
  * en una base nueva corra despues de el.
  */
-export class VincularMultaConSancion1900000000001
-  implements MigrationInterface
-{
+export class VincularMultaConSancion1900000000001 implements MigrationInterface {
   name = 'VincularMultaConSancion1900000000001';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
@@ -52,7 +50,9 @@ export class VincularMultaConSancion1900000000001
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS idx_liquidation_records_sanction`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS idx_liquidation_records_sanction`,
+    );
     await queryRunner.query(
       `ALTER TABLE liquidation_records DROP COLUMN IF EXISTS sanction_id`,
     );

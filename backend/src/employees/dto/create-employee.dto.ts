@@ -142,7 +142,9 @@ export class CreateEmployeeDto {
   @IsString({
     message: 'La URL de la foto de perfil debe ser una cadena de texto',
   })
-  @IsUrl(URL_WEB, { message: 'La foto de perfil debe ser una URL http o https' })
+  @IsUrl(URL_WEB, {
+    message: 'La foto de perfil debe ser una URL http o https',
+  })
   @IsOptional()
   readonly fotoPerfilUrl?: string;
 

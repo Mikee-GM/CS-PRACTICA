@@ -631,7 +631,12 @@ const CONVERSACION_NO_ENCONTRADA = 'Conversación no encontrada';
 
 /** El adjunto que se guarda para una foto o una nota de voz ya subida. */
 export function adjuntoDeMedia(
-  subida: { url: string; kind: 'foto' | 'audio'; mimeType: string; bytes: number },
+  subida: {
+    url: string;
+    kind: 'foto' | 'audio';
+    mimeType: string;
+    bytes: number;
+  },
   dto: { durationMs?: number },
 ): MessageAttachment {
   return {

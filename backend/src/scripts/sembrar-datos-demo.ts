@@ -2351,8 +2351,12 @@ export async function armonizarDinero(qr: QueryRunner): Promise<void> {
   // una semana confirmada no admite servicios nuevos, y la actual sigue abierta.
   // Sus servicios se fechan ahi antes de generar los registros, que heredan la
   // fecha del servicio.
-  const lunesAnterior = new Date(lunesDeEstaSemana().getTime() - 7 * 24 * 60 * 60 * 1000);
-  const viernesAnterior = new Date(lunesAnterior.getTime() + (4 * 24 + 18) * 60 * 60 * 1000);
+  const lunesAnterior = new Date(
+    lunesDeEstaSemana().getTime() - 7 * 24 * 60 * 60 * 1000,
+  );
+  const viernesAnterior = new Date(
+    lunesAnterior.getTime() + (4 * 24 + 18) * 60 * 60 * 1000,
+  );
   await qr.query(
     `UPDATE servicios SET hora_fin_servicio = $1
       WHERE id IN ($2, $3) AND estado = 'finalizado'`,
@@ -2374,15 +2378,28 @@ export async function armonizarDinero(qr: QueryRunner): Promise<void> {
   }
 
   // Abonos repartidos: el primero parcial y el segundo completo.
-  const obligaciones: Array<{ id: string; employee_id: string; amount: string }> =
-    await qr.query(
-      `SELECT id, employee_id, amount FROM employee_cash_obligations
+  const obligaciones: Array<{
+    id: string;
+    employee_id: string;
+    amount: string;
+  }> = await qr.query(
+    `SELECT id, employee_id, amount FROM employee_cash_obligations
         WHERE service_id::text ${demo} AND amount > 0
         ORDER BY service_date`,
-    );
+  );
   const abonos = [
-    { pago: id(310), fraccion: 0.5, nota: 'Abono parcial entregado en el departamento.', dias: -1 },
-    { pago: id(311), fraccion: 1, nota: 'Entrega completa del servicio de mostrador.', dias: -5 },
+    {
+      pago: id(310),
+      fraccion: 0.5,
+      nota: 'Abono parcial entregado en el departamento.',
+      dias: -1,
+    },
+    {
+      pago: id(311),
+      fraccion: 1,
+      nota: 'Entrega completa del servicio de mostrador.',
+      dias: -5,
+    },
   ];
   for (let i = 0; i < Math.min(abonos.length, obligaciones.length); i += 1) {
     const obligacion = obligaciones[i];
@@ -2393,7 +2410,14 @@ export async function armonizarDinero(qr: QueryRunner): Promise<void> {
       `INSERT INTO employee_cash_payments
          (id, employee_id, amount, note, registered_by_user_id, origin, created_at)
        VALUES ($1, $2, $3, $4, $5, 'physical', $6)`,
-      [abonos[i].pago, obligacion.employee_id, fromCents(parte), abonos[i].nota, U.jefe1, dias(abonos[i].dias)],
+      [
+        abonos[i].pago,
+        obligacion.employee_id,
+        fromCents(parte),
+        abonos[i].nota,
+        U.jefe1,
+        dias(abonos[i].dias),
+      ],
     );
     await qr.query(
       `INSERT INTO employee_cash_payment_allocations (payment_id, obligation_id, amount)
@@ -2479,7 +2503,9 @@ export async function armonizarDinero(qr: QueryRunner): Promise<void> {
       WHERE id::text ${demo}`,
     [
       diaDeLaSemana(lunesAnterior),
-      diaDeLaSemana(new Date(lunesAnterior.getTime() + 6 * 24 * 60 * 60 * 1000)),
+      diaDeLaSemana(
+        new Date(lunesAnterior.getTime() + 6 * 24 * 60 * 60 * 1000),
+      ),
     ],
   );
   for (const corte of await qr.query(

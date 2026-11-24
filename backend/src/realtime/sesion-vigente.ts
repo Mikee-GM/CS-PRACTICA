@@ -1,6 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { catchError, exhaustMap, filter, from, interval, Observable, of } from 'rxjs';
+import {
+  catchError,
+  exhaustMap,
+  filter,
+  from,
+  interval,
+  Observable,
+  of,
+} from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { Repository } from 'typeorm';
 import { AuthSession } from '../auth/entities/auth-session.entity';

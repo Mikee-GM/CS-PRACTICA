@@ -35,7 +35,9 @@ describe('abonos de una deuda: aritmetica en centavos', () => {
               ),
             },
     };
-    const service = Object.create(LiquidationsService.prototype) as LiquidationsService;
+    const service = Object.create(
+      LiquidationsService.prototype,
+    ) as LiquidationsService;
     Object.assign(service, {
       dataSource: {
         transaction: (fn: (m: unknown) => unknown) => fn(manager),
