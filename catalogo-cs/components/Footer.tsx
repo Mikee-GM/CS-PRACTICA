@@ -2,6 +2,8 @@
 
 import Image from "next/image";
 
+import AvisoDeIntermediacion from "@/components/AvisoDeIntermediacion";
+
 export default function Footer() {
   return (
     <footer className="w-full border-t border-zinc-800/50 bg-black/40 mt-auto">
@@ -30,6 +32,8 @@ export default function Footer() {
               Catalogo Premium de Modelos
             </p>
           </div>
+
+          <AvisoDeIntermediacion />
         </div>
       </div>
     </footer>

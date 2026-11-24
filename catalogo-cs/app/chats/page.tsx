@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import AvatarModelo from "@/components/cliente/AvatarModelo";
 import BotonChatear from "@/components/cliente/BotonChatear";
 import { ErrorDeFormulario } from "@/components/cliente/Campo";
+import AvisoDeIntermediacion from "@/components/AvisoDeIntermediacion";
 import ListaChats from "@/components/cliente/ListaChats";
 import NavegacionCliente from "@/components/cliente/NavegacionCliente";
 import TransicionDePestana from "@/components/cliente/TransicionDePestana";
@@ -99,6 +100,8 @@ export default async function ChatsPage({
             ) : (
               <ErrorDeFormulario mensaje="No se pudieron cargar tus chats. Revisa tu conexión y recarga la página." />
             )}
+
+            <AvisoDeIntermediacion className="pt-2" />
           </div>
         </main>
       </TransicionDePestana>

@@ -2,6 +2,8 @@ import Image from "next/image";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import AvisoDeIntermediacion from "@/components/AvisoDeIntermediacion";
+
 /**
  * Marco comun de las pantallas de acceso del cliente: fondo negro, tarjeta con
  * borde dorado tenue y cabecera con el icono de la marca.
@@ -50,6 +52,7 @@ export default function AuthShell({
         {pie ? (
           <p className="mt-6 text-center text-xs text-zinc-500">{pie}</p>
         ) : null}
+        <AvisoDeIntermediacion className="mt-6" />
       </div>
     </main>
   );
