@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import { ChevronLeft, Loader2, Send } from "lucide-react";
 import { toast } from "sonner";
 
@@ -29,6 +30,7 @@ import {
   mezclarMensajes,
 } from "@/lib/conversaciones";
 import { esRedireccion } from "@/lib/es-redireccion";
+import { IndicadorEscribiendo } from "@/components/chat/animaciones";
 import DialogoConfirmacion from "./DialogoConfirmacion";
 import MensajeDelEquipo from "./MensajeDelEquipo";
 import VisorDeImagen from "./VisorDeImagen";
@@ -507,13 +509,14 @@ export default function ConversacionChatWeb({
           </ol>
           <ol role="log" aria-live="polite" aria-label="Mensajes nuevos" className="space-y-3">
             {nuevos.map((m) => (
-              <MensajeDelEquipo key={m.id} mensaje={m} onVerImagen={setImagen} />
+              <MensajeDelEquipo key={m.id} mensaje={m} onVerImagen={setImagen} animar />
             ))}
           </ol>
 
-          <p role="status" className="min-h-5 px-2 text-xs italic text-zinc-500">
-            {escribiendo && conversacion.status !== "cerrada" ? "La IA está escribiendo" : null}
-          </p>
+          <IndicadorEscribiendo
+            visible={escribiendo && conversacion.status !== "cerrada"}
+            texto="La IA está escribiendo"
+          />
         </div>
       </div>
 
@@ -557,10 +560,11 @@ export default function ConversacionChatWeb({
                 aria-invalid={errorDeEnvio ? true : undefined}
                 className="min-h-11 min-w-0 flex-1 resize-none rounded-xl border border-zinc-800 bg-zinc-950 px-3 py-2.5 text-base text-white outline-none placeholder:text-zinc-600 focus:border-[#C5A55A] sm:text-sm"
               />
-              <button
+              <motion.button
                 type="submit"
                 disabled={enviando || !texto.trim()}
                 aria-busy={enviando}
+                whileTap={{ scale: 0.9 }}
                 className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#C5A55A]/70 text-[#C5A55A] transition-colors hover:bg-[#C5A55A] hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5A55A]/60 disabled:opacity-40"
               >
                 {enviando ? (
@@ -569,7 +573,7 @@ export default function ConversacionChatWeb({
                   <Send aria-hidden="true" className="h-4 w-4" />
                 )}
                 <span className="sr-only">{enviando ? "Enviando" : "Enviar"}</span>
-              </button>
+              </motion.button>
             </div>
             <p id={ayudaEscrituraId} className="flex justify-between gap-2 text-[11px] text-zinc-500">
               <span>El cliente lo verá como un mensaje de la modelo. Sin emojis.</span>

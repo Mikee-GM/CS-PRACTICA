@@ -1,5 +1,7 @@
 import { MapPin, Receipt } from "lucide-react";
 
+import { ItemMensaje } from "@/components/chat/animaciones";
+
 import {
   enlaceAlMapa,
   etiquetaDeRemitente,
@@ -19,9 +21,12 @@ import { horaDelMensaje } from "@/lib/conversaciones";
 export default function MensajeDelEquipo({
   mensaje,
   onVerImagen,
+  animar = false,
 }: {
   mensaje: MensajeParaElEquipo;
   onVerImagen: (imagen: { url: string; titulo: string }) => void;
+  /** Solo lo que llega con la conversacion abierta entra con movimiento. */
+  animar?: boolean;
 }) {
   const hora = (
     <time dateTime={mensaje.createdAt} className="text-[10px] tabular-nums text-zinc-500">
@@ -32,7 +37,7 @@ export default function MensajeDelEquipo({
 
   if (mensaje.sender === "sistema") {
     return (
-      <li className="flex justify-center px-2">
+      <ItemMensaje lado="centro" animar={animar} className="flex justify-center px-2">
         <div className="max-w-[92%] rounded-xl border border-zinc-800 bg-zinc-950/80 px-4 py-2.5 text-center">
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-500">
             {etiqueta}
@@ -43,7 +48,7 @@ export default function MensajeDelEquipo({
           </p>
           <div className="mt-1">{hora}</div>
         </div>
-      </li>
+      </ItemMensaje>
     );
   }
 
@@ -51,7 +56,11 @@ export default function MensajeDelEquipo({
   const jefe = mensaje.sender === "jefe";
 
   return (
-    <li className={`flex ${cliente ? "justify-start" : "justify-end"}`}>
+    <ItemMensaje
+      lado={cliente ? "izquierda" : "derecha"}
+      animar={animar}
+      className={`flex ${cliente ? "justify-start" : "justify-end"}`}
+    >
       <div className={`flex max-w-[85%] flex-col ${cliente ? "items-start" : "items-end"}`}>
         <p
           className={`mb-1 px-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${
@@ -75,7 +84,7 @@ export default function MensajeDelEquipo({
         </div>
         <div className="mt-1 px-1">{hora}</div>
       </div>
-    </li>
+    </ItemMensaje>
   );
 }
 

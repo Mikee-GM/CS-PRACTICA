@@ -26,6 +26,7 @@ import { esRedireccion } from "@/lib/es-redireccion";
 import BarraEscritura from "./BarraEscritura";
 import Burbuja from "./Burbuja";
 import { ErrorDeFormulario } from "./Campo";
+import { IndicadorEscribiendo } from "@/components/chat/animaciones";
 import EncabezadoAsistente from "./EncabezadoAsistente";
 import SubirComprobante from "./SubirComprobante";
 import ValorarServicio from "./ValorarServicio";
@@ -452,14 +453,16 @@ export default function VistaChat({
                 nombreModelo={nombre}
                 onReintentar={reintentar}
                 analisis={analisis[m.id]}
+                animar
               />
             ))}
           </ol>
 
           {/* Fuera del registro: es un estado pasajero, no un mensaje. */}
-          <p role="status" className="min-h-5 px-2 text-xs italic text-zinc-500">
-            {escribiendo && !cerrada ? `${nombre} está escribiendo` : null}
-          </p>
+          <IndicadorEscribiendo
+            visible={escribiendo && !cerrada}
+            texto={`${nombre} está escribiendo`}
+          />
         </div>
       </div>
 

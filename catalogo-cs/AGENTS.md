@@ -38,6 +38,20 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - **Bordes y acentos en dorado.** Los bordes decorativos, hover states, y acentos usan dorado.
 - **Botones:** Bordes dorados sobre fondo negro, hover con fondo dorado y texto negro.
 
+## Movimiento
+
+- **El movimiento responde a una accion**: enviar, recibir, abrir, confirmar, un
+  error. No decora la carga ni se pone en cada seccion o tarjeta.
+- Se usa `framer-motion`. Las piezas del chat viven en
+  `components/chat/animaciones.tsx` (entrada de mensaje, "escribiendo", cambio de
+  estado del envio); reutilizalas antes de crear otras.
+- En el chat solo se anima lo que llega o se envia con la conversacion abierta:
+  el historial que ya estaba al abrir se pinta sin movimiento.
+- `ProveedorMovimiento` (en `app/layout.tsx`) respeta "reducir movimiento" del
+  sistema en toda la aplicacion: apaga las transformaciones y deja la opacidad.
+- Skills de diseno instaladas: `frontend-design` y `web-design-guidelines`. Si
+  alguna contradice este archivo (fuentes, paleta), manda este archivo.
+
 ## Arquitectura
 
 - **Framework:** Next.js (App Router) + React + TypeScript

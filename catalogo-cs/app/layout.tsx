@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Cinzel, Montserrat } from "next/font/google";
+import { ProveedorMovimiento } from "@/components/chat/animaciones";
 import PwaProvider from "@/components/pwa/PwaProvider";
 import "./globals.css";
 
@@ -99,7 +100,9 @@ export default function RootLayout({
   return (
     <html lang="es" className={`${cinzel.variable} ${montserrat.variable}`}>
       <body className="bg-black text-white font-body antialiased">
-        <PwaProvider>{children}</PwaProvider>
+        <ProveedorMovimiento>
+          <PwaProvider>{children}</PwaProvider>
+        </ProveedorMovimiento>
       </body>
     </html>
   );

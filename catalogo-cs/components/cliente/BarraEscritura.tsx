@@ -1,5 +1,6 @@
 "use client";
 
+import { motion } from "framer-motion";
 import { MapPin, SendHorizontal } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
@@ -200,14 +201,15 @@ export default function BarraEscritura({
             enterKeyHint="enter"
             className="field-sizing-content max-h-36 min-h-11 flex-1 resize-none rounded-2xl border border-zinc-800 bg-black/60 px-4 py-2.5 text-base leading-snug text-white placeholder:text-zinc-600 focus:border-[#C5A55A]/60 focus:outline-none focus:ring-4 focus:ring-[#C5A55A]/10 sm:text-sm"
           />
-          <button
+          <motion.button
             type="submit"
             disabled={!texto.trim()}
             aria-label="Enviar mensaje"
+            whileTap={{ scale: 0.9 }}
             className={`${botonIcono} bg-[#C5A55A] text-black hover:bg-[#D4AF37]`}
           >
             <SendHorizontal aria-hidden="true" className="h-5 w-5" />
-          </button>
+          </motion.button>
         </form>
       </div>
     </div>
