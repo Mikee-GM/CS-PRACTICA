@@ -29,6 +29,7 @@ import { Empleadas } from '../employees/entities/employee.entity';
 import { Usuarios } from '../users/entities/user.entity';
 import { Choferes } from '../drivers/entities/driver.entity';
 import { AiMessageService } from '../ai/ai-message.service';
+import { ClientBenefitsService } from '../client-benefits/client-benefits.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { OfficeLiquidationSyncService } from '../liquidations/office-liquidation-sync.service';
 import { EmployeeCashObligation } from '../transport-operations/entities/employee-cash-obligation.entity';
@@ -244,6 +245,12 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
      */
     @Optional()
     private readonly conversationNotifier?: ConversationNotifier,
+    /*
+     * El descuento por instalar la app. Opcional y al final por la misma razon:
+     * sin el, una reserva se crea sin descuento.
+     */
+    @Optional()
+    private readonly clientBenefits?: ClientBenefitsService,
   ) {}
 
   private estimatedEnd(service: Servicios): Date | null {
@@ -468,6 +475,15 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
 
     const reserved = await this.serviciosRepository.manager.transaction(
       async (manager) => {
+        // Todo servicio nuevo pasa por aqui al guardarse: si el cliente tiene el
+        // descuento por instalar la app disponible, se le aplica en la misma
+        // transaccion que crea el servicio.
+        const guardar = async (borrador: Servicios): Promise<Servicios> => {
+          const guardado = await manager.save(Servicios, borrador);
+          return this.clientBenefits
+            ? this.clientBenefits.aplicarAlServicio(manager, guardado)
+            : guardado;
+        };
         await manager
           .getRepository(Empleadas)
           .createQueryBuilder('employee')
@@ -495,7 +511,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             fechaProgramada: scheduledDate,
             horaInicioEstimada: scheduledDate,
           });
-          return manager.save(Servicios, draft);
+          return guardar(draft);
         }
 
         const active = await manager.findOne(Servicios, {
@@ -514,7 +530,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
             },
             select: { id: true },
           });
-          return manager.save(Servicios, manager.create(Servicios, createData));
+          return guardar(manager.create(Servicios, createData));
         }
         const existing = await manager.findOne(Servicios, {
           where: [
@@ -544,7 +560,7 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
         draft.horaInicioEstimada = new Date(
           availableAt.getTime() + this.travelMinutes(active, draft) * 60_000,
         );
-        return manager.save(Servicios, draft);
+        return guardar(draft);
       },
     );
 

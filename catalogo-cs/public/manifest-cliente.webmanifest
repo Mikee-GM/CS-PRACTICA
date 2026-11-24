@@ -1,0 +1,18 @@
+{
+  "id": "/cliente",
+  "name": "Colombia Sexys",
+  "short_name": "Colombia Sexys",
+  "description": "Chatea con las modelos, revisa sus publicaciones y administra tu cuenta.",
+  "lang": "es-MX",
+  "start_url": "/chats",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#000000",
+  "theme_color": "#050505",
+  "icons": [
+    { "src": "/icono-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/logo-icono.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icono-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

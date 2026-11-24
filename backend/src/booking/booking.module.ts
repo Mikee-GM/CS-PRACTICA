@@ -7,6 +7,7 @@ import { Clientes } from '../clients/entities/client.entity';
 import { Empleadas } from '../employees/entities/employee.entity';
 import { AuthorizedBankAccounts } from '../services/entities/authorized-bank-account.entity';
 import { CustomerBookingSession } from './entities/customer-booking-session.entity';
+import { ClientBenefitsModule } from '../client-benefits/client-benefits.module';
 import { TransportOperationsModule } from '../transport-operations/transport-operations.module';
 import { BookingAiService } from './booking-ai.service';
 import { BookingService } from './booking.service';
@@ -21,6 +22,7 @@ import { BookingService } from './booking.service';
     ConfigModule,
     AiModule,
     TransportOperationsModule,
+    ClientBenefitsModule,
     TypeOrmModule.forFeature([
       Clientes,
       Empleadas,

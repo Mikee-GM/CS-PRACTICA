@@ -1,4 +1,4 @@
-import { multiplyMoney, roundMoney, sumMoney } from '../common/money';
+import { fromCents, multiplyMoney, roundMoney, sumMoney, toCents } from '../common/money';
 import type { MetodoPagoReserva } from './extractores-de-reserva';
 
 /**
@@ -17,6 +17,8 @@ export interface BorradorDeReserva {
   locationNameSnapshot?: string;
   locationAddressSnapshot?: string;
   customerTransportCharge?: number;
+  /** Descuento del cliente (por instalar la app) sobre la base; lo fija el cierre de la reserva. */
+  descuentoPorcentaje?: number;
   trioStatus?: string;
   trioSelectedEmployeeName?: string;
   trioCombinedRatePerHour?: number;
@@ -96,8 +98,23 @@ export function montoEsperadoDeTransferencia(
   const tarifaPorHora =
     borrador.trioCombinedRatePerHour ?? Number(precioBaseHora);
   const horas = borrador.duracionPactadaHoras ?? 1;
+  const base = multiplyMoney(tarifaPorHora, horas);
   return sumMoney([
-    multiplyMoney(tarifaPorHora, horas),
+    base - descuentoSobreLaBase(base, borrador.descuentoPorcentaje),
     borrador.customerTransportCharge ?? 0,
   ]);
+}
+
+/**
+ * Lo que se le quita a la base por el descuento del cliente. Es la misma cuenta
+ * que hace el trigger `calcular_total_servicio` (porcentaje de la base, a dos
+ * decimales), para que lo que se le pide transferir sea lo que luego se cobra.
+ */
+export function descuentoSobreLaBase(
+  base: number,
+  porcentaje: number | undefined,
+): number {
+  const pct = Number(porcentaje);
+  if (!Number.isFinite(pct) || pct <= 0) return 0;
+  return fromCents(Math.round((toCents(base) * Math.min(pct, 100)) / 100));
 }

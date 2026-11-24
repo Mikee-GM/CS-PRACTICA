@@ -66,18 +66,52 @@ export function consultaDeVerificacion(sql: string): string {
 export const VERIFICACIONES: DefinicionDeVerificacion[] = [
   {
     id: 'total-del-servicio',
-    titulo: 'Total del servicio igual a base, extras y transporte',
+    titulo: 'Total del servicio igual a base, extras y transporte menos el descuento',
     descripcion:
-      'El total que se cobra al cliente tiene que ser exactamente la suma de sus tres partes.',
+      'El total que se cobra al cliente tiene que ser exactamente la suma de sus tres partes menos el descuento del cliente, si lo tiene.',
     sql: `
       SELECT 'servicio ' || left(s.id::text, 8) AS referencia, s.id AS servicio_id,
-             (s.total_base + COALESCE(s.total_extras, 0) + COALESCE(s.total_transporte, 0)) AS esperado,
+             (s.total_base + COALESCE(s.total_extras, 0) + COALESCE(s.total_transporte, 0) - s.descuento_cliente) AS esperado,
              s.total_final AS real,
              'base ' || s.total_base || ' + extras ' || COALESCE(s.total_extras, 0)
-               || ' + transporte ' || COALESCE(s.total_transporte, 0) AS detalle
+               || ' + transporte ' || COALESCE(s.total_transporte, 0)
+               || ' - descuento ' || s.descuento_cliente AS detalle
       FROM servicios s
       WHERE ${SERVICIOS_DEL_PERIODO}
-        AND abs(s.total_final - (s.total_base + COALESCE(s.total_extras, 0) + COALESCE(s.total_transporte, 0))) > ${TOLERANCIA}`,
+        AND abs(s.total_final - (s.total_base + COALESCE(s.total_extras, 0) + COALESCE(s.total_transporte, 0) - s.descuento_cliente)) > ${TOLERANCIA}`,
+  },
+  {
+    id: 'descuento-del-cliente',
+    titulo: 'Descuento del cliente: importe del porcentaje y un solo servicio por beneficio',
+    descripcion:
+      'El descuento es el porcentaje de la base, y solo lo lleva un servicio que su beneficio tiene registrado: un descuento sin beneficio, o un beneficio usado en dos servicios, es dinero que se regala.',
+    sql: `
+      SELECT 'servicio ' || left(s.id::text, 8), s.id,
+             round(s.total_base * s.descuento_cliente_porcentaje / 100, 2),
+             s.descuento_cliente,
+             s.descuento_cliente_porcentaje || ' % de ' || s.total_base
+      FROM servicios s
+      WHERE ${SERVICIOS_DEL_PERIODO}
+        AND abs(s.descuento_cliente - round(s.total_base * s.descuento_cliente_porcentaje / 100, 2)) > ${TOLERANCIA}
+      UNION ALL
+      SELECT 'servicio ' || left(s.id::text, 8), s.id, 0::numeric, s.descuento_cliente,
+             'descuento sin beneficio que lo respalde'
+      FROM servicios s
+      WHERE ${SERVICIOS_DEL_PERIODO}
+        AND s.descuento_cliente_porcentaje > 0
+        AND NOT EXISTS (
+          SELECT 1 FROM beneficios_cliente b
+          WHERE b.servicio_id = s.id AND b.porcentaje = s.descuento_cliente_porcentaje)
+      UNION ALL
+      SELECT 'beneficio ' || left(b.id::text, 8), b.servicio_id, 1::numeric,
+             (SELECT count(*) FROM servicios s2
+              WHERE s2.cliente_id = b.cliente_id AND s2.descuento_cliente_porcentaje > 0
+                AND s2.estado <> 'cancelado')::numeric,
+             'servicios vivos con descuento para un mismo beneficio'
+      FROM beneficios_cliente b
+      WHERE (SELECT count(*) FROM servicios s2
+             WHERE s2.cliente_id = b.cliente_id AND s2.descuento_cliente_porcentaje > 0
+               AND s2.estado <> 'cancelado') > 1`,
   },
   {
     id: 'base-del-servicio',

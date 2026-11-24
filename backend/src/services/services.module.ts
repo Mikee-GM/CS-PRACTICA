@@ -12,6 +12,7 @@ import { ExtrasCatalogo } from '../catalog-extras/entities/catalog-extra.entity'
 import { ExtrasServicio } from '../service-extras/entities/service-extra.entity';
 import { ServiceParticipant } from '../group-services/entities/service-participant.entity';
 import { AiModule } from '../ai/ai.module';
+import { ClientBenefitsModule } from '../client-benefits/client-benefits.module';
 import { LoyaltyModule } from '../loyalty/loyalty.module';
 import { LiquidationsModule } from '../liquidations/liquidations.module';
 import { TransportOperationsModule } from '../transport-operations/transport-operations.module';
@@ -61,6 +62,7 @@ import { ServiceScheduleScheduler } from './service-schedule.scheduler';
       EmployeeCashObligation,
     ]),
     AiModule,
+    ClientBenefitsModule,
     LoyaltyModule,
     LiquidationsModule,
     TransportOperationsModule,

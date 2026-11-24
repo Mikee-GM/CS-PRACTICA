@@ -23,6 +23,7 @@ import { MailModule } from './common/mail/mail.module';
 import { ManualServicesModule } from './manual-services/manual-services.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { ApartmentsModule } from './apartments/apartments.module';
+import { ClientBenefitsModule } from './client-benefits/client-benefits.module';
 import { LoyaltyModule } from './loyalty/loyalty.module';
 import { UploadModule } from './upload/upload.module';
 import { EmployeeReportsModule } from './employee-reports/employee-reports.module';
@@ -52,6 +53,7 @@ import { ServiceFeedbackModule } from './service-feedback/service-feedback.modul
     AuthModule,
     MailModule,
     RealtimeModule,
+    ClientBenefitsModule,
     LoyaltyModule,
     ConfigModule.forRoot({
       isGlobal: true,

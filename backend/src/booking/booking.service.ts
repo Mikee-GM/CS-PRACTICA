@@ -1,4 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { ClientBenefitsService } from '../client-benefits/client-benefits.service';
+import { descuentoSobreLaBase } from './datos-de-reserva';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomUUID } from 'crypto';
@@ -208,6 +210,9 @@ export class BookingService {
     @InjectRepository(AuthorizedBankAccounts)
     private readonly cuentasRepository: Repository<AuthorizedBankAccounts>,
     private readonly configService: ConfigService,
+    // Opcional y al final: las pruebas arman este servicio a mano.
+    @Optional()
+    private readonly clientBenefits?: ClientBenefitsService,
   ) {}
 
   /**
@@ -880,6 +885,14 @@ export class BookingService {
       : undefined;
     estado.loopBreaker = clearLoopFailures();
     estado.aplazamientosSeguidos = 0;
+    // Fija el descuento al cerrar: lo que se le dice que transfiera y lo que se le
+    // cobra al aceptar el borrador tienen que ser lo mismo.
+    const descuento = this.clientBenefits
+      ? await this.clientBenefits
+          .porcentajeDisponible(t.ref.clienteId)
+          .catch(() => 0)
+      : 0;
+    estado.descuentoPorcentaje = descuento > 0 ? descuento : undefined;
 
     const borradorId = await this.guardarBorrador(t, empleada);
     estado.bookingSessionId = borradorId;
@@ -1329,11 +1342,16 @@ export function resumenDeReserva(
   if (estado.duracionIndefinida) {
     importe = `Tarifa: ${FORMATO_MONEDA.format(Number(empleada.precioBaseHora))} por hora`;
   } else {
-    const total = sumMoney([
-      multiplyMoney(empleada.precioBaseHora, estado.duracionPactadaHoras ?? 1),
-      transporte,
-    ]);
+    const base = multiplyMoney(
+      empleada.precioBaseHora,
+      estado.duracionPactadaHoras ?? 1,
+    );
+    const descuento = descuentoSobreLaBase(base, estado.descuentoPorcentaje);
+    const total = sumMoney([base - descuento, transporte]);
     importe = `Total estimado: ${FORMATO_MONEDA.format(total)}`;
+    if (descuento > 0) {
+      importe += `, con ${FORMATO_MONEDA.format(descuento)} de descuento por instalar la app`;
+    }
   }
   if (transporte > 0) {
     importe += `, con ${FORMATO_MONEDA.format(transporte)} de traslado`;

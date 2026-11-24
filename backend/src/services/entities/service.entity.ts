@@ -195,6 +195,31 @@ export class Servicios {
   @ApiProperty({ description: 'Total Final', example: 1200.0 })
   totalFinal: number;
 
+  /**
+   * Porcentaje de la base que no se cobra al cliente (beneficio por instalar la
+   * app). Lo fija `ClientBenefitsService`; el trigger calcula el importe.
+   */
+  @Column('numeric', {
+    name: 'descuento_cliente_porcentaje',
+    precision: 5,
+    scale: 2,
+    default: () => '0',
+    transformer: new ColumnNumericTransformer(),
+  })
+  @ApiProperty({ description: 'Porcentaje de descuento al cliente', example: 10 })
+  descuentoClientePorcentaje: number;
+
+  /** Importe del descuento al cliente; lo calcula el trigger sobre `total_base`. */
+  @Column('numeric', {
+    name: 'descuento_cliente',
+    precision: 10,
+    scale: 2,
+    default: () => '0',
+    transformer: new ColumnNumericTransformer(),
+  })
+  @ApiProperty({ description: 'Importe del descuento al cliente', example: 120.0 })
+  descuentoCliente: number;
+
   /** Importe original pactado, antes de extensiones, conservado historicamente. */
   @Column('numeric', {
     name: 'service_base_amount_snapshot',
