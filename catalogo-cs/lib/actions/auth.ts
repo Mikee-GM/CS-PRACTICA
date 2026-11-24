@@ -1,8 +1,10 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { applyBackendSetCookies } from "@/lib/auth-cookies";
+import { ACCESS_COOKIE, CSRF_COOKIE, REFRESH_COOKIE } from "@/lib/auth-constants";
 import {
   getBackendCookieHeader,
   getCsrfToken,
@@ -92,20 +94,38 @@ export async function loginAction(
   redirect(destino);
 }
 
+/**
+ * Cierra la sesion.
+ *
+ * Avisar al backend es lo que revoca la sesion en el servidor, pero no puede ser
+ * lo que decide si se sale: si responde con error (el token anti-CSRF no
+ * coincide, la sesion ya caduco, el backend esta caido) las cookies seguirian
+ * puestas, `/ingresar` devolveria al panel por tener cookie, y quien pulso
+ * "Cerrar sesion" se quedaria dentro sin forma de salir. Por eso las cookies se
+ * borran aqui siempre, y el aviso al backend es de mejor esfuerzo.
+ */
 export async function logoutAction() {
-  const [cookie, csrfToken] = await Promise.all([
-    getBackendCookieHeader(),
-    getCsrfToken(),
-  ]);
-  const response = await fetch(`${getApiBaseUrl()}/auth/logout`, {
-    method: "POST",
-    cache: "no-store",
-    headers: {
-      Cookie: cookie,
-      ...(csrfToken ? { "x-csrf-token": csrfToken } : {}),
-    },
-  });
-  await applyBackendSetCookies(response);
+  try {
+    const [cookie, csrfToken] = await Promise.all([
+      getBackendCookieHeader(),
+      getCsrfToken(),
+    ]);
+    const response = await fetch(`${getApiBaseUrl()}/auth/logout`, {
+      method: "POST",
+      cache: "no-store",
+      headers: {
+        Cookie: cookie,
+        ...(csrfToken ? { "x-csrf-token": csrfToken } : {}),
+      },
+    });
+    await applyBackendSetCookies(response);
+  } catch (error) {
+    console.error("No se pudo avisar al backend del cierre de sesion:", error);
+  }
+  const cookieStore = await cookies();
+  for (const nombre of [ACCESS_COOKIE, REFRESH_COOKIE, CSRF_COOKIE]) {
+    cookieStore.delete(nombre);
+  }
   return { success: true };
 }
 
