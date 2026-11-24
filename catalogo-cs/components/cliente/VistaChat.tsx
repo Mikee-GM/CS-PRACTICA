@@ -461,7 +461,7 @@ export default function VistaChat({
   );
 
   return (
-    <div ref={raizRef} className="fixed inset-x-0 top-0 flex h-dvh flex-col bg-black">
+    <div ref={raizRef} className="flex h-dvh flex-col bg-black">
       <EncabezadoAsistente modelo={conversacion.employee} status={status} canal={canal} />
 
       <div

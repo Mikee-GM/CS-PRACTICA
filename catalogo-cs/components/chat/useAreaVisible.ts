@@ -6,10 +6,15 @@ import { useEffect, useRef } from "react";
  * Ajusta un contenedor a pantalla completa al area que de verdad se ve.
  *
  * En iOS Safari el teclado no encoge el viewport del diseno: lo tapa y, para no
- * esconder el campo enfocado, desplaza la pagina. El resultado es el encabezado
- * empujado hacia abajo con un hueco negro encima y la barra de escritura cortada
- * por abajo. `visualViewport` si da el area visible: se fija el contenedor a su
- * altura y a su desplazamiento, y se impide que la pagina de atras se mueva.
+ * esconder el campo enfocado, desplaza la pagina. El resultado era el encabezado
+ * empujado hacia abajo y la barra de escritura cortada por abajo.
+ *
+ * Se arregla sin pelear con el navegador: la pagina de atras queda fija (no hay
+ * nada que desplazar) y el contenedor mide exactamente el alto visible
+ * (`visualViewport.height`), asi el campo enfocado ya esta a la vista y iOS no
+ * tiene motivo para moverlo. Una version anterior ademas movia el contenedor con
+ * `translateY` y forzaba `scrollTo(0, 0)`: iOS desplazaba para mostrar el cursor,
+ * el codigo lo deshacia, y la pantalla entraba en un bucle de bajadas.
  *
  * Sin `visualViewport` (navegadores viejos) no hace nada y vale el `h-dvh`.
  */
@@ -28,36 +33,36 @@ export function useAreaVisible<T extends HTMLElement>(alAjustar?: () => void) {
     const html = document.documentElement;
     const body = document.body;
     const previo = {
-      html: html.style.overflow,
-      body: body.style.overflow,
-      overscroll: body.style.overscrollBehavior,
+      html: html.style.cssText,
+      body: body.style.cssText,
     };
     html.style.overflow = "hidden";
-    body.style.overflow = "hidden";
-    body.style.overscrollBehavior = "none";
+    body.style.cssText +=
+      ";position:fixed;inset:0;width:100%;overflow:hidden;overscroll-behavior:none";
 
+    let alturaPrevia = -1;
     const ajustar = () => {
-      el.style.height = `${vv.height}px`;
-      el.style.transform = `translateY(${vv.offsetTop}px)`;
+      const altura = Math.round(vv.height);
+      // Una ventana oculta o recien creada puede informar 0: no es un alto real.
+      if (altura < 200 || altura === alturaPrevia) return;
+      alturaPrevia = altura;
+      el.style.height = `${altura}px`;
       // Con el teclado abierto no hay indicador de inicio debajo de la barra: el
       // relleno del area segura solo deja un hueco entre ella y el teclado.
-      const tecladoAbierto = window.innerHeight - vv.height > 120;
-      el.style.setProperty("--inset-inferior", tecladoAbierto ? "0px" : "env(safe-area-inset-bottom)");
-      // La pagina de atras no debe quedarse desplazada tras cerrar el teclado.
-      if (window.scrollY !== 0) window.scrollTo(0, 0);
+      const tecladoAbierto = window.innerHeight - altura > 120;
+      el.style.setProperty(
+        "--inset-inferior",
+        tecladoAbierto ? "0px" : "env(safe-area-inset-bottom)",
+      );
       alAjustarRef.current?.();
     };
     ajustar();
     vv.addEventListener("resize", ajustar);
-    vv.addEventListener("scroll", ajustar);
     return () => {
       vv.removeEventListener("resize", ajustar);
-      vv.removeEventListener("scroll", ajustar);
       el.style.height = "";
-      el.style.transform = "";
-      html.style.overflow = previo.html;
-      body.style.overflow = previo.body;
-      body.style.overscrollBehavior = previo.overscroll;
+      html.style.cssText = previo.html;
+      body.style.cssText = previo.body;
     };
   }, []);
 
