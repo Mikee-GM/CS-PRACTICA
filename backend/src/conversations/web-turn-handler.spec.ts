@@ -93,6 +93,13 @@ class BaseFalsa {
           delCliente.slice(desde).reverse().slice(0, limite),
         );
       }
+      if (sql.includes('WITH actualizada')) {
+        this.conversacion.status = 'en_revision';
+        return Promise.resolve([{ status: 'en_revision' }]);
+      }
+      if (sql.includes('FROM usuarios')) {
+        return Promise.resolve([{ id: 'admin-1' }]);
+      }
       return Promise.reject(new Error(`Consulta no prevista: ${sql}`));
     },
   };
@@ -134,6 +141,12 @@ describe('WebTurnHandler', () => {
   let atendidos: InboundMessage[];
   let canales: ChatChannel[];
   let handler: WebTurnHandler;
+  let notificar: jest.Mock;
+  let empleadaDeLaConversacion: {
+    id: string;
+    jefeId: string | null;
+    jefeSecundarioId: string | null;
+  };
   // Se invoca por la interfaz, como lo hace `ConversationsService`.
   let turno: ConversationTurnHandler;
 
@@ -157,6 +170,12 @@ describe('WebTurnHandler', () => {
     atendidos = [];
     canales = [];
     bookingService = { handleClientMessage: jest.fn(atender) };
+    notificar = jest.fn().mockResolvedValue(1);
+    empleadaDeLaConversacion = {
+      id: 'empleada-1',
+      jefeId: 'jefe-1',
+      jefeSecundarioId: null,
+    };
     const conversationsRepository = {
       findOne: jest.fn(() => Promise.resolve({ ...base.conversacion })),
     };
@@ -164,11 +183,14 @@ describe('WebTurnHandler', () => {
     handler = new WebTurnHandler(
       base.dataSource as any,
       conversationsRepository as any,
-      { findOne: jest.fn() } as any,
+      {
+        findOne: jest.fn(() => Promise.resolve(empleadaDeLaConversacion)),
+      } as any,
       { emitToClient: jest.fn(), emitToBosses: jest.fn() } as any,
       bookingService as any,
       base.store as any,
       config as any,
+      { notificar } as any,
     );
     handler.intervaloReintentoMs = 2;
     turno = handler;
@@ -268,6 +290,104 @@ describe('WebTurnHandler', () => {
       attachments: [
         { type: 'location', lat: 20.6, lng: -100.4, address: 'Centro' },
       ],
+    });
+  });
+
+  describe('foto o audio del cliente', () => {
+    const foto = { type: 'foto', url: 'https://x/f.jpg' } as MessageAttachment;
+
+    it('solo media: la IA no responde, avisa al jefe y pasa la conversacion al equipo', async () => {
+      await turno.onClientMessage(conversacion(), base.agregar('m1', '', foto));
+
+      expect(bookingService.handleClientMessage).not.toHaveBeenCalled();
+      expect(notificar).toHaveBeenCalledTimes(1);
+      expect(notificar).toHaveBeenCalledWith(
+        'jefe-1',
+        expect.objectContaining({
+          url: '/jefe',
+          dedupeKey: 'chat-media:m1:jefe-1',
+          requireInteraction: true,
+        }),
+      );
+      expect(base.estado).toMatchObject({
+        ultimoMensajeAtendidoId: 'm1',
+        entregadaAlEquipo: true,
+        motivoDeEntrega: 'media_del_cliente',
+      });
+      expect(base.conversacion.status).toBe('en_revision');
+    });
+
+    it('el aviso no lleva texto del cliente ni nombres', async () => {
+      await turno.onClientMessage(conversacion(), base.agregar('m1', '', foto));
+
+      const aviso = notificar.mock.calls[0][1] as {
+        titulo: string;
+        cuerpo: string;
+      };
+      expect(`${aviso.titulo} ${aviso.cuerpo}`).not.toMatch(
+        /cliente-1|empleada-1/,
+      );
+    });
+
+    it('un audio tambien pasa al equipo', async () => {
+      await turno.onClientMessage(
+        conversacion(),
+        base.agregar('m1', '', {
+          type: 'audio',
+          url: 'https://x/a.m4a',
+        } as MessageAttachment),
+      );
+
+      expect(notificar).toHaveBeenCalledTimes(1);
+      expect(base.estado?.entregadaAlEquipo).toBe(true);
+    });
+
+    it('foto con texto: la IA contesta el texto y el jefe se entera igual', async () => {
+      await turno.onClientMessage(
+        conversacion(),
+        base.agregar('m1', 'mira', foto),
+      );
+
+      expect(bookingService.handleClientMessage).toHaveBeenCalledTimes(1);
+      expect(notificar).toHaveBeenCalledTimes(1);
+      expect(base.estado?.entregadaAlEquipo).toBeUndefined();
+    });
+
+    it('un mensaje de texto no avisa a nadie', async () => {
+      await turno.onClientMessage(conversacion(), base.agregar('m1', 'hola'));
+
+      expect(notificar).not.toHaveBeenCalled();
+    });
+
+    it('avisa al jefe y al secundario, sin repetir', async () => {
+      empleadaDeLaConversacion.jefeSecundarioId = 'jefe-2';
+      await turno.onClientMessage(conversacion(), base.agregar('m1', '', foto));
+
+      expect(notificar.mock.calls.map((llamada) => llamada[0])).toEqual([
+        'jefe-1',
+        'jefe-2',
+      ]);
+    });
+
+    it('sin jefe asignado avisa a los jefes y admins activos', async () => {
+      empleadaDeLaConversacion.jefeId = null;
+      await turno.onClientMessage(conversacion(), base.agregar('m1', '', foto));
+
+      expect(notificar).toHaveBeenCalledWith('admin-1', expect.anything());
+    });
+
+    it('si el aviso push falla igual pasa al equipo', async () => {
+      notificar.mockRejectedValue(new Error('push caido'));
+      await turno.onClientMessage(conversacion(), base.agregar('m1', '', foto));
+
+      expect(base.estado?.entregadaAlEquipo).toBe(true);
+    });
+
+    it('con la conversacion en manos de una persona no se vuelve a avisar', async () => {
+      base.conversacion.mode = 'HUMAN_ACTIVE';
+      await turno.onClientMessage(conversacion(), base.agregar('m1', '', foto));
+
+      expect(notificar).not.toHaveBeenCalled();
     });
   });
 

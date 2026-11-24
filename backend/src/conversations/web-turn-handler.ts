@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
@@ -22,6 +22,7 @@ import { Conversation } from './entities/conversation.entity';
 import { MessageAttachment } from './entities/message.entity';
 import { WebBookingStateStore } from './web-booking-state.store';
 import { esperar, WebChatChannel } from './web-chat-channel';
+import { NotificationsService } from '../notifications/notifications.service';
 
 /** Mensajes del cliente que se atienden juntos, como mucho, en un turno. */
 /**
@@ -76,6 +77,10 @@ export class WebTurnHandler implements ConversationTurnHandler {
     private readonly bookingService: BookingService,
     private readonly store: WebBookingStateStore,
     configService: ConfigService,
+    // Opcional y al final: las pruebas arman este manejador a mano y sin el no
+    // hay aviso push, pero el pase de control al equipo sigue ocurriendo.
+    @Optional()
+    private readonly notificaciones?: NotificationsService,
   ) {
     this.debounceMs = milisegundos(
       configService.get<number>('WEB_CHAT_DEBOUNCE_MS'),
@@ -170,9 +175,27 @@ export class WebTurnHandler implements ConversationTurnHandler {
       // seria inventar. Se marcan atendidos y no se contesta nada: el equipo los
       // recibe como cualquier mensaje y responde como la modelo. Un aviso del
       // tipo "recibimos tu archivo" rompe la conversacion.
+      const conMedia = pendientes.filter(llevaMedia);
+      if (conMedia.length > 0) {
+        await this.avisarAJefesDeMedia(
+          conversation,
+          conMedia[conMedia.length - 1].id,
+        );
+      }
       if (pendientes.every(esSoloMedia)) {
-        await this.marcarAtendidos(ref, cargado, pendientes);
-        canal.terminarTyping(ref);
+        // Pasa al equipo: la IA calla hasta que el jefe devuelva el control, y
+        // la conversacion queda marcada para que la vea en su bandeja.
+        await this.marcarAtendidos(ref, cargado, pendientes, true);
+        try {
+          await canal.notificarAlEquipo(ref, {
+            motivo: 'media_del_cliente',
+            detalle:
+              'El cliente envio una foto o un audio que la IA no puede revisar.',
+            bookingSessionId: cargado?.state.bookingSessionId ?? null,
+          });
+        } finally {
+          canal.terminarTyping(ref);
+        }
         continue;
       }
       try {
@@ -230,13 +253,66 @@ export class WebTurnHandler implements ConversationTurnHandler {
     return filas.reverse();
   }
 
+  /**
+   * Aviso push a los jefes de la modelo de que el cliente mando una foto o un
+   * audio. Sin texto del cliente ni de la modelo: se lee en la pantalla de
+   * bloqueo. Nunca lanza: el pase de control no depende de que llegue el aviso.
+   */
+  private async avisarAJefesDeMedia(
+    conversation: Conversation,
+    ultimoMensajeId: string,
+  ): Promise<void> {
+    if (!this.notificaciones) return;
+    try {
+      const jefes = await this.jefesDeLaModelo(conversation.employeeId);
+      await Promise.allSettled(
+        jefes.map((jefeId) =>
+          this.notificaciones!.notificar(jefeId, {
+            titulo: 'Un cliente te escribio',
+            cuerpo: 'Mando una foto o un audio. Toca para responder.',
+            url: '/jefe',
+            tag: `chat-${conversation.id}`,
+            requireInteraction: true,
+            relatedEntityId: conversation.id,
+            dedupeKey: `chat-media:${ultimoMensajeId}:${jefeId}`,
+          }),
+        ),
+      );
+    } catch (error) {
+      this.logger.warn(
+        `No se pudo avisar a los jefes de la conversacion ${conversation.id}: ${describeError(error)}`,
+      );
+    }
+  }
+
+  /** Los jefes de la modelo; sin ninguno, todos los jefes y admins activos. */
+  private async jefesDeLaModelo(empleadaId: string): Promise<string[]> {
+    const modelo = await this.empleadasRepository.findOne({
+      where: { id: empleadaId },
+      select: { id: true, jefeId: true, jefeSecundarioId: true },
+    });
+    const propios = [modelo?.jefeId, modelo?.jefeSecundarioId].filter(
+      (id): id is string => Boolean(id),
+    );
+    if (propios.length > 0) return [...new Set(propios)];
+    const filas: Array<{ id: string }> = await this.dataSource.query(
+      `SELECT id FROM usuarios WHERE rol IN ('jefe', 'admin') AND activo = true`,
+    );
+    return filas.map((fila) => fila.id);
+  }
+
   private async marcarAtendidos(
     ref: ConversationRef,
     cargado: Awaited<ReturnType<WebBookingStateStore['load']>>,
     pendientes: FilaPendiente[],
+    entregarAlEquipo = false,
   ): Promise<void> {
     const estado = cargado?.state ?? estadoInicial();
     estado.ultimoMensajeAtendidoId = pendientes[pendientes.length - 1].id;
+    if (entregarAlEquipo) {
+      estado.entregadaAlEquipo = true;
+      estado.motivoDeEntrega = 'media_del_cliente';
+    }
     try {
       await this.store.save(ref, estado, cargado?.version ?? 0);
     } catch (error) {
@@ -251,6 +327,12 @@ export class WebTurnHandler implements ConversationTurnHandler {
 function esSoloMedia(fila: FilaPendiente): boolean {
   const tipo = fila.attachment?.type;
   return (tipo === 'foto' || tipo === 'audio') && !(fila.body ?? '').trim();
+}
+
+/** Una foto o un audio, con o sin texto: lo que la IA no puede revisar. */
+function llevaMedia(fila: FilaPendiente): boolean {
+  const tipo = fila.attachment?.type;
+  return tipo === 'foto' || tipo === 'audio';
 }
 
 function refDe(conversation: Conversation): ConversationRef {

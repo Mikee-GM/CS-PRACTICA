@@ -126,7 +126,8 @@ export type MotivoDeAvisoAlEquipo =
   | 'conversacion_atascada'
   | 'peticion_prohibida'
   | 'cancelacion_solicitada'
-  | 'comprobante_recibido';
+  | 'comprobante_recibido'
+  | 'media_del_cliente';
 
 export interface AvisoAlEquipo {
   motivo: MotivoDeAvisoAlEquipo;

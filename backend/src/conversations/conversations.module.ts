@@ -9,6 +9,7 @@ import { PaymentReceiptValidations } from '../services/entities/payment-receipt-
 import { Servicios } from '../services/entities/service.entity';
 import { ServicesModule } from '../services/services.module';
 import { CustomerBookingSession } from '../booking/entities/customer-booking-session.entity';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { UploadModule } from '../upload/upload.module';
 import { StaffConversationsController } from './staff-conversations.controller';
 import { StaffConversationsService } from './staff-conversations.service';
@@ -44,6 +45,8 @@ import { WebTurnHandler } from './web-turn-handler';
     BookingModule,
     AiModule,
     UploadModule,
+    // El aviso push al jefe cuando el cliente manda una foto o un audio.
+    NotificationsModule,
     // Aceptar el borrador crea el servicio con `ServicesService`. Sin ciclo:
     // `ServicesModule` importa el notificador, no este modulo.
     ServicesModule,
