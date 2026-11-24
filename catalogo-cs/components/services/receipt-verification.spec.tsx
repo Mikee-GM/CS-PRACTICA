@@ -26,10 +26,13 @@ beforeEach(() => {
     },
   ]);
   jest.mocked(confirmReceiptCep).mockResolvedValue({
-    id: "receipt-1",
-    servicioId: "service-1",
-    pagoConfirmadoAt: "2026-10-16T12:00:00.000Z",
-    createdAt: "2026-10-16T11:00:00.000Z",
+    ok: true,
+    data: {
+      id: "receipt-1",
+      servicioId: "service-1",
+      pagoConfirmadoAt: "2026-10-16T12:00:00.000Z",
+      createdAt: "2026-10-16T11:00:00.000Z",
+    },
   });
 });
 

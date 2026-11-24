@@ -80,6 +80,7 @@ import { getServiceByIdAction } from "@/lib/data/services";
 import ServiceDetailDialog from "@/components/services/service-detail-dialog";
 import type { Service } from "@/lib/types";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
+import { desenvolver } from "@/lib/resultado-accion";
 
 interface Props {
   initialOverview: GodEyeOverview;
@@ -513,7 +514,7 @@ export default function GodEyeDashboard({
           ? new Date(Date.now() + sanctionHours * 3600000).toISOString()
           : undefined;
 
-      await createSanction({
+      await desenvolver(createSanction({
         subjectType: actorTab as any,
         subjectId: selectedActorId,
         type: sanctionType,
@@ -521,7 +522,7 @@ export default function GodEyeDashboard({
         fineAmount: sanctionType === "fine" ? Number(sanctionFineAmount) : undefined,
         startsAt,
         endsAt,
-      });
+      }));
 
       setShowSanctionModal(false);
       setSanctionReason("");
@@ -573,7 +574,7 @@ export default function GodEyeDashboard({
     if (!revokingSanctionId || !revokeReason.trim()) return;
     setIsRevoking(true);
     try {
-      await revokeSanction(revokingSanctionId, revokeReason);
+      await desenvolver(revokeSanction(revokingSanctionId, revokeReason));
       notify("Sanción revocada con éxito");
       setShowRevokeModal(false);
       setRevokeReason("");
@@ -592,7 +593,7 @@ export default function GodEyeDashboard({
     decision: "upheld" | "overturned",
   ) => {
     try {
-      await resolveAppeal(appealId, decision);
+      await desenvolver(resolveAppeal(appealId, decision));
       notify(
         decision === "overturned"
           ? "Apelación aprobada (calificación anulada)"

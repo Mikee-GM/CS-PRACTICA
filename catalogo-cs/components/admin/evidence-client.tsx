@@ -8,6 +8,7 @@ import { formatCurrency } from "@/lib/calculations";
 import type { EvidenceItem, EvidencePage } from "@/lib/types";
 import ReceiptVerification from "@/components/services/receipt-verification";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
+import { desenvolver } from "@/lib/resultado-accion";
 
 const inputClass =
   "rounded-xl border border-zinc-800 bg-black px-4 py-3 text-sm text-white outline-none focus:border-[#C5A55A]";
@@ -113,7 +114,7 @@ function EvidenceCard({
 
   async function review(decision: "aprobado" | "rechazado") {
     try {
-      await reviewGroupReceipt(item.id, decision);
+      await desenvolver(reviewGroupReceipt(item.id, decision));
       toast.success(decision === "aprobado" ? "Foto revisada; falta confirmar el pago" : "Comprobante rechazado");
       onReviewed();
     } catch (error) {

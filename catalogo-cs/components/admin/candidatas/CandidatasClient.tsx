@@ -15,6 +15,7 @@ import {
 import { enlaceDeEvaluacion } from "@/lib/candidata";
 import type { CandidateScreening, ScreeningQuestion } from "@/lib/types";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
+import { desenvolver } from "@/lib/resultado-accion";
 
 const STATUS_LABEL: Record<CandidateScreening["status"], string> = {
   pendiente: "Pendiente",
@@ -105,10 +106,10 @@ export default function CandidatasClient({
 
     setSavingQuestion(true);
     try {
-      const question = await createScreeningQuestion({
+      const question = await desenvolver(createScreeningQuestion({
         text: newQuestionText.trim(),
         options: optionsToSave,
-      });
+      }));
       setQuestions((prev) => [...prev, question]);
       setSelectedQuestionIds((prev) => new Set(prev).add(question.id));
       setNewQuestionText("");
@@ -127,9 +128,9 @@ export default function CandidatasClient({
 
   const handleToggleQuestionActive = async (question: ScreeningQuestion) => {
     try {
-      const updated = await updateScreeningQuestion(question.id, {
+      const updated = await desenvolver(updateScreeningQuestion(question.id, {
         active: !question.active,
-      });
+      }));
       setQuestions((prev) => prev.map((q) => (q.id === updated.id ? updated : q)));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "No se pudo actualizar la pregunta");
@@ -138,7 +139,7 @@ export default function CandidatasClient({
 
   const handleDeleteQuestion = async (id: string) => {
     try {
-      await deleteScreeningQuestion(id);
+      await desenvolver(deleteScreeningQuestion(id));
       setQuestions((prev) => prev.filter((q) => q.id !== id));
       setSelectedQuestionIds((prev) => {
         const next = new Set(prev);
@@ -171,11 +172,11 @@ export default function CandidatasClient({
     }
     setCreating(true);
     try {
-      const screening = await createCandidateScreening({
+      const screening = await desenvolver(createCandidateScreening({
         candidateName: candidateName.trim(),
         candidatePhone: candidatePhone.trim() || undefined,
         questionIds: [...selectedQuestionIds],
-      });
+      }));
       setScreenings((prev) => [screening, ...prev]);
       setGeneratedLink(enlaceDeEvaluacion(window.location.origin, screening.token));
       toast.success("Evaluación creada");

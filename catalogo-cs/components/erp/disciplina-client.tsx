@@ -43,6 +43,7 @@ import {
   type RatingAppeal,
   type RatingDirection,
 } from "@/lib/actions/discipline";
+import { desenvolver } from "@/lib/resultado-accion";
 
 /**
  * Panel disciplinario.
@@ -455,7 +456,7 @@ export default function DisciplinaClient({
     const { report, outcome } = closeReportData;
     startTransition(async () => {
       try {
-        await closeConductReport(report.id, outcome, resolution);
+        await desenvolver(closeConductReport(report.id, outcome, resolution));
         toast.success("Reporte cerrado");
         setCloseReportData(null);
         window.location.reload();
@@ -479,14 +480,14 @@ export default function DisciplinaClient({
 
     startTransition(async () => {
       try {
-        await createSanction({
+        await desenvolver(createSanction({
           subjectType: dossier.subjectType,
           subjectId: dossier.subjectId,
           type,
           reason,
           startsAt: startsAt.toISOString(),
           endsAt,
-        });
+        }));
         toast.success("Sancion aplicada");
         setSanctionData(null);
         setSelected(await getDossier(dossier.subjectType, dossier.subjectId));
@@ -515,13 +516,13 @@ export default function DisciplinaClient({
     const { subjectType, subjectId } = fineDossier;
     startTransition(async () => {
       try {
-        await createSanction({
+        await desenvolver(createSanction({
           subjectType,
           subjectId,
           type: "fine",
           reason: fineReason.trim(),
           fineAmount: monto,
-        });
+        }));
         toast.success("Multa aplicada");
         setFineDossier(null);
         setFineAmount("");
@@ -542,7 +543,7 @@ export default function DisciplinaClient({
     const { item, dossier } = revokeData;
     startTransition(async () => {
       try {
-        await revokeSanction(item.id, reason);
+        await desenvolver(revokeSanction(item.id, reason));
         toast.success("Sancion revocada");
         setRevokeData(null);
         setSelected(await getDossier(dossier.subjectType, dossier.subjectId));
@@ -574,14 +575,14 @@ export default function DisciplinaClient({
     const { subjectType, subjectId } = customSuspensionDossier;
     startTransition(async () => {
       try {
-        await createSanction({
+        await desenvolver(createSanction({
           subjectType,
           subjectId,
           type: "suspension",
           reason: customReason.trim(),
           startsAt: inicio.toISOString(),
           endsAt: fin.toISOString(),
-        });
+        }));
         toast.success("Suspension programada");
         setCustomSuspensionDossier(null);
         setCustomStartsAt("");
@@ -604,7 +605,7 @@ export default function DisciplinaClient({
   ) {
     startTransition(async () => {
       try {
-        await resolveAppeal(appeal.id, decision);
+        await desenvolver(resolveAppeal(appeal.id, decision));
         setAppeals((prev) => prev.filter((item) => item.id !== appeal.id));
         toast.success(
           decision === "upheld"

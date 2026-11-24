@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { apiFetch } from "@/lib/api-server";
+import { ejecutarAccion } from "@/lib/ejecutar-accion";
+import type { ResultadoAccion } from "@/lib/resultado-accion";
 import type { EmployeeRatingComment } from "@/lib/types";
 
 export type PersonType = "client" | "employee" | "driver" | "boss";
@@ -162,13 +164,15 @@ export async function closeConductReport(
   id: string,
   outcome: "confirmado" | "no_sustentado",
   resolution: string,
-) {
-  await apiFetch(`/discipline/reports/${id}/close`, {
-    method: "POST",
-    body: JSON.stringify({ outcome, resolution }),
-  });
-  revalidatePath("/admin/reports");
-  revalidatePath("/jefe/reportes");
+): Promise<ResultadoAccion<void>> {
+  return ejecutarAccion(async () => {
+    await apiFetch(`/discipline/reports/${id}/close`, {
+      method: "POST",
+      body: JSON.stringify({ outcome, resolution }),
+    });
+    revalidatePath("/admin/reports");
+    revalidatePath("/jefe/reportes");
+  }, "No se pudo cerrar el reporte.");
 }
 
 export async function createSanction(input: {
@@ -180,20 +184,27 @@ export async function createSanction(input: {
   conductReportId?: string;
   startsAt?: string;
   endsAt?: string;
-}) {
-  await apiFetch("/discipline/sanctions", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
-  revalidatePath("/admin/reports");
+}): Promise<ResultadoAccion<void>> {
+  return ejecutarAccion(async () => {
+    await apiFetch("/discipline/sanctions", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    revalidatePath("/admin/reports");
+  }, "No se pudo aplicar la sancion.");
 }
 
-export async function revokeSanction(id: string, reason: string) {
-  await apiFetch(`/discipline/sanctions/${id}/revoke`, {
-    method: "POST",
-    body: JSON.stringify({ reason }),
-  });
-  revalidatePath("/admin/reports");
+export async function revokeSanction(
+  id: string,
+  reason: string,
+): Promise<ResultadoAccion<void>> {
+  return ejecutarAccion(async () => {
+    await apiFetch(`/discipline/sanctions/${id}/revoke`, {
+      method: "POST",
+      body: JSON.stringify({ reason }),
+    });
+    revalidatePath("/admin/reports");
+  }, "No se pudo revocar la sancion.");
 }
 
 export async function getPendingAppeals() {
@@ -203,10 +214,12 @@ export async function getPendingAppeals() {
 export async function resolveAppeal(
   id: string,
   decision: "upheld" | "overturned",
-) {
-  await apiFetch(`/discipline/appeals/${id}/resolve`, {
-    method: "POST",
-    body: JSON.stringify({ decision }),
-  });
-  revalidatePath("/admin/reports");
+): Promise<ResultadoAccion<void>> {
+  return ejecutarAccion(async () => {
+    await apiFetch(`/discipline/appeals/${id}/resolve`, {
+      method: "POST",
+      body: JSON.stringify({ decision }),
+    });
+    revalidatePath("/admin/reports");
+  }, "No se pudo resolver la apelacion.");
 }

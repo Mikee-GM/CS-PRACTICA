@@ -9,6 +9,7 @@ import {
   getReceiptBankAccounts,
   type ReceiptBankAccount,
 } from "@/lib/actions/evidence";
+import { desenvolver } from "@/lib/resultado-accion";
 
 export type ReceiptVerificationInfo = {
   id: string;
@@ -100,18 +101,18 @@ export default function ReceiptVerification({
     }
     startTransition(async () => {
       try {
-        const result = await confirmReceiptCep(receipt.id, {
+        const result = await desenvolver(confirmReceiptCep(receipt.id, {
           claveRastreo: trackingKey.trim(),
           fechaTransferencia: transferDate,
           bancoOrigen: originBank.trim(),
           cuentaDestinoId: accountId,
           monto: parsedAmount,
-        });
+        }));
         setConfirmedAt(result.pagoConfirmadoAt ?? new Date().toISOString());
         toast.success("Consulta del CEP registrada");
         if (receipt.serviceType === "grupal" && receipt.serviceId) {
           try {
-            await applyConfirmedGroupReceipt(receipt.serviceId, receipt.id, parsedAmount);
+            await desenvolver(applyConfirmedGroupReceipt(receipt.serviceId, receipt.id, parsedAmount));
             setGroupApplied(true);
             toast.success("Pago aplicado al servicio grupal");
           } catch {
@@ -131,7 +132,7 @@ export default function ReceiptVerification({
     if (!receipt.serviceId) return;
     startTransition(async () => {
       try {
-        await applyConfirmedGroupReceipt(receipt.serviceId!, receipt.id, Number(amount));
+        await desenvolver(applyConfirmedGroupReceipt(receipt.serviceId!, receipt.id, Number(amount)));
         setGroupApplied(true);
         onConfirmed?.();
         toast.success("Pago aplicado al servicio grupal");

@@ -9,6 +9,7 @@ import { createEmployeeAction } from "@/lib/actions/registro";
 import { promoteCandidateScreening } from "@/lib/actions/candidate-screening";
 import type { CandidateScreening } from "@/lib/types";
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
+import { desenvolver } from "@/lib/resultado-accion";
 
 const STATUS_LABEL: Record<CandidateScreening["status"], string> = {
   pendiente: "Pendiente",
@@ -75,7 +76,7 @@ export default function CandidateDetailClient({
         toast.error(result.error || "No se pudo registrar a la empleada");
         return;
       }
-      await promoteCandidateScreening(screening.id, result.data.id);
+      await desenvolver(promoteCandidateScreening(screening.id, result.data.id));
       toast.success("Empleada registrada correctamente");
       router.refresh();
     } catch (error) {

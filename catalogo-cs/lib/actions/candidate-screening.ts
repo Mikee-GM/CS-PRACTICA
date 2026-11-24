@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { apiFetch } from "@/lib/api-server";
+import { ejecutarAccion } from "@/lib/ejecutar-accion";
+import type { ResultadoAccion } from "@/lib/resultado-accion";
 import type {
   CandidateScreening,
   CandidateScreeningStatus,
@@ -14,14 +16,16 @@ export async function getScreeningQuestions() {
 
 export async function createScreeningQuestion(
   data: string | { text: string; options?: Array<{ text: string; isCorrect?: boolean }> },
-) {
+): Promise<ResultadoAccion<ScreeningQuestion>> {
   const payload = typeof data === "string" ? { text: data } : data;
-  const question = await apiFetch<ScreeningQuestion>(
-    "/candidate-screening/questions",
-    { method: "POST", body: JSON.stringify(payload) },
-  );
-  revalidatePath("/admin/candidatas");
-  return question;
+  return ejecutarAccion(async () => {
+    const question = await apiFetch<ScreeningQuestion>(
+      "/candidate-screening/questions",
+      { method: "POST", body: JSON.stringify(payload) },
+    );
+    revalidatePath("/admin/candidatas");
+    return question;
+  }, "No se pudo agregar la pregunta.");
 }
 
 export async function updateScreeningQuestion(
@@ -31,29 +35,39 @@ export async function updateScreeningQuestion(
     active?: boolean;
     options?: Array<{ text: string; isCorrect?: boolean }>;
   },
-) {
-  const question = await apiFetch<ScreeningQuestion>(
-    `/candidate-screening/questions/${id}`,
-    { method: "PATCH", body: JSON.stringify(data) },
-  );
-  revalidatePath("/admin/candidatas");
-  return question;
+): Promise<ResultadoAccion<ScreeningQuestion>> {
+  return ejecutarAccion(async () => {
+    const question = await apiFetch<ScreeningQuestion>(
+      `/candidate-screening/questions/${id}`,
+      { method: "PATCH", body: JSON.stringify(data) },
+    );
+    revalidatePath("/admin/candidatas");
+    return question;
+  }, "No se pudo actualizar la pregunta.");
 }
 
-export async function deleteScreeningQuestion(id: string) {
-  await apiFetch<void>(`/candidate-screening/questions/${id}`, {
-    method: "DELETE",
-  });
-  revalidatePath("/admin/candidatas");
+export async function deleteScreeningQuestion(
+  id: string,
+): Promise<ResultadoAccion<void>> {
+  return ejecutarAccion(async () => {
+    await apiFetch<void>(`/candidate-screening/questions/${id}`, {
+      method: "DELETE",
+    });
+    revalidatePath("/admin/candidatas");
+  }, "No se pudo eliminar la pregunta.");
 }
 
-export async function reorderScreeningQuestions(questionIds: string[]) {
-  const questions = await apiFetch<ScreeningQuestion[]>(
-    "/candidate-screening/questions/reorder",
-    { method: "POST", body: JSON.stringify({ questionIds }) },
-  );
-  revalidatePath("/admin/candidatas");
-  return questions;
+export async function reorderScreeningQuestions(
+  questionIds: string[],
+): Promise<ResultadoAccion<ScreeningQuestion[]>> {
+  return ejecutarAccion(async () => {
+    const questions = await apiFetch<ScreeningQuestion[]>(
+      "/candidate-screening/questions/reorder",
+      { method: "POST", body: JSON.stringify({ questionIds }) },
+    );
+    revalidatePath("/admin/candidatas");
+    return questions;
+  }, "No se pudo reordenar las preguntas.");
 }
 
 export async function getCandidateScreenings(status?: CandidateScreeningStatus) {
@@ -69,21 +83,28 @@ export async function createCandidateScreening(data: {
   candidateName: string;
   candidatePhone?: string;
   questionIds: string[];
-}) {
-  const screening = await apiFetch<CandidateScreening>("/candidate-screening", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-  revalidatePath("/admin/candidatas");
-  return screening;
+}): Promise<ResultadoAccion<CandidateScreening>> {
+  return ejecutarAccion(async () => {
+    const screening = await apiFetch<CandidateScreening>("/candidate-screening", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+    revalidatePath("/admin/candidatas");
+    return screening;
+  }, "No se pudo crear la evaluacion.");
 }
 
-export async function promoteCandidateScreening(id: string, employeeId: string) {
-  const screening = await apiFetch<CandidateScreening>(
-    `/candidate-screening/${id}/promote`,
-    { method: "PATCH", body: JSON.stringify({ employeeId }) },
-  );
-  revalidatePath("/admin/candidatas");
-  revalidatePath(`/admin/candidatas/${id}`);
-  return screening;
+export async function promoteCandidateScreening(
+  id: string,
+  employeeId: string,
+): Promise<ResultadoAccion<CandidateScreening>> {
+  return ejecutarAccion(async () => {
+    const screening = await apiFetch<CandidateScreening>(
+      `/candidate-screening/${id}/promote`,
+      { method: "PATCH", body: JSON.stringify({ employeeId }) },
+    );
+    revalidatePath("/admin/candidatas");
+    revalidatePath(`/admin/candidatas/${id}`);
+    return screening;
+  }, "No se pudo asociar la candidata a la empleada.");
 }

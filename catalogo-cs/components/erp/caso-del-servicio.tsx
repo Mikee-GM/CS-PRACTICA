@@ -25,6 +25,7 @@ import {
   type RatingAppeal,
   type RatingDirection,
 } from "@/lib/actions/discipline";
+import { desenvolver } from "@/lib/resultado-accion";
 
 /**
  * El caso de un servicio.
@@ -187,7 +188,7 @@ export default function CasoDelServicioPanel({
     const { report, outcome } = cierre;
     startTransition(async () => {
       try {
-        await closeConductReport(report.id, outcome, resolution);
+        await desenvolver(closeConductReport(report.id, outcome, resolution));
         setCierre(null);
         toast.success(
           outcome === "confirmado"
@@ -207,7 +208,7 @@ export default function CasoDelServicioPanel({
   ) => {
     startTransition(async () => {
       try {
-        await resolveAppeal(rating.id, decision);
+        await desenvolver(resolveAppeal(rating.id, decision));
         toast.success(
           decision === "overturned"
             ? "Calificacion anulada"

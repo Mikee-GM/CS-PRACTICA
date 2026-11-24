@@ -1,6 +1,8 @@
 "use server";
 
 import { apiFetch } from "@/lib/api-server";
+import { ejecutarAccion } from "@/lib/ejecutar-accion";
+import type { ResultadoAccion } from "@/lib/resultado-accion";
 import type { EvidencePage, PaymentReceiptValidation } from "@/lib/types";
 
 export type ReceiptBankAccount = {
@@ -27,10 +29,14 @@ export async function getReceiptBankAccounts(): Promise<ReceiptBankAccount[]> {
 export async function confirmReceiptCep(
   validationId: string,
   input: ConfirmReceiptCepInput,
-): Promise<PaymentReceiptValidation> {
-  return apiFetch<PaymentReceiptValidation>(
-    `/services/receipts/${validationId}/confirm-cep`,
-    { method: "PATCH", body: JSON.stringify(input) },
+): Promise<ResultadoAccion<PaymentReceiptValidation>> {
+  return ejecutarAccion(
+    () =>
+      apiFetch<PaymentReceiptValidation>(
+        `/services/receipts/${validationId}/confirm-cep`,
+        { method: "PATCH", body: JSON.stringify(input) },
+      ),
+    "No se pudo confirmar el comprobante.",
   );
 }
 
@@ -38,11 +44,15 @@ export async function applyConfirmedGroupReceipt(
   serviceId: string,
   validationId: string,
   amount: number,
-) {
-  return apiFetch(`/group-services/services/${serviceId}/payments`, {
-    method: "POST",
-    body: JSON.stringify({ amount, receiptValidationId: validationId }),
-  });
+): Promise<ResultadoAccion<unknown>> {
+  return ejecutarAccion(
+    () =>
+      apiFetch(`/group-services/services/${serviceId}/payments`, {
+        method: "POST",
+        body: JSON.stringify({ amount, receiptValidationId: validationId }),
+      }),
+    "No se pudo aplicar el pago del comprobante.",
+  );
 }
 
 export async function getEvidence(params?: {
@@ -84,9 +94,13 @@ export async function reviewGroupReceipt(
   validationId: string,
   decision: "aprobado" | "rechazado",
   reason?: string,
-) {
-  return apiFetch(`/group-services/receipts/${validationId}/review`, {
-    method: "PATCH",
-    body: JSON.stringify({ decision, reason }),
-  });
+): Promise<ResultadoAccion<unknown>> {
+  return ejecutarAccion(
+    () =>
+      apiFetch(`/group-services/receipts/${validationId}/review`, {
+        method: "PATCH",
+        body: JSON.stringify({ decision, reason }),
+      }),
+    "No se pudo revisar el comprobante.",
+  );
 }

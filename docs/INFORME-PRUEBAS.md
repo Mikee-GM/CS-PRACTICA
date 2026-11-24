@@ -17,8 +17,8 @@ con los datos de demostración (`pnpm local:demo`), navegador Chrome y `curl`.
 | Vista móvil (390 px), 16 páginas | 0 con desbordamiento horizontal |
 | Matriz de permisos (85 GET x 5 identidades) | Coherente; 1 fallo (500) corregido |
 | Barrido de rutas que escriben (220 x 2 cuerpos) | 1 fallo (500) corregido |
-| Hallazgos corregidos | 18 |
-| Hallazgos abiertos | 8 (ninguno crítico) |
+| Hallazgos corregidos | 19 |
+| Hallazgos abiertos | 7 (ninguno crítico) |
 
 El lint no se pudo usar como señal: en Windows da 27.028 errores, todos de
 `prettier` por los saltos de línea CRLF, ninguno de código.
@@ -71,6 +71,7 @@ que se pinta como enlace y validación con ids reales.
 | 16 | Baja | `PATCH /clients/:id` y `PATCH /employees/:id` con cuerpo vacío (o solo `fotosExtra`) daban 500: mismo error de TypeORM que el hallazgo 1. | No ejecutar el update vacío. |
 | 17 | Baja | Registrar un extra en el servicio de otra empleada daba 409 o 403 según el estado del servicio, lo que revelaba si estaba en curso. | Se comprueba primero quién eres. |
 | 18 | Media (UX) | Un error del backend al guardar una modelo mostraba «An error occurred in the Server Components render…» en inglés y sin decir qué campo falló: Next oculta el texto de las excepciones de Server Actions en producción. | `create`, `update` y `delete` de modelos devuelven `{ ok, error }`; el usuario ve el motivo en español y el modal sigue abierto. |
+| 19 | Media (UX) | Las otras 13 acciones que modifican datos (candidatas, disciplina y evidencias) tenían el mismo problema que la 18. | Devuelven el motivo en español con `ejecutarAccion` y `desenvolver`; 20 llamadas adaptadas sin tocar sus `try/catch`. Las lecturas y el flujo público de la candidata ya manejaban sus errores y no se tocaron. |
 
 ### Resultados que salieron bien
 
@@ -96,7 +97,6 @@ que se pinta como enlace y validación con ids reales.
 | # | Gravedad | Hallazgo | Sugerencia |
 |---|---|---|---|
 | J | Baja | `montoCobrado` de una solicitud de servicio manual no tiene tope (acepté 99.999.999). Pasa por aprobación del jefe. | Un máximo razonable. |
-| K | Media (UX) | Nueve archivos de acciones del frontend (unas 35 acciones: disciplina, candidatas, evidencias, onboarding, posts, retos, candidata pública, directorio y diseño del panel) siguen lanzando excepciones, y mostrarán el mismo texto genérico en inglés que tenía el hallazgo 18. | Migrarlas al patrón `{ ok, error }` como ya hicieron 24 de 36. |
 
 ## Qué se probó
 
