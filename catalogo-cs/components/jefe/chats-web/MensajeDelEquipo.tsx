@@ -1,6 +1,7 @@
 import { MapPin, Receipt } from "lucide-react";
 
 import { ItemMensaje } from "@/components/chat/animaciones";
+import ReproductorDeAudio from "@/components/chat/ReproductorDeAudio";
 
 import {
   enlaceAlMapa,
@@ -124,7 +125,20 @@ function Adjunto({
     );
   }
 
-  const titulo = adjunto.type === "comprobante" ? "Comprobante de pago" : "Foto";
+  if (adjunto.type === "audio" && adjunto.url) {
+    return (
+      <div className="mb-1">
+        <ReproductorDeAudio url={adjunto.url} durationMs={adjunto.durationMs} />
+      </div>
+    );
+  }
+
+  const titulo =
+    adjunto.type === "comprobante"
+      ? "Comprobante de pago"
+      : adjunto.type === "audio"
+        ? "Nota de voz"
+        : "Foto";
   if (!adjunto.url) {
     return (
       <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-[#E8D5A3]">

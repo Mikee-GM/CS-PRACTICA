@@ -19,11 +19,13 @@ export type MessageSender = (typeof MESSAGE_SENDERS)[number];
  * (la validacion del comprobante) tiene su propia columna con llave foranea.
  */
 export type MessageAttachment = {
-  type: 'comprobante' | 'foto' | 'ubicacion';
+  type: 'comprobante' | 'foto' | 'audio' | 'ubicacion';
   /** Clave o URL del archivo en R2; ausente en `ubicacion`. */
   url?: string;
   mimeType?: string;
   sizeBytes?: number;
+  /** Solo `audio`: lo que dura la nota de voz, en milisegundos. */
+  durationMs?: number;
   /** Solo `ubicacion`. */
   lat?: number;
   lng?: number;

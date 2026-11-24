@@ -35,6 +35,7 @@ describe('StaffConversationsController: guards y roles por ruta', () => {
     takeOver: [RequestMethod.POST, ':id/take-over'],
     release: [RequestMethod.POST, ':id/release'],
     sendMessage: [RequestMethod.POST, ':id/messages'],
+    sendMedia: [RequestMethod.POST, ':id/media'],
     accept: [RequestMethod.POST, ':id/accept'],
     reject: [RequestMethod.POST, ':id/reject'],
   };
@@ -46,7 +47,7 @@ describe('StaffConversationsController: guards y roles por ruta', () => {
     ).toBe('staff/conversations');
   });
 
-  it('expone exactamente las siete rutas del equipo', () => {
+  it('expone exactamente las ocho rutas del equipo', () => {
     expect(rutas.map((r) => r.nombre).sort()).toEqual([...NOMBRES].sort());
   });
 

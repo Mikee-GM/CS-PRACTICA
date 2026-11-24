@@ -51,8 +51,9 @@ export type ConversacionDelEquipo = {
 /** Mensaje visto por el equipo: el pin trae coordenadas y el comprobante su validacion. */
 export type MensajeParaElEquipo = Omit<MensajeDelChat, "attachment"> & {
   attachment: {
-    type: "comprobante" | "foto" | "ubicacion";
+    type: "comprobante" | "foto" | "audio" | "ubicacion";
     url?: string;
+    durationMs?: number;
     lat?: number;
     lng?: number;
     address?: string;

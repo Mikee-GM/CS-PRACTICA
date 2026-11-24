@@ -31,6 +31,10 @@ import {
 } from './conversations.service';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { ListMessagesDto } from './dto/list-messages.dto';
+import {
+  OPCIONES_DE_SUBIDA_DE_MEDIA,
+  SendMediaDto,
+} from './dto/send-media.dto';
 import { SendMessageDto } from './dto/send-message.dto';
 import {
   OPCIONES_DE_SUBIDA_DE_COMPROBANTE,
@@ -112,6 +116,33 @@ export class ConversationsController {
   ): Promise<MensajeDelChat> {
     const { message, creado } =
       await this.conversationsService.sendClientMessage(actor.id, id, dto);
+    res.status(creado ? HttpStatus.CREATED : HttpStatus.OK);
+    return message;
+  }
+
+  /**
+   * Foto o nota de voz (multipart: `file`, `clientMessageId`, `body` opcional
+   * en fotos y `durationMs` en audios). 201 al crearlo, 200 si es el reintento
+   * de uno ya recibido.
+   */
+  @Throttle({ default: { limit: 12, ttl: 60_000 } })
+  @Post(':id/media')
+  @UseGuards(JwtAuthGuard, RolesGuard, CsrfGuard)
+  @Roles('cliente')
+  @UseInterceptors(FileInterceptor('file', OPCIONES_DE_SUBIDA_DE_MEDIA))
+  async sendMedia(
+    @GetUser() actor: Usuarios,
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: UploadedFilePayload | undefined,
+    @Body() dto: SendMediaDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<MensajeDelChat> {
+    const { message, creado } = await this.conversationsService.sendClientMedia(
+      actor.id,
+      id,
+      file,
+      dto,
+    );
     res.status(creado ? HttpStatus.CREATED : HttpStatus.OK);
     return message;
   }

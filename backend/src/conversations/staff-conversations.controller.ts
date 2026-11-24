@@ -9,8 +9,11 @@ import {
   Post,
   Query,
   Res,
+  UploadedFile,
+  UseInterceptors,
   UseGuards,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { GetUser } from '../auth/decorators/get-user.decorator';
@@ -18,7 +21,12 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { CsrfGuard } from '../auth/guards/csrf.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import type { UploadedFilePayload } from '../upload/upload.service';
 import { Usuarios } from '../users/entities/user.entity';
+import {
+  OPCIONES_DE_SUBIDA_DE_MEDIA,
+  SendMediaDto,
+} from './dto/send-media.dto';
 import { ListMessagesDto } from './dto/list-messages.dto';
 import {
   ListStaffConversationsDto,
@@ -109,6 +117,29 @@ export class StaffConversationsController {
     const { message, creado } = await this.staffService.enviarMensaje(
       actor,
       id,
+      dto,
+    );
+    res.status(creado ? HttpStatus.CREATED : HttpStatus.OK);
+    return message;
+  }
+
+  /** Foto o nota de voz como la modelo (multipart: `file` y `clientMessageId`). */
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @Post(':id/media')
+  @UseGuards(JwtAuthGuard, RolesGuard, CsrfGuard)
+  @Roles('admin', 'jefe')
+  @UseInterceptors(FileInterceptor('file', OPCIONES_DE_SUBIDA_DE_MEDIA))
+  async sendMedia(
+    @GetUser() actor: Usuarios,
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFile() file: UploadedFilePayload | undefined,
+    @Body() dto: SendMediaDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<MensajeParaElEquipo> {
+    const { message, creado } = await this.staffService.enviarMedia(
+      actor,
+      id,
+      file,
       dto,
     );
     res.status(creado ? HttpStatus.CREATED : HttpStatus.OK);

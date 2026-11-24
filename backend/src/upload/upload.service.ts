@@ -14,6 +14,13 @@ import { randomUUID } from 'crypto';
 import { describeError } from '../common/errors/error-message';
 import type { PostMediaKind } from '../posts/entities/post-media.entity';
 import { MAX_VIDEO_BYTES } from '../posts/post-estados';
+import {
+  CHAT_AUDIO_MAX_BYTES,
+  CHAT_IMAGE_MAX_BYTES,
+  CHAT_MEDIA_EXTENSIONS,
+  clasificarMediaDeChat,
+  type ChatMediaKind,
+} from './chat-media';
 
 // Exportado para que las rutas que reciben evidencia corten la subida en
 // Multer con el mismo tope, antes de cargarla entera en memoria.
@@ -337,6 +344,67 @@ export class UploadService {
       );
       throw new InternalServerErrorException(
         'No fue posible almacenar la evidencia en la nube',
+      );
+    }
+  }
+
+  /**
+   * Foto o nota de voz de un chat. El tipo sale de los bytes, no de lo que
+   * declare el navegador (el bucket es publico), y la clave cuelga de la
+   * conversacion para poder depurarla entera.
+   */
+  async uploadChatMedia(input: {
+    buffer: Buffer;
+    declaredType: string;
+    conversationId: string;
+  }): Promise<{
+    url: string;
+    key: string;
+    kind: ChatMediaKind;
+    mimeType: string;
+    bytes: number;
+  }> {
+    if (!UUID_PATTERN.test(input.conversationId)) {
+      throw new BadRequestException('Conversación no válida');
+    }
+    const clasificado = clasificarMediaDeChat(input.buffer, input.declaredType);
+    if (!clasificado) {
+      throw new BadRequestException(
+        'Solo se pueden enviar fotos (JPEG, PNG, WEBP) o audios grabados',
+      );
+    }
+    const tope =
+      clasificado.kind === 'foto' ? CHAT_IMAGE_MAX_BYTES : CHAT_AUDIO_MAX_BYTES;
+    if (!input.buffer.length || input.buffer.length > tope) {
+      throw new BadRequestException(
+        clasificado.kind === 'foto'
+          ? 'La foto está vacía o supera los 10 MB'
+          : 'El audio está vacío o supera los 8 MB',
+      );
+    }
+    const key = `chat/${input.conversationId.toLowerCase()}/${randomUUID()}.${CHAT_MEDIA_EXTENSIONS[clasificado.mimeType]}`;
+    try {
+      await this.s3Client.send(
+        new PutObjectCommand({
+          Bucket: this.bucketName,
+          Key: key,
+          Body: input.buffer,
+          ContentType: clasificado.mimeType,
+        }),
+      );
+      return {
+        key,
+        url: `${this.publicUrl}/${key}`,
+        kind: clasificado.kind,
+        mimeType: clasificado.mimeType,
+        bytes: input.buffer.length,
+      };
+    } catch (error) {
+      this.logger.error(
+        `Error subiendo medio del chat a R2: ${describeError(error)}`,
+      );
+      throw new InternalServerErrorException(
+        'No fue posible almacenar el archivo en la nube',
       );
     }
   }

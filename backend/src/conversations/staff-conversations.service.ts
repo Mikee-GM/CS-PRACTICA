@@ -56,7 +56,16 @@ import {
   CONVERSATION_TURN_HANDLER,
   ConversationTurnHandler,
 } from './conversation-turn-handler';
-import { leerPaginaDeMensajes, PREVIEW_LENGTH } from './conversations.service';
+import {
+  adjuntoDeMedia,
+  leerPaginaDeMensajes,
+  PREVIEW_LENGTH,
+} from './conversations.service';
+import type { SendMediaDto } from './dto/send-media.dto';
+import {
+  UploadService,
+  type UploadedFilePayload,
+} from '../upload/upload.service';
 import type { ListMessagesDto } from './dto/list-messages.dto';
 import type {
   ListStaffConversationsDto,
@@ -152,6 +161,7 @@ export type MensajeParaElEquipo = {
   attachment: {
     type: MessageAttachment['type'];
     url?: string;
+    durationMs?: number;
     lat?: number;
     lng?: number;
     address?: string;
@@ -240,6 +250,7 @@ export class StaffConversationsService {
     @Optional()
     @Inject(CONVERSATION_TURN_HANDLER)
     private readonly turnHandler?: ConversationTurnHandler,
+    @Optional() private readonly uploadService?: UploadService,
   ) {}
 
   // ---------------------------------------------------------------- lectura
@@ -499,7 +510,83 @@ export class StaffConversationsService {
     if (!cuerpo) {
       throw new BadRequestException('El mensaje no puede estar vacío');
     }
+    return this.registrarMensajeDelEquipo(
+      actor,
+      conversationId,
+      dto.clientMessageId,
+      { body: cuerpo, attachment: null },
+    );
+  }
 
+  /**
+   * Foto o nota de voz de quien atiende, que el cliente ve como de la modelo.
+   * Mismas reglas que el texto: hay que tener tomada la conversacion, y el
+   * `clientMessageId` hace idempotente el reintento sin volver a subir el
+   * archivo.
+   */
+  async enviarMedia(
+    actor: Usuarios,
+    conversationId: string,
+    archivo: UploadedFilePayload | undefined,
+    dto: SendMediaDto,
+  ): Promise<{ message: MensajeParaElEquipo; creado: boolean }> {
+    const conversacion = await this.conversacionAlAlcance(
+      actor,
+      conversationId,
+    );
+    if (!archivo?.buffer?.length) {
+      throw new BadRequestException('Adjunta una foto o un audio');
+    }
+    const previo = await this.dataSource.getRepository(Message).findOne({
+      where: { conversationId, clientMessageId: dto.clientMessageId },
+    });
+    if (previo) {
+      return { message: aMensajeParaElEquipo(previo), creado: false };
+    }
+    // Se comprueba antes de subir: un archivo que no se va a aceptar no debe
+    // quedar en el almacenamiento.
+    this.exigirTurnoDelEquipo(actor, conversacion);
+
+    if (!this.uploadService) {
+      throw new Error('El servicio de subida de archivos no esta disponible');
+    }
+    const subida = await this.uploadService.uploadChatMedia({
+      buffer: archivo.buffer,
+      declaredType: archivo.mimetype ?? '',
+      conversationId,
+    });
+    const cuerpo = quitarEmojis(dto.body ?? '').trim();
+    return this.registrarMensajeDelEquipo(
+      actor,
+      conversationId,
+      dto.clientMessageId,
+      { body: cuerpo, attachment: adjuntoDeMedia(subida, dto) },
+    );
+  }
+
+  private exigirTurnoDelEquipo(
+    actor: Usuarios,
+    conversation: Pick<Conversation, 'status' | 'mode' | 'humanOwnerId'>,
+  ): void {
+    if (conversation.status === 'cerrada') throw conversacionCerrada();
+    if (conversation.mode !== 'HUMAN_ACTIVE') {
+      throw new ConflictException(
+        'Toma el control de la conversación antes de escribir',
+      );
+    }
+    if (conversation.humanOwnerId !== actor.id && actor.rol !== 'admin') {
+      throw new ConflictException(
+        'La conversación la atiende otra persona del equipo',
+      );
+    }
+  }
+
+  private async registrarMensajeDelEquipo(
+    actor: Usuarios,
+    conversationId: string,
+    clientMessageId: string,
+    valores: { body: string; attachment: MessageAttachment | null },
+  ): Promise<{ message: MensajeParaElEquipo; creado: boolean }> {
     const resultado = await this.dataSource.transaction(async (manager) => {
       // Mismo protocolo que los mensajes del cliente: con la fila bloqueada,
       // un reintento no se intercala con otro ni con un cambio de modo.
@@ -511,28 +598,19 @@ export class StaffConversationsService {
         throw new NotFoundException(CONVERSACION_NO_ENCONTRADA);
       }
       const existente = await manager.findOne(Message, {
-        where: { conversationId, clientMessageId: dto.clientMessageId },
+        where: { conversationId, clientMessageId },
       });
       if (existente) return { conversation, message: existente, creado: false };
 
-      if (conversation.status === 'cerrada') throw conversacionCerrada();
-      if (conversation.mode !== 'HUMAN_ACTIVE') {
-        throw new ConflictException(
-          'Toma el control de la conversación antes de escribir',
-        );
-      }
-      if (conversation.humanOwnerId !== actor.id && actor.rol !== 'admin') {
-        throw new ConflictException(
-          'La conversación la atiende otra persona del equipo',
-        );
-      }
+      this.exigirTurnoDelEquipo(actor, conversation);
 
       const message = await manager.save(
         manager.create(Message, {
           conversationId,
           sender: 'jefe',
-          body: cuerpo,
-          clientMessageId: dto.clientMessageId,
+          body: valores.body,
+          ...(valores.attachment ? { attachment: valores.attachment } : {}),
+          clientMessageId,
         }),
       );
       await manager.update(
@@ -553,18 +631,8 @@ export class StaffConversationsService {
         [actor.id],
       );
     }
-    const m = resultado.message;
     return {
-      message: {
-        id: m.id,
-        conversationId: m.conversationId,
-        sender: m.sender,
-        body: m.body,
-        attachment: adjuntoParaElEquipo(m.attachment ?? null),
-        receiptValidationId: m.receiptValidationId ?? null,
-        clientMessageId: m.clientMessageId ?? null,
-        createdAt: m.createdAt,
-      },
+      message: aMensajeParaElEquipo(resultado.message),
       creado: resultado.creado,
     };
   }
@@ -1121,6 +1189,19 @@ function escaparLike(texto: string): string {
   return texto.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
+function aMensajeParaElEquipo(m: Message): MensajeParaElEquipo {
+  return {
+    id: m.id,
+    conversationId: m.conversationId,
+    sender: m.sender,
+    body: m.body,
+    attachment: adjuntoParaElEquipo(m.attachment ?? null),
+    receiptValidationId: m.receiptValidationId ?? null,
+    clientMessageId: m.clientMessageId ?? null,
+    createdAt: m.createdAt,
+  };
+}
+
 function adjuntoParaElEquipo(
   adjunto: MessageAttachment | null,
 ): MensajeParaElEquipo['attachment'] {
@@ -1133,9 +1214,14 @@ function adjuntoParaElEquipo(
       ...(adjunto.address ? { address: adjunto.address } : {}),
     };
   }
-  return adjunto.url
-    ? { type: adjunto.type, url: adjunto.url }
-    : { type: adjunto.type };
+  if (!adjunto.url) return { type: adjunto.type };
+  return {
+    type: adjunto.type,
+    url: adjunto.url,
+    ...(adjunto.type === 'audio' && adjunto.durationMs
+      ? { durationMs: adjunto.durationMs }
+      : {}),
+  };
 }
 
 function recortar(texto: string): string {

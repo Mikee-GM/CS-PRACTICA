@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -32,7 +33,12 @@ import {
   ListMessagesDto,
   DEFAULT_MESSAGES_PAGE,
 } from './dto/list-messages.dto';
+import { SendMediaDto } from './dto/send-media.dto';
 import { SendMessageDto } from './dto/send-message.dto';
+import {
+  UploadService,
+  type UploadedFilePayload,
+} from '../upload/upload.service';
 import {
   Conversation,
   ConversationStatus,
@@ -92,7 +98,11 @@ export type MensajeDelChat = {
    * El tipo y, en `comprobante` y `foto`, la URL publica del archivo en R2,
    * para que el cliente vea lo que el mismo mando. Del pin solo va el tipo.
    */
-  attachment: { type: MessageAttachment['type']; url?: string } | null;
+  attachment: {
+    type: MessageAttachment['type'];
+    url?: string;
+    durationMs?: number;
+  } | null;
   clientMessageId: string | null;
   createdAt: Date;
 };
@@ -156,6 +166,9 @@ export class ConversationsService {
     @Optional()
     @Inject(CONVERSATION_TURN_HANDLER)
     private readonly turnHandler?: ConversationTurnHandler,
+    // Al final y opcional: solo lo usan las fotos y los audios, y asi los
+    // especs que construyen el servicio por posicion siguen igual.
+    @Optional() private readonly uploadService?: UploadService,
   ) {}
 
   async listForClient(usuarioId: string): Promise<ResumenDeConversacion[]> {
@@ -329,6 +342,95 @@ export class ConversationsService {
       message: aMensajeDelChat(resultado.message),
       creado: resultado.creado,
     };
+  }
+
+  /**
+   * Foto o nota de voz del cliente. Misma garantia que el texto: el
+   * `clientMessageId` hace idempotente el reintento y el archivo no se sube si
+   * la conversacion no admite mensajes.
+   */
+  async sendClientMedia(
+    usuarioId: string,
+    conversationId: string,
+    archivo: UploadedFilePayload | undefined,
+    dto: SendMediaDto,
+  ): Promise<{ message: MensajeDelChat; creado: boolean }> {
+    const clienteId = await this.resolveClienteId(usuarioId);
+    if (!archivo?.buffer?.length) {
+      throw new BadRequestException('Adjunta una foto o un audio');
+    }
+
+    const previo = await this.dataSource.getRepository(Message).findOne({
+      where: { conversationId, clientMessageId: dto.clientMessageId },
+    });
+    const propia = await this.findOwned(clienteId, conversationId);
+    if (previo) return { message: aMensajeDelChat(previo), creado: false };
+    if (propia.status === 'cerrada') {
+      throw new ConflictException(
+        'Esta conversación está cerrada; abre una nueva para seguir',
+      );
+    }
+
+    const subida = await this.subidas().uploadChatMedia({
+      buffer: archivo.buffer,
+      declaredType: archivo.mimetype ?? '',
+      conversationId,
+    });
+    const attachment = adjuntoDeMedia(subida, dto);
+
+    const resultado = await this.dataSource.transaction(async (manager) => {
+      const conversation = await manager.findOne(Conversation, {
+        where: { id: conversationId, clientId: clienteId },
+        lock: { mode: 'pessimistic_write' },
+      });
+      if (!conversation)
+        throw new NotFoundException(CONVERSACION_NO_ENCONTRADA);
+      const existente = await manager.findOne(Message, {
+        where: { conversationId, clientMessageId: dto.clientMessageId },
+      });
+      if (existente) return { conversation, message: existente, creado: false };
+      if (conversation.status === 'cerrada') {
+        throw new ConflictException(
+          'Esta conversación está cerrada; abre una nueva para seguir',
+        );
+      }
+      const message = await manager.save(
+        manager.create(Message, {
+          conversationId,
+          sender: 'cliente',
+          body: dto.body ?? '',
+          attachment,
+          clientMessageId: dto.clientMessageId,
+        }),
+      );
+      await manager.update(
+        Conversation,
+        { id: conversationId },
+        { lastMessageAt: message.createdAt },
+      );
+      conversation.lastMessageAt = message.createdAt;
+      return { conversation, message, creado: true };
+    });
+
+    if (resultado.creado) {
+      await this.avisarMensajeNuevo(
+        clienteId,
+        resultado.conversation,
+        resultado.message,
+      );
+      this.lanzarTurno(resultado.conversation, resultado.message);
+    }
+    return {
+      message: aMensajeDelChat(resultado.message),
+      creado: resultado.creado,
+    };
+  }
+
+  private subidas(): UploadService {
+    if (!this.uploadService) {
+      throw new Error('El servicio de subida de archivos no esta disponible');
+    }
+    return this.uploadService;
   }
 
   private async resolveClienteId(usuarioId: string): Promise<string> {
@@ -527,6 +629,22 @@ export class ConversationsService {
 
 const CONVERSACION_NO_ENCONTRADA = 'Conversación no encontrada';
 
+/** El adjunto que se guarda para una foto o una nota de voz ya subida. */
+export function adjuntoDeMedia(
+  subida: { url: string; kind: 'foto' | 'audio'; mimeType: string; bytes: number },
+  dto: { durationMs?: number },
+): MessageAttachment {
+  return {
+    type: subida.kind,
+    url: subida.url,
+    mimeType: subida.mimeType,
+    sizeBytes: subida.bytes,
+    ...(subida.kind === 'audio' && dto.durationMs
+      ? { durationMs: Math.round(dto.durationMs) }
+      : {}),
+  };
+}
+
 /**
  * Una pagina de mensajes, comun al cliente y al equipo: cada uno decide antes
  * si puede ver la conversacion y despues que deja ver de cada fila.
@@ -583,10 +701,18 @@ function adjuntoParaElCliente(
 ): MensajeDelChat['attachment'] {
   if (!adjunto) return null;
   if (
-    (adjunto.type === 'comprobante' || adjunto.type === 'foto') &&
+    (adjunto.type === 'comprobante' ||
+      adjunto.type === 'foto' ||
+      adjunto.type === 'audio') &&
     adjunto.url
   ) {
-    return { type: adjunto.type, url: adjunto.url };
+    return {
+      type: adjunto.type,
+      url: adjunto.url,
+      ...(adjunto.type === 'audio' && adjunto.durationMs
+        ? { durationMs: adjunto.durationMs }
+        : {}),
+    };
   }
   return { type: adjunto.type };
 }

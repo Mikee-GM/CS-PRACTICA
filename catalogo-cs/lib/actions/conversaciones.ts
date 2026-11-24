@@ -164,6 +164,47 @@ export async function enviarMensajeAction(
   }
 }
 
+/**
+ * Sube una foto o una nota de voz del cliente (campo `file`; `clientMessageId`,
+ * `body` en fotos y `durationMs` en audios). El tipo real lo decide el backend por
+ * los bytes; aqui solo se descarta lo evidente para no subir de balde.
+ */
+export async function enviarMediaAction(
+  conversationId: string,
+  formData: FormData,
+): Promise<ResultadoDeChat<MensajeDelChat>> {
+  const clientMessageId = formData.get("clientMessageId");
+  if (
+    !UUID.test(conversationId) ||
+    typeof clientMessageId !== "string" ||
+    !UUID.test(clientMessageId)
+  ) {
+    return { success: false, error: "No se pudo enviar. Recarga la página e inténtalo de nuevo." };
+  }
+  const archivo = formData.get("file");
+  if (!(archivo instanceof File) || archivo.size === 0) {
+    return { success: false, error: "Elige una foto o graba un audio antes de enviarlo." };
+  }
+  if (!archivo.type.startsWith("image/") && !archivo.type.startsWith("audio/")) {
+    return { success: false, error: "Solo se pueden enviar fotos o audios." };
+  }
+
+  try {
+    const mensaje = await apiFetch<MensajeDelChat>(
+      `/conversations/${conversationId}/media`,
+      { ...LOGIN_CLIENTE, method: "POST", body: formData },
+    );
+    return { success: true, data: mensaje };
+  } catch (error) {
+    if (isRedirectError(error)) throw error;
+    return errorDeChat(
+      error,
+      "Esta conversación está cerrada. Abre un chat nuevo desde el catálogo para seguir.",
+      "enviarMediaAction",
+    );
+  }
+}
+
 const TIPOS_DE_COMPROBANTE = ["image/jpeg", "image/png", "image/webp"];
 
 /** Sube la imagen del comprobante de pago (campo `file`, JPEG, PNG o WEBP). */

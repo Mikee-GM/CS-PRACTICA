@@ -1,5 +1,6 @@
 "use client";
 
+import { nuevoId } from "@/lib/nuevo-id";
 import { ChevronDown, Receipt } from "lucide-react";
 import { useEffect, useId, useRef, useState, useTransition } from "react";
 
@@ -55,7 +56,7 @@ export default function SubirComprobante({
       setError("El archivo debe ser una imagen JPEG, PNG o WEBP. Haz una captura de la transferencia y elígela.");
       return;
     }
-    setArchivo({ file, url: URL.createObjectURL(file), clientMessageId: crypto.randomUUID() });
+    setArchivo({ file, url: URL.createObjectURL(file), clientMessageId: nuevoId() });
   }
 
   function enviar(e: React.FormEvent<HTMLFormElement>) {

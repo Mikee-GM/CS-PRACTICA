@@ -100,6 +100,45 @@ export async function enviarMensajeDelEquipoAction(
   );
 }
 
+/**
+ * Foto o nota de voz como la modelo (campo `file` y `clientMessageId`).
+ * Idempotente por `clientMessageId`, igual que el texto.
+ */
+export async function enviarMediaDelEquipoAction(
+  conversationId: string,
+  formData: FormData,
+): Promise<ResultadoDelEquipo<MensajeParaElEquipo>> {
+  const clientMessageId = formData.get("clientMessageId");
+  if (
+    !UUID.test(conversationId) ||
+    typeof clientMessageId !== "string" ||
+    !UUID.test(clientMessageId)
+  ) {
+    return ID_INVALIDO;
+  }
+  const archivo = formData.get("file");
+  if (!(archivo instanceof File) || archivo.size === 0) {
+    return { success: false, error: "Elige una foto o graba un audio antes de enviarlo." };
+  }
+  try {
+    const data = await apiFetch<MensajeParaElEquipo>(
+      `/staff/conversations/${conversationId}/media`,
+      { method: "POST", body: formData },
+    );
+    return { success: true, data };
+  } catch (error) {
+    if (isRedirectError(error)) throw error;
+    if (!(error instanceof ApiError)) console.error("chats del equipo (enviar media):", error);
+    const fallo = traducirFalloDelEquipo(
+      error instanceof ApiError
+        ? { status: error.status, message: error.message, body: error.body }
+        : null,
+      "enviar",
+    );
+    return { success: false, ...fallo };
+  }
+}
+
 export async function aceptarSolicitudAction(
   conversationId: string,
 ): Promise<ResultadoDelEquipo<DecisionSobreBorrador>> {

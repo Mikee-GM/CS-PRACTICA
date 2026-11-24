@@ -159,6 +159,20 @@ export class WebTurnHandler implements ConversationTurnHandler {
           pausaMaximaMs: this.pausaMaximaMs,
         },
       );
+      // El asistente no ve fotos ni oye audios: contestarle un mensaje vacio
+      // seria inventar. Se marcan atendidos, el equipo los recibe como cualquier
+      // mensaje y el cliente sabe que una persona los revisara.
+      if (pendientes.every(esSoloMedia)) {
+        await this.marcarAtendidos(ref, cargado, pendientes);
+        try {
+          await canal.sendText(ref, AVISO_DE_MEDIA_RECIBIDA, {
+            sender: 'sistema',
+          });
+        } finally {
+          canal.terminarTyping(ref);
+        }
+        continue;
+      }
       try {
         await this.bookingService.handleClientMessage(
           ref,
@@ -229,6 +243,15 @@ export class WebTurnHandler implements ConversationTurnHandler {
       if (!(error instanceof ConflictoDeVersionError)) throw error;
     }
   }
+}
+
+const AVISO_DE_MEDIA_RECIBIDA =
+  'Recibimos tu archivo. Una persona del equipo lo revisará y te responderá por aquí.';
+
+/** Un mensaje que es solo una foto o un audio, sin texto que acompañe. */
+function esSoloMedia(fila: FilaPendiente): boolean {
+  const tipo = fila.attachment?.type;
+  return (tipo === 'foto' || tipo === 'audio') && !(fila.body ?? '').trim();
 }
 
 function refDe(conversation: Conversation): ConversationRef {

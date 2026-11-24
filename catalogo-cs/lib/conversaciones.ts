@@ -1,4 +1,5 @@
 import { APP_LOCALE, APP_TIME_ZONE } from "@/lib/locale";
+import type { MediaParaEnviar } from "@/lib/media-del-chat";
 
 /**
  * Tipos y reglas puras del chat web del cliente.
@@ -19,8 +20,10 @@ export type EstadoConversacion =
 export type Remitente = "cliente" | "ia" | "jefe" | "sistema";
 
 export type AdjuntoDelChat = {
-  type: "comprobante" | "foto" | "ubicacion";
+  type: "comprobante" | "foto" | "audio" | "ubicacion";
   url?: string;
+  /** Solo audio, en milisegundos. */
+  durationMs?: number;
 };
 
 export type MensajeDelChat = {
@@ -85,7 +88,12 @@ export const ESTADOS_DEL_COMPROBANTE: readonly EstadoDelComprobante[] = [
 export type EstadoDeEnvio = {
   envio?: "enviando" | "error";
   /** Lo que hay que volver a mandar si el envio falla. */
-  reintento?: { body?: string; location?: UbicacionDelMensaje };
+  reintento?: {
+    body?: string;
+    location?: UbicacionDelMensaje;
+    /** Foto o audio: el archivo se conserva para volver a subirlo. */
+    media?: MediaParaEnviar;
+  };
 };
 
 export type MensajeEnPantalla = MensajeDelChat & EstadoDeEnvio;
@@ -102,6 +110,7 @@ export function crearOptimista(datos: {
   clientMessageId: string;
   body?: string;
   location?: UbicacionDelMensaje;
+  media?: MediaParaEnviar;
   ahora?: Date;
 }): MensajeEnPantalla {
   return {
@@ -110,11 +119,20 @@ export function crearOptimista(datos: {
     sender: "cliente",
     // Sin texto, la burbuja ya rotula el adjunto de ubicacion.
     body: datos.body ?? datos.location?.address ?? "",
-    attachment: datos.location ? { type: "ubicacion" } : null,
+    attachment: datos.location
+      ? { type: "ubicacion" }
+      : datos.media
+        ? {
+            type: datos.media.kind,
+            // Se ve y se oye al instante, desde el archivo local, mientras sube.
+            url: URL.createObjectURL(datos.media.archivo),
+            ...(datos.media.durationMs ? { durationMs: datos.media.durationMs } : {}),
+          }
+        : null,
     clientMessageId: datos.clientMessageId,
     createdAt: (datos.ahora ?? new Date()).toISOString(),
     envio: "enviando",
-    reintento: { body: datos.body, location: datos.location },
+    reintento: { body: datos.body, location: datos.location, media: datos.media },
   };
 }
 

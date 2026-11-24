@@ -1,8 +1,10 @@
 "use client";
 
+import { nuevoId } from "@/lib/nuevo-id";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
-import { enviarMensajeAction } from "@/lib/actions/conversaciones";
+import { enviarMediaAction, enviarMensajeAction } from "@/lib/actions/conversaciones";
+import { errorDeMedia, type MediaParaEnviar } from "@/lib/media-del-chat";
 import { pedirConSesion } from "@/lib/client-fetch";
 import {
   crearOptimista,
@@ -359,13 +361,60 @@ export default function VistaChat({
   }
 
   function enviarNuevo(contenido: { body?: string; location?: UbicacionDelMensaje }) {
-    const clientMessageId = crypto.randomUUID();
+    const clientMessageId = nuevoId();
     seguirAlFinal.current = true;
     setMensajes((actuales) => [
       ...actuales,
       crearOptimista({ conversationId, clientMessageId, ...contenido }),
     ]);
     void mandar(clientMessageId, contenido);
+  }
+
+  async function mandarMedia(clientMessageId: string, media: MediaParaEnviar, pie?: string) {
+    setErrorDeEnvio("");
+    const problema = errorDeMedia({
+      kind: media.kind,
+      type: media.archivo.type,
+      size: media.archivo.size,
+    });
+    if (problema) {
+      setMensajes((actuales) => marcarEnvio(actuales, clientMessageId, "error"));
+      setErrorDeEnvio(problema);
+      return;
+    }
+    try {
+      const datos = new FormData();
+      datos.append("file", media.archivo, media.archivo.name);
+      datos.append("clientMessageId", clientMessageId);
+      if (pie) datos.append("body", pie);
+      if (media.kind === "audio" && media.durationMs) {
+        datos.append("durationMs", String(Math.round(media.durationMs)));
+      }
+      const resultado = await enviarMediaAction(conversationId, datos);
+      if (resultado.success) {
+        setMensajes((actuales) => mezclarMensajes(actuales, [resultado.data]));
+        return;
+      }
+      setMensajes((actuales) => marcarEnvio(actuales, clientMessageId, "error"));
+      setErrorDeEnvio(resultado.error);
+      if (resultado.conflicto) setStatus("cerrada");
+    } catch (error) {
+      if (esRedireccion(error)) throw error;
+      setMensajes((actuales) => marcarEnvio(actuales, clientMessageId, "error"));
+      setErrorDeEnvio(
+        "No se pudo enviar el archivo. Revisa tu conexión y toca Reintentar junto al mensaje.",
+      );
+    }
+  }
+
+  function enviarMediaNueva(media: MediaParaEnviar, pie?: string) {
+    const clientMessageId = nuevoId();
+    seguirAlFinal.current = true;
+    setMensajes((actuales) => [
+      ...actuales,
+      crearOptimista({ conversationId, clientMessageId, body: pie, media }),
+    ]);
+    void mandarMedia(clientMessageId, media, pie);
   }
 
   function reintentar(clientMessageId: string) {
@@ -375,6 +424,10 @@ export default function VistaChat({
     if (!original?.reintento) return;
     // Mismo clientMessageId: si el primero si llego, el backend no lo duplica.
     setMensajes((actuales) => marcarEnvio(actuales, clientMessageId, "enviando"));
+    if (original.reintento.media) {
+      void mandarMedia(clientMessageId, original.reintento.media, original.reintento.body);
+      return;
+    }
     void mandar(clientMessageId, original.reintento);
   }
 
@@ -497,6 +550,7 @@ export default function VistaChat({
           error={errorDeEnvio}
           onEnviar={(texto) => enviarNuevo({ body: texto })}
           onEnviarUbicacion={(location) => enviarNuevo({ location })}
+          onEnviarMedia={enviarMediaNueva}
           textareaRef={textareaRef}
         />
       </div>

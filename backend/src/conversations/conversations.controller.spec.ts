@@ -36,9 +36,10 @@ describe('ConversationsController: guards y roles por ruta', () => {
     'open',
     'sendMessage',
     'uploadReceipt',
+    'sendMedia',
   ];
 
-  it('expone las seis rutas del cliente', () => {
+  it('expone las siete rutas del cliente', () => {
     expect(rutas.map((r) => r.nombre).sort()).toEqual([...NOMBRES].sort());
   });
 

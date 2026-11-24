@@ -5,7 +5,10 @@ import { MapPin, SendHorizontal } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 
+import { BotonesDeMedia, PanelDeMedia } from "@/components/chat/ControlesDeMedia";
+import { useMediaDelChat } from "@/components/chat/useMediaDelChat";
 import type { UbicacionDelMensaje } from "@/lib/conversaciones";
+import type { MediaParaEnviar } from "@/lib/media-del-chat";
 import { ErrorDeFormulario } from "./Campo";
 
 const MAXIMO = 2000;
@@ -56,6 +59,7 @@ export default function BarraEscritura({
   error,
   onEnviar,
   onEnviarUbicacion,
+  onEnviarMedia,
   textareaRef,
 }: {
   nombreModelo: string;
@@ -63,12 +67,15 @@ export default function BarraEscritura({
   error: string;
   onEnviar: (texto: string) => void;
   onEnviarUbicacion: (ubicacion: UbicacionDelMensaje) => void;
+  onEnviarMedia: (media: MediaParaEnviar, pie?: string) => void;
   textareaRef: React.RefObject<HTMLTextAreaElement | null>;
 }) {
   const id = useId();
   const formRef = useRef<HTMLFormElement>(null);
   const [texto, setTexto] = useState("");
   const [ubicacion, setUbicacion] = useState<EstadoUbicacion>({ fase: "inactiva" });
+  const media = useMediaDelChat({ onEnviar: onEnviarMedia });
+  const ocupada = media.estado.fase !== "inactivo";
 
   function enviar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -170,6 +177,12 @@ export default function BarraEscritura({
 
         <ErrorDeFormulario mensaje={error} />
 
+        <PanelDeMedia
+          controles={media}
+          pie={texto}
+          onFotoEnviada={() => setTexto("")}
+        />
+
         <form ref={formRef} onSubmit={enviar} className="flex items-end gap-1.5">
           <button
             type="button"
@@ -185,6 +198,7 @@ export default function BarraEscritura({
           >
             <MapPin aria-hidden="true" className="h-5 w-5" />
           </button>
+          <BotonesDeMedia controles={media} />
           <label htmlFor={id} className="sr-only">
             Mensaje para {nombreModelo}
           </label>
@@ -203,7 +217,7 @@ export default function BarraEscritura({
           />
           <motion.button
             type="submit"
-            disabled={!texto.trim()}
+            disabled={!texto.trim() || ocupada}
             aria-label="Enviar mensaje"
             whileTap={{ scale: 0.9 }}
             className={`${botonIcono} bg-[#C5A55A] text-black hover:bg-[#D4AF37]`}

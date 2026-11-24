@@ -1,5 +1,6 @@
 "use client";
 
+import { nuevoId } from "@/lib/nuevo-id";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { ChevronLeft, Loader2, Send } from "lucide-react";
@@ -8,6 +9,7 @@ import { toast } from "sonner";
 import {
   aceptarSolicitudAction,
   devolverControlAction,
+  enviarMediaDelEquipoAction,
   enviarMensajeDelEquipoAction,
   rechazarSolicitudAction,
   tomarControlAction,
@@ -31,6 +33,9 @@ import {
 } from "@/lib/conversaciones";
 import { esRedireccion } from "@/lib/es-redireccion";
 import { IndicadorEscribiendo } from "@/components/chat/animaciones";
+import { BotonesDeMedia, PanelDeMedia } from "@/components/chat/ControlesDeMedia";
+import { useMediaDelChat } from "@/components/chat/useMediaDelChat";
+import { errorDeMedia, type MediaParaEnviar } from "@/lib/media-del-chat";
 import DialogoConfirmacion from "./DialogoConfirmacion";
 import MensajeDelEquipo from "./MensajeDelEquipo";
 import VisorDeImagen from "./VisorDeImagen";
@@ -105,6 +110,13 @@ export default function ConversacionChatWeb({
   const repetir = useRef(false);
   // Se conserva entre reintentos: el backend no duplica un mismo id.
   const clientMessageId = useRef<string | null>(null);
+  // La foto o el audio que no salio: se vuelve a mandar con el mismo id.
+  const [mediaFallida, setMediaFallida] = useState<{
+    id: string;
+    media: MediaParaEnviar;
+    pie?: string;
+  } | null>(null);
+  const [enviandoMedia, setEnviandoMedia] = useState(false);
 
   const acciones = accionesDisponibles(conversacion, usuario);
   const resumen = useMemo(() => resumenDelBorrador(mensajes), [mensajes]);
@@ -248,7 +260,7 @@ export default function ConversacionChatWeb({
     evento.preventDefault();
     const cuerpo = texto.trim();
     if (!cuerpo || enviando || !acciones.escribir) return;
-    clientMessageId.current ??= crypto.randomUUID();
+    clientMessageId.current ??= nuevoId();
     setEnviando(true);
     setErrorDeEnvio("");
     try {
@@ -275,6 +287,53 @@ export default function ConversacionChatWeb({
       setEnviando(false);
     }
   }
+
+  async function mandarMedia(id: string, media: MediaParaEnviar, pie?: string) {
+    if (!acciones.escribir) return;
+    const problema = errorDeMedia({
+      kind: media.kind,
+      type: media.archivo.type,
+      size: media.archivo.size,
+    });
+    if (problema) {
+      setErrorDeEnvio(problema);
+      return;
+    }
+    setEnviandoMedia(true);
+    setErrorDeEnvio("");
+    setMediaFallida(null);
+    try {
+      const datos = new FormData();
+      datos.append("file", media.archivo, media.archivo.name);
+      datos.append("clientMessageId", id);
+      if (pie) datos.append("body", pie);
+      if (media.kind === "audio" && media.durationMs) {
+        datos.append("durationMs", String(Math.round(media.durationMs)));
+      }
+      const resultado = await enviarMediaDelEquipoAction(conversationId, datos);
+      if (!resultado.success) {
+        setErrorDeEnvio(resultado.error);
+        setMediaFallida({ id, media, pie });
+        if (resultado.conflicto) onReleerBandeja();
+        return;
+      }
+      seguirAlFinal.current = true;
+      setMensajes((actuales) => mezclarMensajes(actuales, [resultado.data]));
+    } catch (error) {
+      if (esRedireccion(error)) throw error;
+      setErrorDeEnvio(
+        "No se pudo enviar el archivo. Revisa tu conexión y pulsa Reintentar; no se duplicará.",
+      );
+      setMediaFallida({ id, media, pie });
+    } finally {
+      setEnviandoMedia(false);
+    }
+  }
+
+  const controlesDeMedia = useMediaDelChat({
+    onEnviar: (media, pie) => void mandarMedia(nuevoId(), media, pie),
+  });
+  const mediaEnCurso = controlesDeMedia.estado.fase !== "inactivo";
 
   function alPulsarTecla(evento: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (evento.key !== "Enter" || evento.shiftKey) return;
@@ -540,7 +599,14 @@ export default function ConversacionChatWeb({
 
         {acciones.escribir ? (
           <form onSubmit={enviar} className="space-y-1.5">
+            <PanelDeMedia
+              controles={controlesDeMedia}
+              pie={texto}
+              onFotoEnviada={() => setTexto("")}
+              enviando={enviandoMedia}
+            />
             <div className="flex items-end gap-2">
+              <BotonesDeMedia controles={controlesDeMedia} deshabilitado={enviandoMedia} />
               <label htmlFor={`${idBase}-texto`} className="sr-only">
                 Responder al cliente
               </label>
@@ -562,7 +628,7 @@ export default function ConversacionChatWeb({
               />
               <motion.button
                 type="submit"
-                disabled={enviando || !texto.trim()}
+                disabled={enviando || enviandoMedia || mediaEnCurso || !texto.trim()}
                 aria-busy={enviando}
                 whileTap={{ scale: 0.9 }}
                 className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#C5A55A]/70 text-[#C5A55A] transition-colors hover:bg-[#C5A55A] hover:text-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5A55A]/60 disabled:opacity-40"
@@ -582,6 +648,16 @@ export default function ConversacionChatWeb({
             <p id={errorEnvioId} role="alert" className="text-sm text-red-400 empty:hidden">
               {errorDeEnvio}
             </p>
+            {mediaFallida ? (
+              <button
+                type="button"
+                onClick={() => void mandarMedia(mediaFallida.id, mediaFallida.media, mediaFallida.pie)}
+                disabled={enviandoMedia}
+                className={`${BOTON_SECUNDARIO} border-[#C5A55A]/50 text-[#C5A55A] hover:bg-[#C5A55A] hover:text-black`}
+              >
+                Reintentar envío del archivo
+              </button>
+            ) : null}
           </form>
         ) : (
           <p className="py-2 text-center text-xs text-zinc-400">{acciones.motivoSinEscritura}</p>
