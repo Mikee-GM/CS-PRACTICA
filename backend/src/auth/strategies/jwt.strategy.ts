@@ -24,7 +24,7 @@ export const extraerAccessToken = ExtractJwt.fromExtractors([
  * Cuanto sigue valiendo un access token cuya sesion acaba de rotar. Es el mismo
  * margen que `AuthService.refresh` da a dos renovaciones que se cruzan.
  */
-const GRACIA_DE_ROTACION_MS = 30_000;
+export const GRACIA_DE_ROTACION_MS = 30_000;
 
 type AccessPayload = {
   sub: string;

@@ -18,6 +18,8 @@ import {
   ApiSseTokenDocs,
 } from '../common/swagger/api-docs.decorators';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { SesionActual } from '../auth/decorators/sesion-actual.decorator';
+import { mientrasLaSesionValga, VigilanteDeSesion } from './sesion-vigente';
 import { Usuarios } from '../users/entities/user.entity';
 
 /**
@@ -41,6 +43,7 @@ import { Usuarios } from '../users/entities/user.entity';
 export class RealtimeController {
   constructor(
     private readonly realtimeEventsService: RealtimeEventsService,
+    private readonly vigilante: VigilanteDeSesion,
     @InjectRepository(Empleadas)
     private readonly empleadasRepository: Repository<Empleadas>,
     @InjectRepository(Choferes)
@@ -52,14 +55,19 @@ export class RealtimeController {
   @Sse('sse/jefes')
   @UseGuards(JwtAuthGuard)
   @ApiSseTokenDocs('Conectar canal SSE para panel de jefes')
-  sseJefes(@Req() request: { user: Usuarios }): Observable<any> {
+  sseJefes(
+    @Req() request: { user: Usuarios },
+    @SesionActual() sesion: SesionActual,
+  ): Observable<any> {
     const user = request.user;
     if (user.rol !== 'jefe' && user.rol !== 'admin') {
       throw new ForbiddenException('No tienes permisos para este panel');
     }
-    return user.rol === 'admin'
-      ? this.realtimeEventsService.getJefesStream()
-      : this.realtimeEventsService.getBossStream(user.id);
+    const flujo =
+      user.rol === 'admin'
+        ? this.realtimeEventsService.getJefesStream()
+        : this.realtimeEventsService.getBossStream(user.id);
+    return this.vigilar(flujo, user.id, sesion.sid);
   }
 
   @Sse('sse/empleada')
@@ -67,6 +75,7 @@ export class RealtimeController {
   @ApiSseTokenDocs('Conectar canal SSE para empleada autenticada')
   async sseEmpleada(
     @Req() request: { user: Usuarios },
+    @SesionActual() sesion: SesionActual,
   ): Promise<Observable<any>> {
     const user = request.user;
     if (user.rol !== 'empleada') {
@@ -79,7 +88,11 @@ export class RealtimeController {
     if (!empleada) {
       throw new NotFoundException('Perfil de empleada no encontrado');
     }
-    return this.realtimeEventsService.getEmployeeStream(empleada.id);
+    return this.vigilar(
+      this.realtimeEventsService.getEmployeeStream(empleada.id),
+      user.id,
+      sesion.sid,
+    );
   }
 
   @Sse('sse/cliente')
@@ -87,6 +100,7 @@ export class RealtimeController {
   @ApiSseTokenDocs('Conectar canal SSE para cliente autenticado')
   async sseCliente(
     @Req() request: { user: Usuarios },
+    @SesionActual() sesion: SesionActual,
   ): Promise<Observable<any>> {
     const user = request.user;
     if (user.rol !== 'cliente') {
@@ -99,7 +113,11 @@ export class RealtimeController {
     if (!cliente) {
       throw new NotFoundException('Perfil de cliente no encontrado');
     }
-    return this.realtimeEventsService.getClientStream(cliente.id);
+    return this.vigilar(
+      this.realtimeEventsService.getClientStream(cliente.id),
+      user.id,
+      sesion.sid,
+    );
   }
 
   @Sse('sse/chofer')
@@ -107,6 +125,7 @@ export class RealtimeController {
   @ApiSseTokenDocs('Conectar canal SSE para chofer autenticado')
   async sseChofer(
     @Req() request: { user: Usuarios },
+    @SesionActual() sesion: SesionActual,
   ): Promise<Observable<any>> {
     const user = request.user;
     if (user.rol !== 'chofer') {
@@ -119,6 +138,21 @@ export class RealtimeController {
     if (!chofer) {
       throw new NotFoundException('Perfil de chofer no encontrado');
     }
-    return this.realtimeEventsService.getDriverStream(chofer.id);
+    return this.vigilar(
+      this.realtimeEventsService.getDriverStream(chofer.id),
+      user.id,
+      sesion.sid,
+    );
+  }
+
+  /** El flujo se cierra solo cuando su sesion deja de valer (ver sesion-vigente). */
+  private vigilar<T>(
+    flujo: Observable<T>,
+    userId: string,
+    sid: string,
+  ): Observable<T> {
+    return mientrasLaSesionValga(flujo, () =>
+      this.vigilante.estaVigente(userId, sid),
+    );
   }
 }

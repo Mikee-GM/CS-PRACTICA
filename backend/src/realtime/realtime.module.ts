@@ -11,6 +11,8 @@ import { Clientes } from '../clients/entities/client.entity';
 import { Servicios } from '../services/entities/service.entity';
 import { Viajes } from '../trips/entities/trip.entity';
 import { AuthModule } from '../auth/auth.module';
+import { AuthSession } from '../auth/entities/auth-session.entity';
+import { VigilanteDeSesion } from './sesion-vigente';
 
 @Global()
 @Module({
@@ -23,11 +25,12 @@ import { AuthModule } from '../auth/auth.module';
       Servicios,
       Viajes,
       RealtimeOutboxEvent,
+      AuthSession,
     ]),
     AuthModule,
   ],
   controllers: [RealtimeController],
-  providers: [RealtimeEventsService, RealtimeBus],
+  providers: [RealtimeEventsService, RealtimeBus, VigilanteDeSesion],
   exports: [RealtimeEventsService],
 })
 export class RealtimeModule {}

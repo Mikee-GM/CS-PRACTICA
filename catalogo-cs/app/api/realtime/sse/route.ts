@@ -46,9 +46,15 @@ export async function GET(request: Request) {
       headers["x-csrf-token"] = csrfToken;
     }
 
+    // `request.signal` se aborta cuando el navegador se desconecta (cerrar la
+    // pestana, recargar, perder la senal). Sin pasarla, la conexion hacia el
+    // backend se quedaba abierta para siempre: cada desconexion dejaba un flujo
+    // huerfano, con su suscripcion y su temporizador de latido, y crecian sin
+    // limite.
     const response = await fetch(backendUrl, {
       headers,
       cache: "no-store",
+      signal: request.signal,
     });
 
     if (!response.ok) {
@@ -66,6 +72,10 @@ export async function GET(request: Request) {
       },
     });
   } catch (error) {
+    // El navegador se fue antes de que el backend contestara: no es un fallo.
+    if (error instanceof Error && error.name === "AbortError") {
+      return new Response(null, { status: 204 });
+    }
     console.error("Error en proxy SSE:", error);
     return new Response("Error interno del servidor proxy SSE", { status: 500 });
   }

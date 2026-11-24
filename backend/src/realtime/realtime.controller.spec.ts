@@ -1,6 +1,10 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { firstValueFrom, of } from 'rxjs';
 import { Usuarios } from '../users/entities/user.entity';
 import { RealtimeController } from './realtime.controller';
+
+const SESION = { sid: 'sid-1', familyId: null };
+const primerValor = (flujo: unknown) => firstValueFrom(flujo as any);
 
 /*
  * sseChofer entra con JwtAuthGuard y comprueba el rol a mano, como los demas
@@ -8,12 +12,14 @@ import { RealtimeController } from './realtime.controller';
  */
 describe('RealtimeController.sseChofer', () => {
   const realtimeEventsService = { getDriverStream: jest.fn() };
+  const vigilante = { estaVigente: jest.fn().mockResolvedValue(true) };
   const empleadasRepository = { findOne: jest.fn() };
   const choferesRepository = { findOne: jest.fn() };
   const clientesRepository = { findOne: jest.fn() };
 
   const controller = new RealtimeController(
     realtimeEventsService as any,
+    vigilante as any,
     empleadasRepository as any,
     choferesRepository as any,
     clientesRepository as any,
@@ -23,12 +29,13 @@ describe('RealtimeController.sseChofer', () => {
 
   it('conecta al canal del chofer resuelto por el usuario de la sesion', async () => {
     choferesRepository.findOne.mockResolvedValue({ id: 'driver-1' });
-    const stream = {} as any;
+    const stream = of({ data: 'x' });
     realtimeEventsService.getDriverStream.mockReturnValue(stream);
 
-    const result = await controller.sseChofer({
-      user: { id: 'user-1', rol: 'chofer' } as Usuarios,
-    });
+    const result = await controller.sseChofer(
+      { user: { id: 'user-1', rol: 'chofer' } as Usuarios },
+      SESION,
+    );
 
     expect(choferesRepository.findOne).toHaveBeenCalledWith({
       where: { usuarioId: 'user-1' },
@@ -37,16 +44,17 @@ describe('RealtimeController.sseChofer', () => {
     expect(realtimeEventsService.getDriverStream).toHaveBeenCalledWith(
       'driver-1',
     );
-    expect(result).toBe(stream);
+    expect(await primerValor(result)).toEqual({ data: 'x' });
   });
 
   it('rechaza cuando el usuario autenticado no tiene perfil de chofer', async () => {
     choferesRepository.findOne.mockResolvedValue(null);
 
     await expect(
-      controller.sseChofer({
-        user: { id: 'user-2', rol: 'chofer' } as Usuarios,
-      }),
+      controller.sseChofer(
+        { user: { id: 'user-2', rol: 'chofer' } as Usuarios },
+        SESION,
+      ),
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(realtimeEventsService.getDriverStream).not.toHaveBeenCalled();
   });
@@ -55,7 +63,7 @@ describe('RealtimeController.sseChofer', () => {
     'niega el canal del chofer al rol %s',
     async (rol) => {
       await expect(
-        controller.sseChofer({ user: { id: 'user-3', rol } as Usuarios }),
+        controller.sseChofer({ user: { id: 'user-3', rol } as Usuarios }, SESION),
       ).rejects.toBeInstanceOf(ForbiddenException);
       expect(choferesRepository.findOne).not.toHaveBeenCalled();
       expect(realtimeEventsService.getDriverStream).not.toHaveBeenCalled();
@@ -76,12 +84,14 @@ describe('RealtimeController: canal del cliente y separacion de roles', () => {
     getBossStream: jest.fn(),
     getEmployeeStream: jest.fn(),
   };
+  const vigilante = { estaVigente: jest.fn().mockResolvedValue(true) };
   const empleadasRepository = { findOne: jest.fn() };
   const choferesRepository = { findOne: jest.fn() };
   const clientesRepository = { findOne: jest.fn() };
 
   const controller = new RealtimeController(
     realtimeEventsService as any,
+    vigilante as any,
     empleadasRepository as any,
     choferesRepository as any,
     clientesRepository as any,
@@ -95,10 +105,10 @@ describe('RealtimeController: canal del cliente y separacion de roles', () => {
 
   it('conecta al cliente con el canal de su ficha', async () => {
     clientesRepository.findOne.mockResolvedValue({ id: 'cliente-1' });
-    const stream = {} as any;
+    const stream = of({ data: 'x' });
     realtimeEventsService.getClientStream.mockReturnValue(stream);
 
-    const result = await controller.sseCliente(peticion('cliente'));
+    const result = await controller.sseCliente(peticion('cliente'), SESION);
 
     expect(clientesRepository.findOne).toHaveBeenCalledWith({
       where: { usuarioId: 'user-1' },
@@ -107,14 +117,14 @@ describe('RealtimeController: canal del cliente y separacion de roles', () => {
     expect(realtimeEventsService.getClientStream).toHaveBeenCalledWith(
       'cliente-1',
     );
-    expect(result).toBe(stream);
+    expect(await primerValor(result)).toEqual({ data: 'x' });
   });
 
   it('responde 404 al cliente sin ficha', async () => {
     clientesRepository.findOne.mockResolvedValue(null);
 
     await expect(
-      controller.sseCliente(peticion('cliente')),
+      controller.sseCliente(peticion('cliente'), SESION),
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(realtimeEventsService.getClientStream).not.toHaveBeenCalled();
   });
@@ -122,7 +132,7 @@ describe('RealtimeController: canal del cliente y separacion de roles', () => {
   it.each(['jefe', 'admin', 'empleada', 'chofer'] as const)(
     'niega el canal del cliente al rol %s',
     async (rol) => {
-      await expect(controller.sseCliente(peticion(rol))).rejects.toBeInstanceOf(
+      await expect(controller.sseCliente(peticion(rol), SESION)).rejects.toBeInstanceOf(
         ForbiddenException,
       );
       expect(clientesRepository.findOne).not.toHaveBeenCalled();
@@ -131,7 +141,7 @@ describe('RealtimeController: canal del cliente y separacion de roles', () => {
   );
 
   it('niega a un cliente el canal de jefes', () => {
-    expect(() => controller.sseJefes(peticion('cliente'))).toThrow(
+    expect(() => controller.sseJefes(peticion('cliente'), SESION)).toThrow(
       ForbiddenException,
     );
     expect(realtimeEventsService.getJefesStream).not.toHaveBeenCalled();
@@ -140,7 +150,7 @@ describe('RealtimeController: canal del cliente y separacion de roles', () => {
 
   it('niega a un cliente el canal de empleada', async () => {
     await expect(
-      controller.sseEmpleada(peticion('cliente')),
+      controller.sseEmpleada(peticion('cliente'), SESION),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(empleadasRepository.findOne).not.toHaveBeenCalled();
   });
