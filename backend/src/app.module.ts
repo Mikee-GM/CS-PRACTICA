@@ -98,7 +98,7 @@ import { ServiceFeedbackModule } from './service-feedback/service-feedback.modul
           .integer()
           .min(0)
           .max(10000)
-          .default(1500),
+          .default(4000),
         WEB_CHAT_MAX_TYPING_DELAY_MS: Joi.number()
           .integer()
           .min(0)

@@ -189,6 +189,31 @@ export function detectGlobalBookingIntent(
     return { intent: 'PROVIDE_EXPECTED_DATA', confidence: 'medium' };
   }
 
+  // Pedir la lista de moteles, o contestar "uno de los tuyos", no aporta un dato
+  // que el parser entienda, pero tampoco es un mensaje perdido: la IA contesta con
+  // la lista o con la eleccion. Sin esto caian en UNKNOWN y el filtro de bucles
+  // sustituia su respuesta por "no alcance a ubicar el lugar".
+  if (
+    hasAny(normalized, [
+      /\b(lista|listado|opciones)\b/,
+      /\b(moteles?|hoteles?|lugares|sitios)\b/,
+      /\b(cuales|donde)\s+(tienes|manejas|atiendes|hay)\b/,
+    ])
+  ) {
+    return { intent: 'GENERAL_QUESTION', confidence: 'medium' };
+  }
+
+  if (
+    hasAny(normalized, [
+      /\b(uno|una|alguno|alguna|cualquiera)\s+de\s+(los|las)\s+(tuyos|tuyas|que\s+(manejas|tienes|atiendes))\b/,
+      /\b(uno|alguno)\s+de\s+(tus|esos|esas)\b/,
+      /\bel\s+que\s+(tu\s+)?(quieras|sea|prefieras|me\s+recomiendes|digas)\b/,
+      /\bdonde\s+(tu\s+)?(quieras|prefieras)\b/,
+    ])
+  ) {
+    return { intent: 'PROVIDE_EXPECTED_DATA', confidence: 'medium' };
+  }
+
   if (
     normalized.endsWith('?') ||
     /^\b(acepta|puedo|tienen|cuanto|cu[aá]l|d[oó]nde)\b/.test(normalized)

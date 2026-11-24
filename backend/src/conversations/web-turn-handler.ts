@@ -24,6 +24,13 @@ import { WebBookingStateStore } from './web-booking-state.store';
 import { esperar, WebChatChannel } from './web-chat-channel';
 
 /** Mensajes del cliente que se atienden juntos, como mucho, en un turno. */
+/**
+ * Cuanto espera la IA desde el ultimo mensaje del cliente antes de empezar a
+ * "escribir". Mas de un segundo y medio para que no parezca que contesta antes de
+ * haber leido, y para agrupar a quien manda varios mensajes seguidos.
+ */
+const DEBOUNCE_POR_DEFECTO_MS = 4000;
+
 const MAX_MENSAJES_POR_TURNO = 10;
 /** Turnos seguidos que un mismo proceso encadena antes de soltar el lock. */
 const MAX_RONDAS_POR_LOCK = 5;
@@ -72,7 +79,7 @@ export class WebTurnHandler implements ConversationTurnHandler {
   ) {
     this.debounceMs = milisegundos(
       configService.get<number>('WEB_CHAT_DEBOUNCE_MS'),
-      1500,
+      DEBOUNCE_POR_DEFECTO_MS,
     );
     this.pausaMaximaMs = milisegundos(
       configService.get<number>('WEB_CHAT_MAX_TYPING_DELAY_MS'),

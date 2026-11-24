@@ -18,6 +18,12 @@ describe('booking lifecycle', () => {
     ['cancelar la solicitud', 'CANCEL_BOOKING'],
     ['quiero hablar con una persona', 'REQUEST_HUMAN'],
     ['en qué estado va', 'ASK_STATUS'],
+    ['Pásame la lista', 'GENERAL_QUESTION'],
+    ['me pasas la lista de moteles', 'GENERAL_QUESTION'],
+    ['cuáles moteles manejas', 'GENERAL_QUESTION'],
+    ['Uno de los tuyos', 'PROVIDE_EXPECTED_DATA'],
+    ['el que tú quieras', 'PROVIDE_EXPECTED_DATA'],
+    ['uno de tus moteles', 'GENERAL_QUESTION'],
   ])('prioriza la intención global para %s', (text, intent) => {
     expect(
       detectGlobalBookingIntent(text, {
