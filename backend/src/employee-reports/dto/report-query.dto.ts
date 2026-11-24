@@ -1,3 +1,4 @@
+import { finDelDia, inicioDelDia } from '../../common/dias-del-negocio';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import {
@@ -65,12 +66,12 @@ export class ReportQueryDto {
   bossId?: string;
 
   @IsOptional()
-  @Transform(({ value }) => new Date(value))
+  @Transform(({ value }) => inicioDelDia(value))
   @IsDate()
   from?: Date;
 
   @IsOptional()
-  @Transform(({ value }) => new Date(value))
+  @Transform(({ value }) => finDelDia(value))
   @IsDate()
   to?: Date;
 }

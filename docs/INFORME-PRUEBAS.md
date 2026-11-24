@@ -128,6 +128,7 @@ registro se niega con un 409 si el corte de esa semana ya esta confirmado.
 | 21 | Media | Los cortes sumaban dinero con `Number`: `0.1 + 0.2 > 0.3` rechazaba el **ultimo abono legitimo de una deuda**, y una obligacion podia quedarse `pendiente` con saldo cero. | Centavos enteros (`money.ts`) en el corte, la confirmacion y las deudas. |
 | 22 | Media | **Todos los cortes semanales guardaban `week_end` un dia de mas** (el lunes siguiente): el domingo 23:59 de Mexico ya es lunes en UTC. Ademas, el grafico diario mandaba los servicios de la noche al dia siguiente. | `fechaDelNegocio` en todos los puntos; migracion que corrige los cortes ya guardados. |
 | 23 | Media | La siembra de demostracion se contradecia (obligaciones de efectivo sobre servicios por transferencia, abonos sin repartir, cortes sin sus viajes, una multa revocada que seguia descontando): la conciliacion nacia con decenas de discrepancias. | La siembra regenera lo derivado con las reglas reales del sistema. |
+| 24 | Media | **El corte semanal del Centro de Mando perdia desde el sabado por la tarde y no veia los cortes confirmados** (decia 0 de 3 aunque hubiera 3): mandaba fechas planas (`2026-11-23`) y el backend las tomaba como medianoche UTC, que en Mexico es el sabado a las 18:00. El filtro de reportes tenia el mismo defecto. | Una fecha plana es un dia del calendario del negocio (`inicioDelDia` y `finDelDia`); un instante completo se respeta tal cual. |
 
 ### Abiertos: necesitan una decision tuya
 
