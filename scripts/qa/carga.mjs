@@ -164,13 +164,16 @@ function recursos() {
 }
 
 function conexionesAlBackend() {
+  // Se lee /proc/net/tcp del contenedor y se cuenta aqui: meter un awk dentro de
+  // `docker exec` obliga a escapar comillas por tres capas.
   try {
-    return Number(
-      execSync(
-        `docker exec ${CONTENEDORES[0]} sh -c "cat /proc/net/tcp /proc/net/tcp6 2>/dev/null | awk '\\$4==\\"01\\" && toupper(substr(\\$3,length(\\$3)-3))==\\"0FA0\\"' | wc -l"`,
-        { encoding: 'utf8' },
-      ).trim(),
-    );
+    const crudo = execSync(`docker exec ${CONTENEDORES[0]} sh -c "cat /proc/net/tcp /proc/net/tcp6"`, {
+      encoding: 'utf8',
+    });
+    return crudo
+      .split(String.fromCharCode(10))
+      .map((linea) => linea.trim().split(/\s+/))
+      .filter((campos) => campos[3] === '01' && campos[2]?.split(':')[1]?.toUpperCase() === '0FA0').length;
   } catch {
     return null;
   }
