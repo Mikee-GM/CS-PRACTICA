@@ -8,6 +8,7 @@ import { ErrorDeFormulario } from "@/components/cliente/Campo";
 import FormContrasena from "@/components/cliente/FormContrasena";
 import FormNombre from "@/components/cliente/FormNombre";
 import NavegacionCliente from "@/components/cliente/NavegacionCliente";
+import TransicionDePestana from "@/components/cliente/TransicionDePestana";
 import TarjetaCalificacion from "@/components/cliente/TarjetaCalificacion";
 import TarjetaDePerfil from "@/components/cliente/TarjetaDePerfil";
 import TarjetaEstado from "@/components/cliente/TarjetaEstado";
@@ -59,37 +60,39 @@ export default async function CuentaPage() {
   return (
     <>
       <NavegacionCliente />
-      <main className="min-h-dvh bg-[#050505] px-4 pb-[max(2.5rem,env(safe-area-inset-bottom))] pt-[max(2rem,env(safe-area-inset-top))] md:pt-8">
-        <div className="mx-auto w-full max-w-xl space-y-6">
-          <header className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-[0.4em] text-[#C5A55A]/60">
-                Mi perfil
-              </p>
-              <h1 className="mt-2 break-words font-heading text-3xl font-semibold text-white">
-                {perfil?.nombre || "Bienvenido"}
-              </h1>
-              {perfil ? (
-                <p className="mt-1 break-all text-sm text-zinc-500">
-                  {perfil.email}
+      <TransicionDePestana>
+        <main className="min-h-dvh bg-[#050505] px-4 pb-[max(2.5rem,env(safe-area-inset-bottom))] pt-[max(2rem,env(safe-area-inset-top))] md:pt-8">
+          <div className="mx-auto w-full max-w-xl space-y-6">
+            <header className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-[0.4em] text-[#C5A55A]/60">
+                  Mi perfil
                 </p>
-              ) : null}
+                <h1 className="mt-2 break-words font-heading text-3xl font-semibold text-white">
+                  {perfil?.nombre || "Bienvenido"}
+                </h1>
+                {perfil ? (
+                  <p className="mt-1 break-all text-sm text-zinc-500">
+                    {perfil.email}
+                  </p>
+                ) : null}
+              </div>
+              <CerrarSesion destino="/" />
+            </header>
+
+            {perfil ? <Perfil perfil={perfil} /> : <PerfilNoDisponible />}
+
+            <div className="flex flex-wrap gap-3">
+              <Link href="/chats" className={enlacePrimario}>
+                Mis chats
+              </Link>
+              <Link href="/" className={enlaceSecundario}>
+                Ver el catálogo
+              </Link>
             </div>
-            <CerrarSesion destino="/" />
-          </header>
-
-          {perfil ? <Perfil perfil={perfil} /> : <PerfilNoDisponible />}
-
-          <div className="flex flex-wrap gap-3">
-            <Link href="/chats" className={enlacePrimario}>
-              Mis chats
-            </Link>
-            <Link href="/" className={enlaceSecundario}>
-              Ver el catálogo
-            </Link>
           </div>
-        </div>
-      </main>
+        </main>
+      </TransicionDePestana>
     </>
   );
 }
