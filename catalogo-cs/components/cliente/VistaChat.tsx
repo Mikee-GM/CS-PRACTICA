@@ -25,6 +25,7 @@ import {
   type UbicacionDelMensaje,
 } from "@/lib/conversaciones";
 import { esRedireccion } from "@/lib/es-redireccion";
+import { useAreaVisible } from "@/components/chat/useAreaVisible";
 import BarraEscritura from "./BarraEscritura";
 import Burbuja from "./Burbuja";
 import { ErrorDeFormulario } from "./Campo";
@@ -439,6 +440,8 @@ export default function VistaChat({
     void releerResumen();
   }
 
+  const raizRef = useAreaVisible<HTMLDivElement>();
+
   // El corte entre historial y lo nuevo: desde el primer mensaje que no estaba.
   const corte = useMemo(() => {
     const i = mensajes.findIndex((m) => !historial.has(m.id));
@@ -454,7 +457,7 @@ export default function VistaChat({
   );
 
   return (
-    <div className="flex h-dvh flex-col bg-black">
+    <div ref={raizRef} className="fixed inset-x-0 top-0 flex h-dvh flex-col bg-black">
       <EncabezadoAsistente modelo={conversacion.employee} status={status} canal={canal} />
 
       <div
