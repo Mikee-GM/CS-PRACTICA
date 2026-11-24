@@ -90,6 +90,9 @@ export default function BarraEscritura({
     if (!limpio || cerrada) return;
     onEnviar(limpio);
     setTexto("");
+    // El teclado se queda abierto para escribir otro mensaje: cerrarlo y abrirlo
+    // en cada envio mueve toda la pantalla.
+    textareaRef.current?.focus();
   }
 
   function alPulsarTecla(e: KeyboardEvent<HTMLTextAreaElement>) {
@@ -225,6 +228,8 @@ export default function BarraEscritura({
               type="submit"
               disabled={!hayTexto || ocupada}
               aria-label="Enviar mensaje"
+              // Tocar el boton no debe quitarle el foco al cuadro de texto.
+              onPointerDown={(e) => e.preventDefault()}
               whileTap={{ scale: 0.9 }}
               className={`${botonIcono} bg-[#C5A55A] text-black hover:bg-[#D4AF37]`}
             >

@@ -117,6 +117,7 @@ export default function ConversacionChatWeb({
     pie?: string;
   } | null>(null);
   const [enviandoMedia, setEnviandoMedia] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const acciones = accionesDisponibles(conversacion, usuario);
   const resumen = useMemo(() => resumenDelBorrador(mensajes), [mensajes]);
@@ -278,6 +279,8 @@ export default function ConversacionChatWeb({
       setMensajes((actuales) => mezclarMensajes(actuales, [resultado.data]));
       // Solo se borra si no se escribio otra cosa mientras se enviaba.
       setTexto((actual) => (actual.trim() === cuerpo ? "" : actual));
+      // El teclado se queda abierto para escribir otro mensaje.
+      textareaRef.current?.focus();
     } catch (error) {
       if (esRedireccion(error)) throw error;
       setErrorDeEnvio(
@@ -611,6 +614,7 @@ export default function ConversacionChatWeb({
                 Responder al cliente
               </label>
               <textarea
+                ref={textareaRef}
                 id={`${idBase}-texto`}
                 rows={2}
                 value={texto}
@@ -628,6 +632,7 @@ export default function ConversacionChatWeb({
               />
               <motion.button
                 type="submit"
+                onPointerDown={(e) => e.preventDefault()}
                 disabled={enviando || enviandoMedia || mediaEnCurso || !texto.trim()}
                 aria-busy={enviando}
                 whileTap={{ scale: 0.9 }}
