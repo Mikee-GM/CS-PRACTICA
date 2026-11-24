@@ -1,11 +1,16 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { MapPin, SendHorizontal } from "lucide-react";
+import { SendHorizontal } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 
-import { BotonesDeMedia, PanelDeMedia } from "@/components/chat/ControlesDeMedia";
+import {
+  BotonMas,
+  BotonMicrofono,
+  MenuDeAdjuntos,
+  PanelDeMedia,
+} from "@/components/chat/ControlesDeMedia";
 import { useMediaDelChat } from "@/components/chat/useMediaDelChat";
 import type { UbicacionDelMensaje } from "@/lib/conversaciones";
 import type { MediaParaEnviar } from "@/lib/media-del-chat";
@@ -76,6 +81,8 @@ export default function BarraEscritura({
   const [ubicacion, setUbicacion] = useState<EstadoUbicacion>({ fase: "inactiva" });
   const media = useMediaDelChat({ onEnviar: onEnviarMedia });
   const ocupada = media.estado.fase !== "inactivo";
+  const [menuAbierto, setMenuAbierto] = useState(false);
+  const hayTexto = texto.trim().length > 0;
 
   function enviar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -183,22 +190,20 @@ export default function BarraEscritura({
           onFotoEnviada={() => setTexto("")}
         />
 
+        <MenuDeAdjuntos
+          controles={media}
+          abierto={menuAbierto}
+          onCerrar={() => setMenuAbierto(false)}
+          onUbicacion={() => setUbicacion({ fase: "confirmando" })}
+          ubicacionOcupada={ubicacion.fase === "buscando"}
+        />
+
         <form ref={formRef} onSubmit={enviar} className="flex items-end gap-1.5">
-          <button
-            type="button"
-            onClick={() => setUbicacion({ fase: "confirmando" })}
-            disabled={ubicacion.fase === "buscando"}
-            aria-busy={ubicacion.fase === "buscando"}
-            aria-label={
-              ubicacion.fase === "buscando"
-                ? "Obteniendo tu ubicación"
-                : "Compartir mi ubicación"
-            }
-            className={`${botonIcono} text-[#C5A55A] hover:bg-zinc-900`}
-          >
-            <MapPin aria-hidden="true" className="h-5 w-5" />
-          </button>
-          <BotonesDeMedia controles={media} />
+          <BotonMas
+            controles={media}
+            abierto={menuAbierto}
+            onAlternar={() => setMenuAbierto((v) => !v)}
+          />
           <label htmlFor={id} className="sr-only">
             Mensaje para {nombreModelo}
           </label>
@@ -215,15 +220,22 @@ export default function BarraEscritura({
             enterKeyHint="enter"
             className="field-sizing-content max-h-36 min-h-11 flex-1 resize-none rounded-2xl border border-zinc-800 bg-black/60 px-4 py-2.5 text-base leading-snug text-white placeholder:text-zinc-600 focus:border-[#C5A55A]/60 focus:outline-none focus:ring-4 focus:ring-[#C5A55A]/10 sm:text-sm"
           />
-          <motion.button
-            type="submit"
-            disabled={!texto.trim() || ocupada}
-            aria-label="Enviar mensaje"
-            whileTap={{ scale: 0.9 }}
-            className={`${botonIcono} bg-[#C5A55A] text-black hover:bg-[#D4AF37]`}
-          >
-            <SendHorizontal aria-hidden="true" className="h-5 w-5" />
-          </motion.button>
+          {hayTexto || ocupada ? (
+            <motion.button
+              type="submit"
+              disabled={!hayTexto || ocupada}
+              aria-label="Enviar mensaje"
+              whileTap={{ scale: 0.9 }}
+              className={`${botonIcono} bg-[#C5A55A] text-black hover:bg-[#D4AF37]`}
+            >
+              <SendHorizontal aria-hidden="true" className="h-5 w-5" />
+            </motion.button>
+          ) : (
+            // Sin texto el sitio de enviar es del microfono, como en cualquier mensajeria.
+            media.estado.fase === "inactivo" ? (
+              <BotonMicrofono controles={media} deshabilitado={false} />
+            ) : null
+          )}
         </form>
       </div>
     </div>

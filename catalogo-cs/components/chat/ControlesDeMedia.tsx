@@ -1,8 +1,8 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { Camera, Image as IconoFoto, Mic, Send, Square, X } from "lucide-react";
-import { useId, useRef } from "react";
+import { Camera, Image as IconoFoto, MapPin, Mic, Plus, Send, Square, X } from "lucide-react";
+import { useRef } from "react";
 
 import { formatearDuracion } from "@/lib/media-del-chat";
 import type { useMediaDelChat } from "./useMediaDelChat";
@@ -12,37 +12,28 @@ type Controles = ReturnType<typeof useMediaDelChat>;
 const boton =
   "flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[#C5A55A] transition-colors hover:bg-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5A55A]/60 disabled:opacity-40";
 
+const botonChico =
+  "flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[#C5A55A] transition-colors hover:bg-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5A55A]/60 disabled:opacity-40 sm:h-11 sm:w-11";
+
 /**
- * Los tres botones del compositor: galeria, camara y microfono.
+ * Los dos `<input type=file>` ocultos y sus botones: galeria y camara.
  *
- * Los dos primeros son `<input type=file>` ocultos: `capture` hace que en el
- * telefono la camara abra directo, y en un equipo de escritorio cae al selector
- * de archivos. Mientras se graba o hay una foto por confirmar se ocultan, para
- * que el compositor no tenga dos cosas a medias a la vez.
+ * `capture` hace que en el telefono la camara abra directo, y en un equipo de
+ * escritorio cae al selector de archivos. Los inputs siguen en el DOM aunque el
+ * menu este cerrado: si se desmontaran, el navegador perderia el archivo elegido.
  */
-export function BotonesDeMedia({
-  controles,
-  deshabilitado = false,
-}: {
-  controles: Controles;
-  deshabilitado?: boolean;
-}) {
-  const id = useId();
+function useEntradasDeFoto(controles: Controles) {
   const galeria = useRef<HTMLInputElement>(null);
   const camara = useRef<HTMLInputElement>(null);
-  if (controles.estado.fase !== "inactivo") return null;
-
   const alElegir = (e: React.ChangeEvent<HTMLInputElement>) => {
     controles.elegirFoto(e.target.files?.[0]);
     // Permite volver a elegir el mismo archivo despues de cancelar.
     e.target.value = "";
   };
-
-  return (
+  const entradas = (
     <>
       <input
         ref={galeria}
-        id={`${id}-galeria`}
         type="file"
         accept="image/jpeg,image/png,image/webp"
         onChange={alElegir}
@@ -52,7 +43,6 @@ export function BotonesDeMedia({
       />
       <input
         ref={camara}
-        id={`${id}-camara`}
         type="file"
         accept="image/*"
         capture="environment"
@@ -61,32 +51,169 @@ export function BotonesDeMedia({
         tabIndex={-1}
         aria-hidden="true"
       />
+    </>
+  );
+  return {
+    entradas,
+    abrirGaleria: () => galeria.current?.click(),
+    abrirCamara: () => camara.current?.click(),
+  };
+}
+
+export function BotonMicrofono({
+  controles,
+  deshabilitado,
+}: {
+  controles: Controles;
+  deshabilitado: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => void controles.iniciarGrabacion()}
+      disabled={deshabilitado}
+      aria-label="Grabar una nota de voz"
+      className={botonChico}
+    >
+      <Mic aria-hidden="true" className="h-5 w-5" />
+    </button>
+  );
+}
+
+/**
+ * Galeria, camara y microfono en fila, para el panel del equipo. Mientras se
+ * graba o hay una foto por confirmar se ocultan, para que el compositor no tenga
+ * dos cosas a medias a la vez.
+ */
+export function BotonesDeMedia({
+  controles,
+  deshabilitado = false,
+}: {
+  controles: Controles;
+  deshabilitado?: boolean;
+}) {
+  const { entradas, abrirGaleria, abrirCamara } = useEntradasDeFoto(controles);
+  const libre = controles.estado.fase === "inactivo";
+  return (
+    <>
+      {entradas}
+      {libre ? (
+        <>
+          <button
+            type="button"
+            onClick={abrirGaleria}
+            disabled={deshabilitado}
+            aria-label="Enviar una foto de la galería"
+            className={botonChico}
+          >
+            <IconoFoto aria-hidden="true" className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            onClick={abrirCamara}
+            disabled={deshabilitado}
+            aria-label="Tomar una foto con la cámara"
+            className={botonChico}
+          >
+            <Camera aria-hidden="true" className="h-5 w-5" />
+          </button>
+          <BotonMicrofono controles={controles} deshabilitado={deshabilitado} />
+        </>
+      ) : null}
+    </>
+  );
+}
+
+/**
+ * Menu "+" del chat del cliente: ubicacion, galeria y camara en una fila de tres
+ * etiquetadas, sobre la barra. Deja la barra con lo esencial (boton, texto y
+ * microfono o enviar), que es lo que cabe en un telefono estrecho.
+ */
+export function MenuDeAdjuntos({
+  controles,
+  abierto,
+  onCerrar,
+  onUbicacion,
+  ubicacionOcupada = false,
+}: {
+  controles: Controles;
+  abierto: boolean;
+  onCerrar: () => void;
+  onUbicacion: () => void;
+  ubicacionOcupada?: boolean;
+}) {
+  const { entradas, abrirGaleria, abrirCamara } = useEntradasDeFoto(controles);
+  const visible = abierto && controles.estado.fase === "inactivo";
+  const accion =
+    "flex min-h-14 flex-col items-center justify-center gap-1 rounded-xl border border-zinc-800 bg-zinc-950 px-2 py-2 text-[11px] font-medium text-zinc-300 transition-colors hover:border-[#C5A55A]/50 hover:text-[#E8D5A3] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C5A55A]/60 disabled:opacity-40";
+  return (
+    <div>
+      {entradas}
+      <div hidden={!visible} className="grid grid-cols-3 gap-2" id="menu-de-adjuntos">
+        <button
+          type="button"
+          disabled={ubicacionOcupada}
+          onClick={() => {
+            onCerrar();
+            onUbicacion();
+          }}
+          className={accion}
+        >
+          <MapPin aria-hidden="true" className="h-5 w-5 text-[#C5A55A]" />
+          Ubicación
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            onCerrar();
+            abrirGaleria();
+          }}
+          className={accion}
+        >
+          <IconoFoto aria-hidden="true" className="h-5 w-5 text-[#C5A55A]" />
+          Galería
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            onCerrar();
+            abrirCamara();
+          }}
+          className={accion}
+        >
+          <Camera aria-hidden="true" className="h-5 w-5 text-[#C5A55A]" />
+          Cámara
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** El boton "+" que abre y cierra el menu de adjuntos. */
+export function BotonMas({
+  controles,
+  abierto,
+  onAlternar,
+}: {
+  controles: Controles;
+  abierto: boolean;
+  onAlternar: () => void;
+}) {
+  if (controles.estado.fase !== "inactivo") return null;
+  return (
+    <>
       <button
         type="button"
-        onClick={() => galeria.current?.click()}
-        disabled={deshabilitado}
-        aria-label="Enviar una foto de la galería"
-        className={boton}
+        onClick={onAlternar}
+        aria-expanded={abierto}
+        aria-controls="menu-de-adjuntos"
+        aria-label={abierto ? "Cerrar los adjuntos" : "Adjuntar ubicación, foto o cámara"}
+        className={botonChico}
       >
-        <IconoFoto aria-hidden="true" className="h-5 w-5" />
-      </button>
-      <button
-        type="button"
-        onClick={() => camara.current?.click()}
-        disabled={deshabilitado}
-        aria-label="Tomar una foto con la cámara"
-        className={boton}
-      >
-        <Camera aria-hidden="true" className="h-5 w-5" />
-      </button>
-      <button
-        type="button"
-        onClick={() => void controles.iniciarGrabacion()}
-        disabled={deshabilitado}
-        aria-label="Grabar una nota de voz"
-        className={boton}
-      >
-        <Mic aria-hidden="true" className="h-5 w-5" />
+        <Plus
+          aria-hidden="true"
+          className={`h-6 w-6 transition-transform motion-reduce:transition-none ${abierto ? "rotate-45" : ""}`}
+        />
       </button>
     </>
   );
