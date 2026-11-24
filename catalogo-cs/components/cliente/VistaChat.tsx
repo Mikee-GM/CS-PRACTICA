@@ -440,7 +440,11 @@ export default function VistaChat({
     void releerResumen();
   }
 
-  const raizRef = useAreaVisible<HTMLDivElement>();
+  // Al abrir o cerrar el teclado el area visible cambia de alto: si se venia
+  // leyendo lo ultimo, lo ultimo tiene que seguir a la vista.
+  const raizRef = useAreaVisible<HTMLDivElement>(() => {
+    if (seguirAlFinal.current) irAlFinal(false);
+  });
 
   // El corte entre historial y lo nuevo: desde el primer mensaje que no estaba.
   const corte = useMemo(() => {

@@ -13,8 +13,12 @@ import { useEffect, useRef } from "react";
  *
  * Sin `visualViewport` (navegadores viejos) no hace nada y vale el `h-dvh`.
  */
-export function useAreaVisible<T extends HTMLElement>() {
+export function useAreaVisible<T extends HTMLElement>(alAjustar?: () => void) {
   const ref = useRef<T>(null);
+  const alAjustarRef = useRef(alAjustar);
+  useEffect(() => {
+    alAjustarRef.current = alAjustar;
+  }, [alAjustar]);
 
   useEffect(() => {
     const vv = window.visualViewport;
@@ -35,8 +39,13 @@ export function useAreaVisible<T extends HTMLElement>() {
     const ajustar = () => {
       el.style.height = `${vv.height}px`;
       el.style.transform = `translateY(${vv.offsetTop}px)`;
+      // Con el teclado abierto no hay indicador de inicio debajo de la barra: el
+      // relleno del area segura solo deja un hueco entre ella y el teclado.
+      const tecladoAbierto = window.innerHeight - vv.height > 120;
+      el.style.setProperty("--inset-inferior", tecladoAbierto ? "0px" : "env(safe-area-inset-bottom)");
       // La pagina de atras no debe quedarse desplazada tras cerrar el teclado.
       if (window.scrollY !== 0) window.scrollTo(0, 0);
+      alAjustarRef.current?.();
     };
     ajustar();
     vv.addEventListener("resize", ajustar);

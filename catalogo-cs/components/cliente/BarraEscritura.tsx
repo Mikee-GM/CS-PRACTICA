@@ -133,7 +133,7 @@ export default function BarraEscritura({
 
   if (cerrada) {
     return (
-      <div className="shrink-0 border-t border-zinc-800/80 bg-[#050505] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+      <div className="shrink-0 border-t border-zinc-800/80 bg-[#050505] px-4 pb-[max(1rem,var(--inset-inferior,env(safe-area-inset-bottom)))] pt-3">
         <p className="mx-auto max-w-2xl text-center text-xs text-zinc-400">
           Esta conversación está cerrada y ya no admite mensajes. Para volver a
           escribir, abre un chat nuevo desde el catálogo.
@@ -143,7 +143,7 @@ export default function BarraEscritura({
   }
 
   return (
-    <div className="shrink-0 border-t border-zinc-800/80 bg-[#050505] pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] pt-2">
+    <div className="shrink-0 border-t border-zinc-800/80 bg-[#050505] pb-[max(0.75rem,var(--inset-inferior,env(safe-area-inset-bottom)))] pl-[max(0.5rem,env(safe-area-inset-left))] pr-[max(0.5rem,env(safe-area-inset-right))] pt-2">
       <div className="mx-auto w-full max-w-2xl space-y-2">
         {ubicacion.fase === "confirmando" ? (
           // El permiso del navegador llega despues de explicar para que se usa,
