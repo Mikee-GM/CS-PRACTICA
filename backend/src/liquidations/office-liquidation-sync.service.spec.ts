@@ -12,6 +12,8 @@ describe('OfficeLiquidationSyncService.syncOfficeRecord', () => {
     merge: jest.fn(),
     save: jest.fn((valor: object) => Promise.resolve(valor)),
     findOneOrFail: jest.fn().mockResolvedValue({ id: 'registro' }),
+    // Ninguna semana confirmada: el servicio entra con la fecha en que termino.
+    manager: { query: jest.fn().mockResolvedValue([]) },
   };
   const cashObligations = {
     findOneBy: jest.fn().mockResolvedValue(null),

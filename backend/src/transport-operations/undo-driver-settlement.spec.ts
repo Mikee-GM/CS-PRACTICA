@@ -30,6 +30,7 @@ describe('SettlementsService undoDriverSettlement', () => {
           ? { update: actualizarViajes }
           : { findOne: buscarSettlement, save: guardar },
       ),
+      query: jest.fn().mockResolvedValue(undefined),
     };
 
     /*

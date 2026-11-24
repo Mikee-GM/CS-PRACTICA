@@ -678,6 +678,24 @@ export class ServicesService implements OnModuleInit, OnModuleDestroy {
       }
     }
 
+    /*
+     * El cargo de transporte lo fija quien crea el servicio: el chat de reserva y
+     * el cambio de destino ya lo hacian, pero el formulario del jefe lo dejaba en
+     * cero, asi que al cliente de un domicilio no se le cobraba el traslado y el
+     * chofer cobraba 0. Un lugar predefinido no lleva cargo; una direccion
+     * externa lleva la tarifa configurada.
+     */
+    if (
+      createServiceDto.customerTransportCharge === undefined &&
+      !createServiceDto.presetLocationId &&
+      createServiceDto.ubicacionClienteLat != null &&
+      createServiceDto.ubicacionClienteLng != null
+    ) {
+      createServiceDto.customerTransportCharge = await this.transportOperations
+        .externalLocationFee()
+        .catch(() => 0);
+    }
+
     const servicioGuardado = await this.reserveNext(createServiceDto);
 
     // Emit event to Jefes in real-time via SSE

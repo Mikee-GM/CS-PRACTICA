@@ -318,13 +318,22 @@ export const VERIFICACIONES: DefinicionDeVerificacion[] = [
     id: 'corte-chofer',
     titulo: 'Cortes de choferes: total igual a la suma de sus viajes',
     descripcion:
-      'Un corte pagado suma los viajes que liquido; uno pendiente suma los viajes terminados de su semana que todavia no estan en ningun corte.',
+      'Un corte pagado suma los viajes que liquido menos las multas que descontó; uno pendiente suma los viajes terminados que todavia no estan en ningun corte menos las multas por descontar.',
     sql: `
-      SELECT 'corte ' || left(d.id::text, 8), NULL::uuid, d.total, x.suma,
+      SELECT 'corte ' || left(d.id::text, 8), NULL::uuid, d.total, x.suma - x.multas,
              d.status || ', semana ' || d.week_start || ' del chofer ' || left(d.driver_id::text, 8)
       FROM driver_settlements d
       CROSS JOIN LATERAL (
-        SELECT COALESCE(SUM(v.driver_payout), 0) AS suma
+        SELECT COALESCE(SUM(v.driver_payout), 0) AS suma,
+               CASE WHEN d.status = 'paid'
+                 THEN COALESCE((SELECT SUM(s.fine_amount) FROM disciplinary_sanctions s
+                                 WHERE s.driver_settlement_id = d.id), 0)
+                 ELSE COALESCE((SELECT SUM(s.fine_amount) FROM disciplinary_sanctions s
+                                 WHERE s.subject_type = 'driver' AND s.subject_id = d.driver_id
+                                   AND s.type = 'fine' AND s.status = 'active'
+                                   AND s.driver_settlement_id IS NULL
+                                   AND s.created_at < ((d.week_end + 1)::timestamp AT TIME ZONE 'America/Mexico_City')), 0)
+               END AS multas
         FROM viajes v
         WHERE CASE WHEN d.status = 'paid'
                 THEN v.driver_settlement_id = d.id
@@ -332,22 +341,29 @@ export const VERIFICACIONES: DefinicionDeVerificacion[] = [
                  AND v.proveedor_transporte = 'interno'
                  AND v.estado = 'finalizado'
                  AND v.driver_settlement_id IS NULL
-                 AND v.hora_fin_viaje >= (d.week_start::timestamp AT TIME ZONE 'America/Mexico_City')
                  AND v.hora_fin_viaje < ((d.week_end + 1)::timestamp AT TIME ZONE 'America/Mexico_City')
+                 AND (v.hora_fin_viaje >= (d.week_start::timestamp AT TIME ZONE 'America/Mexico_City')
+                      OR EXISTS (SELECT 1 FROM driver_settlements p
+                                  WHERE p.driver_id = d.driver_id AND p.status = 'paid'
+                                    AND (v.hora_fin_viaje AT TIME ZONE 'America/Mexico_City')::date
+                                        BETWEEN p.week_start AND p.week_end))
               END
       ) x
       WHERE d.week_start >= ($1 AT TIME ZONE 'America/Mexico_City')::date - 7
         AND d.week_start < ($2 AT TIME ZONE 'America/Mexico_City')::date
-        AND abs(d.total - x.suma) > ${TOLERANCIA}`,
+        -- Un corte pendiente con mas multas que viajes descuenta solo las que caben:
+        -- no se puede recalcular sin repetir esa eleccion, asi que no se verifica.
+        AND (d.status = 'paid' OR x.suma >= x.multas)
+        AND abs(d.total - (x.suma - x.multas)) > ${TOLERANCIA}`,
   },
   {
     id: 'viaje-fuera-de-corte',
-    titulo: 'Viajes de choferes que quedaron fuera de un corte pagado',
+    titulo: 'Viajes de choferes sin un corte abierto que los recoja',
     descripcion:
-      'Un viaje terminado en una semana cuyo corte de chofer ya se pago no entra en ningun corte: ese dinero se le debe y nadie lo va a pagar.',
+      'Un viaje terminado despues de pagar el corte de su semana se paga en la semana siguiente: tiene que existir un corte pendiente posterior que lo recoja.',
     sql: `
       SELECT 'viaje ' || left(v.id::text, 8), v.servicio_id, v.driver_payout, 0::numeric,
-             'terminado en la semana ' || d.week_start || ', que ya esta pagada'
+             'terminado en la semana ' || d.week_start || ', ya pagada, y no hay un corte posterior abierto'
       FROM viajes v
       JOIN driver_settlements d
         ON d.driver_id = v.chofer_id AND d.status = 'paid'
@@ -355,6 +371,9 @@ export const VERIFICACIONES: DefinicionDeVerificacion[] = [
        AND v.hora_fin_viaje < ((d.week_end + 1)::timestamp AT TIME ZONE 'America/Mexico_City')
       WHERE v.proveedor_transporte = 'interno' AND v.estado = 'finalizado'
         AND v.driver_payout > 0 AND v.driver_settlement_id IS NULL
+        AND NOT EXISTS (SELECT 1 FROM driver_settlements n
+                         WHERE n.driver_id = v.chofer_id AND n.status = 'pending'
+                           AND n.week_start > d.week_start)
         AND v.hora_fin_viaje >= $1::timestamptz - interval '21 days'
         AND v.hora_fin_viaje < $2`,
   },

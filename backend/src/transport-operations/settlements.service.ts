@@ -7,7 +7,14 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Between, DataSource, In, IsNull, Repository } from 'typeorm';
+import {
+  Between,
+  DataSource,
+  EntityManager,
+  In,
+  IsNull,
+  Repository,
+} from 'typeorm';
 import { Viajes } from '../trips/entities/trip.entity';
 import { EmployeeCashObligation } from './entities/employee-cash-obligation.entity';
 import {
@@ -60,6 +67,12 @@ export class SettlementsService {
    * `T00:00:00Z` el periodo empezaba a las seis de la tarde del dia anterior.
    */
   private ventanaDeSemana(startDate: string, endDate: string) {
+    const { desde, hasta } = this.limitesDeSemana(startDate, endDate);
+    return Between(desde, hasta);
+  }
+
+  /** Primer y ultimo milisegundo del periodo, en hora de Mexico. */
+  private limitesDeSemana(startDate: string, endDate: string) {
     // Solo `AAAA-MM-DD` y una fecha que exista: con una fecha ISO completa o con
     // `2026-02-31`, `toISOString` lanzaba RangeError y la ruta respondia 500.
     // Ademas, JavaScript convierte `2026-02-31` en el 3 de marzo sin avisar: se
@@ -84,7 +97,7 @@ export class SettlementsService {
     if (!desde || !hasta) {
       throw new BadRequestException('El periodo no es válido');
     }
-    return Between(desde, new Date(hasta.getTime() - 1));
+    return { desde, hasta: new Date(hasta.getTime() - 1) };
   }
 
   private async allowedEmployeeIds(actor: Usuarios): Promise<string[] | null> {
@@ -419,6 +432,11 @@ export class SettlementsService {
           driverSettlementId: null,
         },
       );
+      // Las multas descontadas en ese corte vuelven a quedar por descontar.
+      await manager.query(
+        `UPDATE disciplinary_sanctions SET driver_settlement_id = NULL WHERE driver_settlement_id = $1`,
+        [settlement.id],
+      );
 
       const reabierta = await manager.getRepository(DriverSettlement).save({
         ...settlement,
@@ -477,17 +495,13 @@ export class SettlementsService {
         .findOneBy({ driverId, weekStart: startDate });
       if (existing?.status === 'paid')
         throw new ConflictException('La liquidación ya fue pagada');
-      const trips = await manager.getRepository(Viajes).find({
-        where: {
-          choferId: driverId,
-          proveedorTransporte: 'interno',
-          estado: 'finalizado',
-          driverSettlementId: IsNull(),
-          horaFinViaje: this.ventanaDeSemana(startDate, endDate),
-        },
-        lock: { mode: 'pessimistic_write' },
-      });
-      const total = sumMoney(trips.map((trip) => trip.driverPayout));
+      const { trips, multas, total } = await this.corteDelChofer(
+        manager,
+        driverId,
+        startDate,
+        endDate,
+        true,
+      );
       const settlement = await manager.getRepository(DriverSettlement).save({
         ...(existing ?? {}),
         driverId,
@@ -503,6 +517,11 @@ export class SettlementsService {
         await manager.getRepository(Viajes).update(
           trips.map((trip) => trip.id),
           { driverSettlementId: settlement.id },
+        );
+      if (multas.length)
+        await manager.query(
+          `UPDATE disciplinary_sanctions SET driver_settlement_id = $1 WHERE id = ANY($2::uuid[])`,
+          [settlement.id, multas.map((multa) => multa.id)],
         );
       return settlement;
     });
@@ -536,6 +555,67 @@ export class SettlementsService {
     return resultado;
   }
 
+  /**
+   * Lo que se le paga a un chofer en una semana abierta: sus viajes terminados que
+   * aun no estan en ningun corte, menos sus multas por descontar.
+   *
+   * Un viaje que termina cuando el corte de su semana ya estaba pagado no se
+   * pierde: queda sin corte y este lo recoge en la semana siguiente que se cierre.
+   * Los de una semana anterior que sigue sin pagar no se tocan, son de su propio
+   * corte.
+   *
+   * Las multas se descuentan enteras, de la mas antigua a la mas nueva, mientras
+   * quepan en lo ganado: el pago nunca queda negativo y la que no cabe espera al
+   * corte siguiente.
+   */
+  private async corteDelChofer(
+    manager: EntityManager,
+    driverId: string,
+    weekStart: string,
+    weekEnd: string,
+    bloquear = false,
+  ) {
+    const { desde, hasta } = this.limitesDeSemana(weekStart, weekEnd);
+    const consulta = manager
+      .getRepository(Viajes)
+      .createQueryBuilder('v')
+      .where('v.choferId = :driverId', { driverId })
+      .andWhere("v.proveedorTransporte = 'interno'")
+      .andWhere("v.estado = 'finalizado'")
+      .andWhere('v.driverSettlementId IS NULL')
+      .andWhere('v.horaFinViaje <= :hasta', { hasta })
+      .andWhere(
+        `(v.horaFinViaje >= :desde OR EXISTS (
+          SELECT 1 FROM driver_settlements d
+          WHERE d.driver_id = :driverId AND d.status = 'paid'
+            AND (v.hora_fin_viaje AT TIME ZONE 'America/Mexico_City')::date
+                BETWEEN d.week_start AND d.week_end))`,
+        { desde },
+      );
+    if (bloquear) consulta.setLock('pessimistic_write');
+    const trips = await consulta.getMany();
+
+    const candidatas: Array<{ id: string; fine_amount: string }> =
+      await manager.query(
+        `SELECT id, fine_amount FROM disciplinary_sanctions
+          WHERE subject_type = 'driver' AND subject_id = $1 AND type = 'fine'
+            AND status = 'active' AND driver_settlement_id IS NULL
+            AND created_at <= $2
+          ORDER BY created_at, id`,
+        [driverId, hasta],
+      );
+
+    let restante = toCents(sumMoney(trips.map((trip) => trip.driverPayout)));
+    const multas: Array<{ id: string; amount: number }> = [];
+    for (const multa of candidatas) {
+      const centavos = toCents(Number(multa.fine_amount));
+      if (centavos > restante) break;
+      restante -= centavos;
+      multas.push({ id: multa.id, amount: Number(multa.fine_amount) });
+    }
+    return { trips, multas, total: fromCents(restante) };
+  }
+
   async syncDriverSettlement(tripId: string): Promise<void> {
     const trip = await this.trips.findOneBy({ id: tripId });
     if (
@@ -547,22 +627,28 @@ export class SettlementsService {
     ) {
       return;
     }
-    const { weekStart, weekEnd } = this.getWeekBounds(trip.horaFinViaje);
-    const existing = await this.driverSettlements.findOneBy({
+    // Si el corte de su semana ya esta pagado, el viaje cuenta en la primera
+    // semana siguiente que siga abierta.
+    let { weekStart, weekEnd } = this.getWeekBounds(trip.horaFinViaje);
+    let existing = await this.driverSettlements.findOneBy({
       driverId: trip.choferId,
       weekStart,
     });
-    if (existing?.status === 'paid') return;
-    const trips = await this.trips.find({
-      where: {
-        choferId: trip.choferId,
-        proveedorTransporte: 'interno',
-        estado: 'finalizado',
-        driverSettlementId: IsNull(),
-        horaFinViaje: this.ventanaDeSemana(weekStart, weekEnd),
-      },
-    });
-    const total = sumMoney(trips.map((item) => item.driverPayout));
+    while (existing?.status === 'paid') {
+      const siguiente = new Date(`${weekStart}T12:00:00.000Z`);
+      siguiente.setUTCDate(siguiente.getUTCDate() + 7);
+      ({ weekStart, weekEnd } = this.getWeekBounds(siguiente));
+      existing = await this.driverSettlements.findOneBy({
+        driverId: trip.choferId,
+        weekStart,
+      });
+    }
+    const { total } = await this.corteDelChofer(
+      this.dataSource.manager,
+      trip.choferId,
+      weekStart,
+      weekEnd,
+    );
     await this.driverSettlements.save({
       ...(existing ?? {}),
       driverId: trip.choferId,
@@ -595,23 +681,48 @@ export class SettlementsService {
   async getDriverReport(driverId: string, startDate: string, endDate: string) {
     const driver = await this.drivers.findOneBy({ id: driverId });
     if (!driver) throw new NotFoundException('Chofer no encontrado');
-    const trips = await this.trips.find({
-      where: {
-        choferId: driverId,
-        proveedorTransporte: 'interno',
-        estado: 'finalizado',
-        horaFinViaje: this.ventanaDeSemana(startDate, endDate),
-      },
-      order: { horaFinViaje: 'ASC' },
-    });
     const existing = await this.driverSettlements.findOneBy({
       driverId,
       weekStart: startDate,
     });
-    const totalPay = existing
-      ? Number(existing.total)
-      : sumMoney(trips.map((trip) => trip.driverPayout));
+    // Un corte pagado muestra lo que de verdad liquido (incluye viajes de
+    // semanas anteriores que se recogieron y las multas que descontó); uno
+    // abierto, lo que se pagaria hoy.
+    const pagado = existing?.status === 'paid';
+    const corte = pagado
+      ? null
+      : await this.corteDelChofer(
+          this.dataSource.manager,
+          driverId,
+          startDate,
+          endDate,
+        );
+    const trips = pagado
+      ? await this.trips.find({
+          where: { driverSettlementId: existing.id },
+          order: { horaFinViaje: 'ASC' },
+        })
+      : [...corte!.trips].sort(
+          (a, b) =>
+            (a.horaFinViaje?.getTime() ?? 0) - (b.horaFinViaje?.getTime() ?? 0),
+        );
+    const multas: Array<{ id: string; reason: string; amount: number }> = (
+      await this.dataSource.query(
+        `SELECT id, reason, fine_amount FROM disciplinary_sanctions
+          WHERE subject_type = 'driver' AND subject_id = $1 AND type = 'fine'
+            AND ${pagado ? 'driver_settlement_id = $2' : 'id = ANY($2::uuid[])'}
+          ORDER BY created_at`,
+        [driverId, pagado ? existing.id : corte!.multas.map((m) => m.id)],
+      )
+    ).map((m: { id: string; reason: string; fine_amount: string }) => ({
+      id: m.id,
+      reason: m.reason,
+      amount: Number(m.fine_amount),
+    }));
+    const totalPay = pagado ? Number(existing.total) : corte!.total;
     return {
+      fines: multas,
+      finesTotal: sumMoney(multas.map((m) => m.amount)),
       driver: { id: driver.id, name: driver.nombre },
       period: { startDate, endDate },
       trips: trips.map((trip) => ({

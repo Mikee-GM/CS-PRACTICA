@@ -211,8 +211,8 @@ export class ConciliacionService {
    * Vuelve a generar el registro de liquidacion de un servicio que quedo
    * desactualizado o sin registro.
    *
-   * Se niega si la semana de su empleada ya tiene el corte confirmado: cambiar el
-   * pasado despues de pagar es justo la discrepancia que se quiere evitar.
+   * Se niega si el registro ya vive en una semana con el corte confirmado: cambiar
+   * el pasado despues de pagar es justo la discrepancia que se quiere evitar.
    */
   async resincronizar(servicioId: string, adminId: string): Promise<void> {
     const [servicio] = await this.dataSource.query<
@@ -227,13 +227,16 @@ export class ConciliacionService {
         'Solo se puede regenerar el registro de un servicio terminado',
       );
     }
+    // Cuenta la semana donde vive hoy el registro: un servicio sin registro cuya
+    // semana ya esta cerrada entra en la semana siguiente, sin tocar la pagada.
     const [cerrada] = await this.dataSource.query(
-      `SELECT 1 FROM employee_weekly_settlements w
-        WHERE w.employee_id = $1
-          AND ($2::timestamptz AT TIME ZONE 'America/Mexico_City')::date
-              BETWEEN w.week_start AND w.week_end
+      `SELECT 1 FROM liquidation_records r
+        JOIN employee_weekly_settlements w ON w.employee_id = r.employee_id
+         AND (r.occurred_at AT TIME ZONE 'America/Mexico_City')::date
+             BETWEEN w.week_start AND w.week_end
+        WHERE r.service_id = $1 AND r.employee_id = $2 AND NOT r.is_fine
         LIMIT 1`,
-      [servicio.empleada_id, servicio.fin],
+      [servicioId, servicio.empleada_id],
     );
     if (cerrada) {
       throw new ConflictException(
@@ -411,7 +414,8 @@ export class ConciliacionService {
     );
     const [multasChoferes] = await manager.query<Array<Record<string, string>>>(
       `SELECT COALESCE(sum(fine_amount), 0) AS total FROM disciplinary_sanctions
-        WHERE type = 'fine' AND subject_type = 'driver' AND status <> 'revoked'`,
+        WHERE type = 'fine' AND subject_type = 'driver' AND status = 'active'
+          AND driver_settlement_id IS NULL`,
     );
     return {
       servicios,

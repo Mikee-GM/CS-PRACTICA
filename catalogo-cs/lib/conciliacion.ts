@@ -193,7 +193,7 @@ export function gruposDelResumen(resumen: ResumenDeDinero): GrupoDelResumen[] {
           etiqueta: "Multas a choferes sin descontar",
           valor: resumen.multasDeChoferesSinDescontar,
           ayuda:
-            "Se registran como sancion, pero ningun corte de chofer las resta de su pago.",
+            "Se descuentan del siguiente corte del chofer, de la mas antigua a la mas nueva, mientras quepan en lo que gano.",
           tono: resumen.multasDeChoferesSinDescontar > 0 ? "aviso" : "normal",
         },
       ],

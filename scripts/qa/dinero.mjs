@@ -392,12 +392,36 @@ async function faseCortes(extra) {
 async function faseChoferes() {
   console.log('\n== Fase 5. Cortes de choferes');
   const semana = semanaActual();
+  // Multa a un chofer: debe descontarse de su pago, no quedar solo registrada.
+  sql(`INSERT INTO disciplinary_sanctions (subject_type, subject_id, type, fine_amount, status, reason, created_by_user_id)
+       SELECT 'driver', c.id, 'fine', 40, 'active', 'Multa de prueba QA', c.usuario_id FROM choferes c WHERE c.id = '${id(30)}'`);
   const r = await S.admin.pedir('POST', `/transport-operations/driver-settlements/${id(30)}/pay`, {
     startDate: semana.lunes,
     endDate: semana.domingo,
   });
   exigir([200, 201, 400, 409].includes(r.status), `corte del chofer (${r.status})`);
   await conciliar('despues de pagar el corte del chofer');
+
+  // Las multas del chofer se descuentan de su pago, y un viaje que termina con el
+  // corte de su semana ya pagado se paga en la semana siguiente.
+  const pagado = sql(`SELECT id || '|' || total FROM driver_settlements WHERE driver_id = '${id(30)}' AND week_start = '${semana.lunes}' AND status = 'paid'`);
+  if (pagado) {
+    const [corteId, total] = pagado.split('|');
+    const suma = sql(`SELECT COALESCE(SUM(driver_payout),0) FROM viajes WHERE driver_settlement_id = '${corteId}'`);
+    const multas = sql(`SELECT COALESCE(SUM(fine_amount),0) FROM disciplinary_sanctions WHERE driver_settlement_id = '${corteId}'`);
+    exigir(Math.abs(Number(total) - (Number(suma) - Number(multas))) < 0.005, `corte pagado: viajes ${suma} menos multas ${multas} = ${total}`);
+  }
+  // Servicios que terminan con los cortes de las empleadas ya confirmados: entran
+  // en la semana siguiente, sin tocar la pagada.
+  for (let intento = 0; intento < 3; intento += 1) await servicioCompleto(N + 1000 + intento);
+  const lunesSiguiente = sql(`SELECT ('${semana.lunes}'::date + 7)::text`);
+  const tardios = sql(`SELECT count(*) FROM servicios WHERE estado = 'finalizado' AND hora_fin_servicio > (SELECT max(confirmed_at) FROM employee_weekly_settlements)`);
+  const movidos = sql(`SELECT count(*) FROM liquidation_records WHERE NOT is_fine AND NOT cancelled AND occurred_at >= '${lunesSiguiente} 00:00-06'`);
+  exigir(Number(movidos) === Number(tardios), `los ${tardios} servicios tardios entran en la semana siguiente (${movidos} registros)`);
+  await conciliar('despues de un viaje que termina con el corte ya pagado');
+  const sinCorte = sql(`SELECT count(*) FROM viajes WHERE chofer_id = '${id(30)}' AND estado = 'finalizado' AND driver_settlement_id IS NULL AND hora_fin_viaje >= '${semana.lunes} 00:00-06'`);
+  const posteriores = sql(`SELECT count(*) FROM driver_settlements WHERE driver_id = '${id(30)}' AND status = 'pending' AND week_start > '${semana.lunes}'`);
+  console.log(`  viajes sin corte tras el pago: ${sinCorte}; cortes pendientes posteriores: ${posteriores}`);
 }
 
 async function main() {

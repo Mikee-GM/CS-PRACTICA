@@ -130,15 +130,18 @@ registro se niega con un 409 si el corte de esa semana ya esta confirmado.
 | 23 | Media | La siembra de demostracion se contradecia (obligaciones de efectivo sobre servicios por transferencia, abonos sin repartir, cortes sin sus viajes, una multa revocada que seguia descontando): la conciliacion nacia con decenas de discrepancias. | La siembra regenera lo derivado con las reglas reales del sistema. |
 | 24 | Media | **El corte semanal del Centro de Mando perdia desde el sabado por la tarde y no veia los cortes confirmados** (decia 0 de 3 aunque hubiera 3): mandaba fechas planas (`2026-11-23`) y el backend las tomaba como medianoche UTC, que en Mexico es el sabado a las 18:00. El filtro de reportes tenia el mismo defecto. | Una fecha plana es un dia del calendario del negocio (`inicioDelDia` y `finDelDia`); un instante completo se respeta tal cual. |
 
-### Abiertos: necesitan una decision tuya
+### Resueltos con las decisiones del negocio
 
-| # | Hallazgo |
-|---|---|
-| L | **Las multas a choferes no se descuentan.** Se registran como sancion (por ejemplo la multa automatica por rechazar ofertas), pero ningun corte de chofer las resta de su pago. Aparece en el Dashboard como «Multas a choferes sin descontar». |
-| M | **Un servicio creado a un domicilio desde el formulario del jefe no calcula el cargo de transporte** (el cambio de destino si lo calcula): al cliente no se le cobra y el chofer cobra 0. Solo el chat de reserva y los servicios grupales lo fijan. |
-| N | **Un viaje terminado despues de pagar el corte de su semana no entra en ningun corte** (el sistema solo mira los de su propia semana): ese dinero se le debe al chofer y nadie lo paga. La conciliacion lo senala; falta decidir como se liquida. |
-| O | **Un corte semanal confirmado no admite servicios tardios**: si despues entra un servicio de esa semana, el corte pagado deja de coincidir con sus registros. La conciliacion lo muestra; falta decidir si se reabre el corte o se compensa en la semana siguiente. |
-| P | Una multa y su registro del corte se crean en dos pasos sin transaccion: si falla el segundo, queda una sancion sin descuento. La conciliacion lo detecta. |
+| # | Decision | Que hace ahora el sistema |
+|---|---|---|
+| L | Las multas a choferes se descuentan | Cada multa activa se descuenta del siguiente corte del chofer, de la mas antigua a la mas nueva, mientras quepa en lo que gano (el pago nunca queda negativo; la que no cabe espera al corte siguiente). Deshacer el corte la libera. Columna `driver_settlement_id` en la sancion. |
+| M | Un servicio a domicilio creado por el jefe lleva cargo de transporte | Igual que el chat de reserva: un lugar predefinido no lleva cargo y una direccion externa lleva la tarifa configurada. |
+| N | Un viaje terminado con el corte de su semana pagado se paga en el siguiente | Queda sin corte y lo recoge el corte pendiente de la primera semana abierta. La conciliacion exige que exista ese corte posterior. |
+| O | Un servicio tardio en una semana confirmada se compensa en la siguiente | El registro entra con la fecha del lunes de la primera semana abierta; la semana pagada no se toca. Un registro que ya vive en una semana confirmada conserva su fecha. |
+| P | Sin tope en extras con tarjeta ni en el monto de un servicio manual | Sin cambios, por decision del negocio. |
+
+Pendiente menor: la multa y su registro del corte se siguen creando en dos pasos sin
+transaccion (`conciliacion` lo detecta si falla el segundo).
 
 ## Qué se probó
 

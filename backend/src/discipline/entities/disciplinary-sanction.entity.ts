@@ -51,6 +51,10 @@ export class DisciplinarySanction {
   @Column('text', { name: 'revocation_reason', nullable: true })
   revocationReason: string | null;
 
+  /** Corte del chofer en el que se descuenta esta multa; vacio = por descontar. */
+  @Column('uuid', { name: 'driver_settlement_id', nullable: true })
+  driverSettlementId: string | null;
+
   @Column('timestamptz', { name: 'created_at', default: () => 'now()' })
   createdAt: Date;
 }

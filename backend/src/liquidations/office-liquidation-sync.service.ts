@@ -5,6 +5,7 @@ import { Servicios } from '../services/entities/service.entity';
 import { LiquidationRecord } from './entities/liquidation-record.entity';
 import { EmployeeCashObligation } from '../transport-operations/entities/employee-cash-obligation.entity';
 import { fromCents, sumMoney, toCents } from '../common/money';
+import { desdeHoraDelNegocio, lunesDeLaSemana } from '../common/locale';
 
 @Injectable()
 export class OfficeLiquidationSyncService {
@@ -18,6 +19,45 @@ export class OfficeLiquidationSyncService {
     @InjectRepository(EmployeeCashObligation)
     private readonly cashObligations: Repository<EmployeeCashObligation>,
   ) {}
+
+  /**
+   * Fecha con la que un servicio entra al corte semanal de la empleada.
+   *
+   * Si el servicio termino en una semana cuyo corte ya esta confirmado, no se
+   * reescribe esa semana: cuenta en la primera semana siguiente que siga abierta
+   * (su lunes a medianoche, en hora de Mexico). Un registro que ya vive en una
+   * semana confirmada conserva su fecha.
+   */
+  private async fechaDeCorteAbierto(
+    employeeId: string,
+    termino: Date,
+    actual: Date | null,
+  ): Promise<Date> {
+    const cerrada = async (momento: Date) => {
+      const filas: unknown[] = await this.records.manager.query(
+        `SELECT 1 FROM employee_weekly_settlements w
+          WHERE w.employee_id = $1
+            AND ($2::timestamptz AT TIME ZONE 'America/Mexico_City')::date
+                BETWEEN w.week_start AND w.week_end
+          LIMIT 1`,
+        [employeeId, momento],
+      );
+      return filas.length > 0;
+    };
+
+    if (actual && (await cerrada(new Date(actual)))) return new Date(actual);
+
+    let fecha = new Date(termino);
+    // Tope de seguridad: ninguna empleada tiene un ano de cortes confirmados por delante.
+    for (let i = 0; i < 60 && (await cerrada(fecha)); i++) {
+      const lunes = new Date(`${lunesDeLaSemana(fecha)}T12:00:00.000Z`);
+      lunes.setUTCDate(lunes.getUTCDate() + 7);
+      fecha =
+        desdeHoraDelNegocio(`${lunes.toISOString().slice(0, 10)}T00:00:00`) ??
+        fecha;
+    }
+    return fecha;
+  }
 
   /**
    * Registro de corte de un servicio cancelado.
@@ -263,6 +303,11 @@ export class OfficeLiquidationSyncService {
           employeeId: value.employeeId,
         },
       });
+      value.occurredAt = await this.fechaDeCorteAbierto(
+        value.employeeId!,
+        value.occurredAt as Date,
+        existingRecord?.occurredAt ?? null,
+      );
       await this.records.save(
         existingRecord
           ? this.records.merge(existingRecord, value)
