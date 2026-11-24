@@ -60,11 +60,11 @@ import { WebChatChannel } from './web-chat-channel';
  */
 export const TEXTOS_DEL_COMPROBANTE = {
   recibido:
-    'Recibimos tu comprobante. El equipo confirmará la transferencia con el banco y te avisará por aquí.',
+    'Ya recibí tu comprobante, mi vida. Déjame confirmar la transferencia y te aviso por aquí.',
   enRevision:
-    'Recibimos tu comprobante y quedó en revisión con el equipo. Te confirmaremos por aquí en cuanto lo verifiquen.',
+    'Ya recibí tu comprobante, mi cielo. Déjame confirmarlo y te aviso por aquí en cuanto esté.',
   error:
-    'No pudimos revisar tu comprobante en este momento. El equipo ya está avisado; si quieres, envíalo de nuevo en unos minutos.',
+    'No alcancé a ver bien tu comprobante, mi amor. Si quieres, mándalo otra vez en unos minutos.',
   duplicado: 'Esta clave de rastreo ya se usó para confirmar otro pago.',
   sinMontoEsperado:
     'No hay un monto acordado con el que comparar el comprobante; requiere revisión del equipo.',

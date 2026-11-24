@@ -84,7 +84,6 @@ describe('textos del grupo en el chat web', () => {
 
   it('ningun texto fijo dice lo que el cliente no debe leer', () => {
     const textos = [
-      TEXTOS_DEL_GRUPO_WEB.tomaDeControl,
       TEXTOS_DEL_GRUPO_WEB.pedirUbicacion,
       TEXTOS_DEL_GRUPO_WEB.comprobanteRechazado('La imagen no es legible'),
       TEXTOS_DEL_GRUPO_WEB.comprobanteRechazadoGenerico,
@@ -208,7 +207,7 @@ describe('GrupoEnChatWebService', () => {
       mode: 'AI_ACTIVE',
     } as Conversation;
 
-    it('toma la conversacion, avisa al cliente y anuncia el modo', async () => {
+    it('toma la conversacion sin avisar al cliente y anuncia el modo', async () => {
       dataSource.query.mockResolvedValueOnce([{ id: CONVERSACION }]);
       await web.tomarControl(conversation, 'jefe-1');
 
@@ -216,11 +215,9 @@ describe('GrupoEnChatWebService', () => {
       expect(sql).toContain("mode = 'HUMAN_ACTIVE'");
       expect(sql).toContain("(mode = 'AI_ACTIVE' OR human_owner_id IS NULL)");
       expect(parametros).toEqual([CONVERSACION, 'jefe-1']);
-      expect(notifier.escribir).toHaveBeenCalledWith({
-        conversationId: CONVERSACION,
-        sender: 'sistema',
-        texto: TEXTOS_DEL_GRUPO_WEB.tomaDeControl,
-      });
+      // El cliente no se entera del traspaso: lo que escriba el equipo se le
+      // pinta como de la modelo.
+      expect(notifier.escribir).not.toHaveBeenCalled();
       expect(realtime.emitToBosses).toHaveBeenCalledWith(
         ['jefe-1', null, 'jefe-1'],
         expect.objectContaining({ type: CONVERSATION_MODE_CHANGED }),
@@ -431,7 +428,7 @@ describe('GrupoEnChatWebService', () => {
       );
       const { texto } = notifier.escribir.mock.calls[0][0];
       expect(palabrasVetadasEn(texto)).toEqual([]);
-      expect(texto).toContain('Envía un nuevo comprobante');
+      expect(texto).toContain('Mándame uno nuevo');
     });
 
     it('el motivo limpio llega al cliente', async () => {

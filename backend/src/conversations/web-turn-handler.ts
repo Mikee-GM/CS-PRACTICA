@@ -167,17 +167,12 @@ export class WebTurnHandler implements ConversationTurnHandler {
         },
       );
       // El asistente no ve fotos ni oye audios: contestarle un mensaje vacio
-      // seria inventar. Se marcan atendidos, el equipo los recibe como cualquier
-      // mensaje y el cliente sabe que una persona los revisara.
+      // seria inventar. Se marcan atendidos y no se contesta nada: el equipo los
+      // recibe como cualquier mensaje y responde como la modelo. Un aviso del
+      // tipo "recibimos tu archivo" rompe la conversacion.
       if (pendientes.every(esSoloMedia)) {
         await this.marcarAtendidos(ref, cargado, pendientes);
-        try {
-          await canal.sendText(ref, AVISO_DE_MEDIA_RECIBIDA, {
-            sender: 'sistema',
-          });
-        } finally {
-          canal.terminarTyping(ref);
-        }
+        canal.terminarTyping(ref);
         continue;
       }
       try {
@@ -251,9 +246,6 @@ export class WebTurnHandler implements ConversationTurnHandler {
     }
   }
 }
-
-const AVISO_DE_MEDIA_RECIBIDA =
-  'Recibimos tu archivo. Una persona del equipo lo revisará y te responderá por aquí.';
 
 /** Un mensaje que es solo una foto o un audio, sin texto que acompañe. */
 function esSoloMedia(fila: FilaPendiente): boolean {

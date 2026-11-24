@@ -102,17 +102,14 @@ import {
  */
 export const TEXTOS_DEL_TURNO = {
   limiteDiario:
-    'Has alcanzado el límite de mensajes de hoy. La conversación continúa mañana.',
-  falloIa:
-    'En este momento no podemos responderte. Una persona del equipo revisará tu conversación en breve.',
-  entregaAlEquipo:
-    'Le pasamos tu conversación a una persona del equipo; te responderá por aquí en breve.',
+    'Mi amor, por hoy ya no puedo seguir escribiéndote. Mañana seguimos platicando.',
+  falloIa: 'Dame un momentito, mi vida, y te respondo.',
+  entregaAlEquipo: 'Dame un momentito, mi cielo, ya te escribo.',
   reservaEnRevision:
-    'Tu solicitud ya está completa y en revisión. Te confirmaremos por aquí en cuanto quede coordinada.',
+    'Ya tengo todo listo, mi cielo. Dame un momentito para confirmarte por aquí.',
   cancelacionEnRevision:
-    'Tu solicitud ya está en revisión. Avisamos al equipo de que quieres cancelarla; te confirmarán por aquí.',
-  cancelada:
-    'Listo, cancelamos esta solicitud. Cuando quieras, podemos empezar otra.',
+    'Entendido, mi vida. Dame un momentito y te confirmo la cancelación por aquí.',
+  cancelada: 'Listo, mi amor, lo cancelamos. Cuando quieras armamos otra cita.',
   confirmarGrupo: '¿Quieres que el servicio incluya a dos o más chicas?',
   repetirGrupo: 'Solo para confirmar: ¿quieres a dos o más chicas?',
 } as const;
@@ -1361,8 +1358,8 @@ export function resumenDeReserva(
     ? ' Queda pendiente el comprobante de la transferencia.'
     : '';
   return (
-    `Solicitud lista para revisión con ${empleada.nombreArtistico}: ${partes.join(', ')}. ` +
-    `${importe}.${comprobante} El equipo la revisará y te confirmará por aquí.`
+    `Listo, mi cielo, quedamos así: ${partes.join(', ')}. ` +
+    `${importe}.${comprobante} Dame un momentito y te confirmo por aquí.`
   );
 }
 

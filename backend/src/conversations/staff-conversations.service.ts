@@ -98,16 +98,10 @@ const INTENTOS_DE_ESTADO = 3;
  * modelo, y sin el aviso parecería que sigue hablando la asistente virtual.
  */
 export const TEXTOS_DEL_EQUIPO = {
-  tomaDeControl: 'Una persona del equipo continúa esta conversación contigo.',
-  retomaAsistente: (nombre: string) =>
-    `La asistente virtual de ${nombre} retoma la conversación.`,
-  retomaAsistenteGenerico: 'La asistente virtual retoma la conversación.',
-  solicitudAprobada: (nombre: string) =>
-    `Tu solicitud fue aprobada. Te avisaremos por aquí en cuanto ${nombre} confirme.`,
   solicitudAprobadaGenerica:
-    'Tu solicitud fue aprobada. Te avisaremos por aquí en cuanto quede confirmada.',
+    'Todo listo, mi cielo. En cuanto confirme mi llegada te aviso por aquí.',
   solicitudRechazada:
-    'Esta vez no fue posible coordinar tu solicitud. Si quieres, puedes intentarlo de nuevo más tarde.',
+    'Mi amor, esta vez no me va a ser posible. Si quieres, lo intentamos de nuevo más tarde.',
 } as const;
 
 /** Por que una conversacion necesita que la mire alguien del equipo. */
@@ -394,9 +388,6 @@ export class StaffConversationsService {
     const previoDueno = conversation.humanOwnerId;
     // El cliente solo se entera si antes le contestaba la IA; entre dos
     // personas del equipo el traspaso no le cambia nada.
-    if (conversation.mode === 'AI_ACTIVE') {
-      await this.avisarAlCliente(conversation, TEXTOS_DEL_EQUIPO.tomaDeControl);
-    }
     await this.anunciarModo(conversation, 'HUMAN_ACTIVE', actor.id, [
       actor.id,
       previoDueno,
@@ -464,16 +455,6 @@ export class StaffConversationsService {
       if (ultimaRespuesta) estado.ultimoMensajeAtendidoId = ultimaRespuesta;
     });
 
-    if (estabaEnManosDelEquipo) {
-      const nombre = await this.nombreDeLaModelo(conversation.employeeId);
-      await this.avisarAlCliente(
-        conversation,
-        textoSeguro(
-          nombre ? TEXTOS_DEL_EQUIPO.retomaAsistente(nombre) : '',
-          TEXTOS_DEL_EQUIPO.retomaAsistenteGenerico,
-        ),
-      );
-    }
     if (conversation.mode === 'HUMAN_ACTIVE') {
       await this.anunciarModo(conversation, 'AI_ACTIVE', null, [
         actor.id,
@@ -716,10 +697,7 @@ export class StaffConversationsService {
     await this.anunciarEstado(conversation, 'con_servicio', [actor.id]);
     await this.avisarAlCliente(
       conversation,
-      textoSeguro(
-        TEXTOS_DEL_EQUIPO.solicitudAprobada(employee.nombreArtistico ?? ''),
-        TEXTOS_DEL_EQUIPO.solicitudAprobadaGenerica,
-      ),
+      TEXTOS_DEL_EQUIPO.solicitudAprobadaGenerica,
     );
     return {
       conversationId,

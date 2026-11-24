@@ -61,16 +61,14 @@ export const ESTADOS_DE_SOLICITUD_VIVA = [
  * recorre): el cliente no sabe quien coordina ni como se reparte el trabajo.
  */
 export const TEXTOS_DEL_GRUPO_WEB = {
-  // El mismo aviso que la bandeja al tomar el control: es el mismo hecho.
-  tomaDeControl: TEXTOS_DEL_EQUIPO.tomaDeControl,
   pedirUbicacion:
-    'Para coordinar tu servicio necesitamos la ubicación. Compártela con el botón de ubicación del chat o escribe la dirección.',
+    'Para coordinar contigo necesito tu ubicación, mi cielo. Compártela con el botón de ubicación del chat o escríbeme la dirección.',
   comprobanteRechazado: (motivo: string | null) =>
-    `Tu comprobante no se pudo validar tras revisarlo${motivo ? `: ${motivo}` : ''}. Envía un nuevo comprobante por aquí, por favor.`,
+    `No pude validar tu comprobante${motivo ? `: ${motivo}` : ''}. Mándame uno nuevo por aquí, por favor.`,
   comprobanteRechazadoGenerico:
-    'Tu comprobante no se pudo validar tras revisarlo. Envía un nuevo comprobante por aquí, por favor.',
+    'No pude validar tu comprobante. Mándame uno nuevo por aquí, por favor.',
   pagoCompleto:
-    'Recibimos tu pago completo. Tu servicio grupal queda confirmado.',
+    'Ya recibí tu pago completo, mi vida. Tu servicio queda confirmado.',
 } as const;
 
 const FORMATO_MONEDA = new Intl.NumberFormat(APP_LOCALE, {
@@ -266,12 +264,6 @@ export class GrupoEnChatWebService {
     );
     if (!filas[0]) return;
 
-    if (conversation.mode === 'AI_ACTIVE') {
-      await this.escribirSinFallar(
-        conversation.id,
-        TEXTOS_DEL_GRUPO_WEB.tomaDeControl,
-      );
-    }
     try {
       const modelo = await this.dataSource.getRepository(Empleadas).findOne({
         where: { id: conversation.employeeId },

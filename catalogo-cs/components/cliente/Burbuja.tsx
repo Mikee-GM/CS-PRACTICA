@@ -17,19 +17,19 @@ import {
 
 /** Que paso con el comprobante, y si hay que hacer algo. */
 const TEXTO_DEL_ANALISIS: Record<EstadoDelComprobante, string> = {
-  recibido: "Comprobante recibido. El equipo confirmará la transferencia.",
-  en_revision: "Comprobante en revisión por el equipo.",
-  rechazado: "Comprobante no válido. Envía otro desde el botón de abajo.",
-  error: "No pudimos revisar el comprobante. Vuelve a enviarlo.",
+  recibido: "Comprobante recibido.",
+  en_revision: "Comprobante recibido.",
+  rechazado: "No pude validar el comprobante. Envía otro desde el botón de abajo.",
+  error: "No pude revisar el comprobante. Vuelve a enviarlo.",
 };
 
 /**
  * Un mensaje del chat.
  *
- * Tres formas: el cliente a la derecha, la modelo a la izquierda y los avisos
- * del sistema centrados y neutros. Lo que escribe alguien del equipo (`jefe`)
- * se pinta igual que la IA, como la modelo: el cliente no distingue quien esta
- * detras del asistente.
+ * Dos formas: el cliente a la derecha y la modelo a la izquierda. Lo que escribe
+ * alguien del equipo (`jefe`) y los textos fijos del servicio (`sistema`) se
+ * pintan igual que la IA, como la modelo: no hay avisos con otra apariencia que
+ * saquen al cliente de la conversacion.
  *
  * Cada burbuja lleva el nombre de quien habla en texto oculto: dentro del
  * registro en vivo, un lector de pantalla anuncia "Valeria: ..." en vez de una
@@ -55,20 +55,6 @@ export default function Burbuja({
       {horaDelMensaje(mensaje.createdAt)}
     </time>
   );
-
-  if (mensaje.sender === "sistema") {
-    return (
-      <ItemMensaje lado="centro" animar={animar} className="flex justify-center px-2">
-        <div className="max-w-[92%] rounded-xl border border-zinc-800 bg-zinc-950/80 px-4 py-2.5 text-center">
-          <span className="sr-only">Aviso: </span>
-          <p className="whitespace-pre-wrap break-words text-xs leading-relaxed text-zinc-300">
-            {mensaje.body}
-          </p>
-          <div className="mt-1">{hora}</div>
-        </div>
-      </ItemMensaje>
-    );
-  }
 
   const propio = mensaje.sender === "cliente";
   const fallo = mensaje.envio === "error";

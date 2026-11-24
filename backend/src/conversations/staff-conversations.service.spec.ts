@@ -529,15 +529,16 @@ describe('StaffConversationsService', () => {
   });
 
   describe('tomarControl', () => {
-    it('la toma, avisa al cliente y anuncia el modo solo a los jefes', async () => {
+    it('la toma sin avisar al cliente y anuncia el modo solo a los jefes', async () => {
       const control = await crear().tomarControl(JEFE, CONVERSACION);
 
       expect(control).toMatchObject({
         mode: 'HUMAN_ACTIVE',
         humanOwnerId: 'jefe-1',
       });
-      expect(textosAvisados()).toEqual([TEXTOS_DEL_EQUIPO.tomaDeControl]);
-      expect(avisos.mock.calls[0][2]).toEqual({ sender: 'sistema' });
+      // El cliente no se entera del traspaso: lo que escriba el equipo se le
+      // pinta como de la modelo.
+      expect(textosAvisados()).toEqual([]);
       const tiposAlCliente = realtime.emitToClient.mock.calls.map(
         (llamada) => (llamada as [string, { type: string }])[1].type,
       );
@@ -574,8 +575,8 @@ describe('StaffConversationsService', () => {
         humanOwner: { id: 'jefe-1', nombre: 'Jefa Uno' },
       });
       expect(fila.humanOwnerId).toBe('jefe-1');
-      // Solo el ganador deja aviso al cliente.
-      expect(avisos).toHaveBeenCalledTimes(1);
+      // Ninguno de los dos deja aviso: el cliente no se entera del traspaso.
+      expect(avisos).not.toHaveBeenCalled();
     });
 
     it('volver a tomar la propia no repite el aviso', async () => {
@@ -647,9 +648,8 @@ describe('StaffConversationsService', () => {
       });
       expect(estado.state.entregadaAlEquipo).toBeUndefined();
       expect(estado.state.motivoDeEntrega).toBeUndefined();
-      expect(textosAvisados()).toEqual([
-        'La asistente virtual de Valentina retoma la conversación.',
-      ]);
+      // El cliente no se entera de que la IA retoma la conversacion.
+      expect(textosAvisados()).toEqual([]);
       expect(turnHandler.procesarPendientes).toHaveBeenCalledWith(CONVERSACION);
       expect(realtime.emitToBosses).toHaveBeenCalledWith(
         expect.any(Array),
@@ -818,7 +818,7 @@ describe('StaffConversationsService', () => {
       expect(estado.state).toMatchObject({ lifecycle: 'SERVICE_CREATED' });
       expect(estado.state.esperandoComprobante).toBeUndefined();
       expect(textosAvisados()).toEqual([
-        TEXTOS_DEL_EQUIPO.solicitudAprobada('Valentina'),
+        TEXTOS_DEL_EQUIPO.solicitudAprobadaGenerica,
       ]);
       expect(realtime.emitToClient).toHaveBeenCalledWith('cliente-1', {
         type: CONVERSATION_STATUS_CHANGED,
@@ -928,10 +928,6 @@ describe('StaffConversationsService', () => {
 
   describe('textos al cliente', () => {
     const textos = [
-      TEXTOS_DEL_EQUIPO.tomaDeControl,
-      TEXTOS_DEL_EQUIPO.retomaAsistente('Valentina'),
-      TEXTOS_DEL_EQUIPO.retomaAsistenteGenerico,
-      TEXTOS_DEL_EQUIPO.solicitudAprobada('Valentina'),
       TEXTOS_DEL_EQUIPO.solicitudAprobadaGenerica,
       TEXTOS_DEL_EQUIPO.solicitudRechazada,
     ];
@@ -941,13 +937,8 @@ describe('StaffConversationsService', () => {
       expect(quitarEmojis(texto)).toBe(texto);
     });
 
-    it('un nombre artistico con palabra vetada cae al texto generico', () => {
-      expect(
-        textoSeguro(
-          TEXTOS_DEL_EQUIPO.retomaAsistente('Modelo Vip'),
-          TEXTOS_DEL_EQUIPO.retomaAsistenteGenerico,
-        ),
-      ).toBe(TEXTOS_DEL_EQUIPO.retomaAsistenteGenerico);
+    it('un texto con palabra vetada cae al respaldo', () => {
+      expect(textoSeguro('Aqui esta Modelo Vip', 'respaldo')).toBe('respaldo');
     });
   });
 
