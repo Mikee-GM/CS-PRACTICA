@@ -25,6 +25,8 @@ import { UpdateLiquidationSettingsDto } from './dto/liquidation-settings.dto';
 import { LiquidationsService } from './liquidations.service';
 import { EmployeeMoneyService } from './employee-money.service';
 import { UndoSettlementDto } from './dto/undo-settlement.dto';
+import { ConciliacionService } from './conciliacion.service';
+import { ConciliacionQueryDto } from './dto/conciliacion-query.dto';
 
 @ApiTags('liquidations')
 @ApiBearerAuth('jwt')
@@ -35,7 +37,31 @@ export class LiquidationsController {
   constructor(
     private readonly service: LiquidationsService,
     private readonly money: EmployeeMoneyService,
+    private readonly conciliacion: ConciliacionService,
   ) {}
+
+  /**
+   * Conciliacion de dinero: recalcula cada importe desde los servicios y lo
+   * compara con lo que el sistema guardo en otra parte (registros de liquidacion,
+   * efectivo, cortes de choferes). Una fila de discrepancia es dinero que no
+   * cuadra. Solo admin: expone el dinero de toda la empresa.
+   */
+  @Get('conciliacion')
+  @Roles('admin')
+  conciliar(@Query() query: ConciliacionQueryDto) {
+    return this.conciliacion.conciliar(query.from, query.to);
+  }
+
+  /** Vuelve a generar el registro de liquidacion de un servicio terminado. */
+  @Post('conciliacion/servicios/:servicioId/resincronizar')
+  @Roles('admin')
+  @HttpCode(204)
+  async resincronizar(
+    @Param('servicioId', new ParseUUIDPipe()) servicioId: string,
+    @GetUser() actor: Usuarios,
+  ) {
+    await this.conciliacion.resincronizar(servicioId, actor.id);
+  }
 
   /**
    * Listado de personal con su situacion de dinero, para la pantalla unica.

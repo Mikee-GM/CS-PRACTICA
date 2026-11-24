@@ -55,11 +55,21 @@
  */
 
 import { AppDataSource } from '../data-source';
-import type { QueryRunner } from 'typeorm';
+import { Between, type QueryRunner } from 'typeorm';
 import {
   calculateCardExtraSnapshot,
   EMPLOYEE_SERVICE_PERCENTAGE,
 } from '../services/service-financial-calculator';
+import { fromCents, toCents } from '../common/money';
+import { desdeHoraDelNegocio } from '../common/locale';
+import {
+  calculateCut,
+  DEFAULT_CARD_EXTRA_COMMISSION,
+} from '../liquidations/liquidation-calculator';
+import { OfficeLiquidationSyncService } from '../liquidations/office-liquidation-sync.service';
+import { LiquidationRecord } from '../liquidations/entities/liquidation-record.entity';
+import { Servicios } from '../services/entities/service.entity';
+import { EmployeeCashObligation } from '../transport-operations/entities/employee-cash-obligation.entity';
 
 /** Prefijo de todos los ids sembrados. Es lo que hace exacta la limpieza. */
 const PREFIJO = 'deadbeef';
@@ -2306,6 +2316,210 @@ function describirDestino(): string {
   return `${conexion.username ?? '?'}@${conexion.host ?? '?'}:${conexion.port ?? '?'}/${String(conexion.database ?? '?')} (${entorno})`;
 }
 
+/**
+ * Deja el dinero derivado de la demostracion consistente por construccion.
+ *
+ * Los registros de liquidacion, las obligaciones de efectivo y sus abonos se
+ * habian escrito a mano y se contradecian entre si y con los servicios (una
+ * obligacion de efectivo sobre un servicio pagado por transferencia, abonos sin
+ * repartir, cortes de chofer sin sus viajes). Con eso la conciliacion de dinero
+ * nacia con decenas de discrepancias y no se podia distinguir una real de una de
+ * siembra.
+ *
+ * Aqui lo derivado se regenera con las reglas reales: los registros y las
+ * obligaciones salen de `syncOfficeRecord`, los abonos se reparten entre
+ * obligaciones y los viajes se enlazan a su corte de chofer.
+ */
+export async function armonizarDinero(qr: QueryRunner): Promise<void> {
+  const manager = qr.manager;
+  const demo = `LIKE 'deadbeef-%'`;
+
+  await qr.query(
+    `DELETE FROM employee_cash_payment_allocations WHERE payment_id::text ${demo}`,
+  );
+  await qr.query(`DELETE FROM employee_cash_payments WHERE id::text ${demo}`);
+  await qr.query(
+    `DELETE FROM employee_cash_obligations WHERE id::text ${demo} OR service_id::text ${demo}`,
+  );
+  await qr.query(
+    `DELETE FROM liquidation_records
+      WHERE NOT is_fine
+        AND service_id IN (SELECT id FROM servicios WHERE id::text ${demo} AND estado = 'finalizado')`,
+  );
+
+  // El corte semanal confirmado de la demostracion es el de la semana ANTERIOR:
+  // una semana confirmada no admite servicios nuevos, y la actual sigue abierta.
+  // Sus servicios se fechan ahi antes de generar los registros, que heredan la
+  // fecha del servicio.
+  const lunesAnterior = new Date(lunesDeEstaSemana().getTime() - 7 * 24 * 60 * 60 * 1000);
+  const viernesAnterior = new Date(lunesAnterior.getTime() + (4 * 24 + 18) * 60 * 60 * 1000);
+  await qr.query(
+    `UPDATE servicios SET hora_fin_servicio = $1
+      WHERE id IN ($2, $3) AND estado = 'finalizado'`,
+    [viernesAnterior, SRV.finalizado, SRV.manual],
+  );
+
+  const sincronizador = new OfficeLiquidationSyncService(
+    manager.getRepository(Servicios),
+    manager.getRepository(LiquidationRecord),
+    manager.getRepository(EmployeeCashObligation),
+  );
+  const finalizados: Array<{ id: string }> = await qr.query(
+    `SELECT id FROM servicios
+      WHERE id::text ${demo} AND estado = 'finalizado'
+      ORDER BY hora_fin_servicio`,
+  );
+  for (const servicio of finalizados) {
+    await sincronizador.syncOfficeRecord(servicio.id);
+  }
+
+  // Abonos repartidos: el primero parcial y el segundo completo.
+  const obligaciones: Array<{ id: string; employee_id: string; amount: string }> =
+    await qr.query(
+      `SELECT id, employee_id, amount FROM employee_cash_obligations
+        WHERE service_id::text ${demo} AND amount > 0
+        ORDER BY service_date`,
+    );
+  const abonos = [
+    { pago: id(310), fraccion: 0.5, nota: 'Abono parcial entregado en el departamento.', dias: -1 },
+    { pago: id(311), fraccion: 1, nota: 'Entrega completa del servicio de mostrador.', dias: -5 },
+  ];
+  for (let i = 0; i < Math.min(abonos.length, obligaciones.length); i += 1) {
+    const obligacion = obligaciones[i];
+    const total = toCents(obligacion.amount);
+    const parte = Math.round(total * abonos[i].fraccion);
+    if (parte <= 0) continue;
+    await qr.query(
+      `INSERT INTO employee_cash_payments
+         (id, employee_id, amount, note, registered_by_user_id, origin, created_at)
+       VALUES ($1, $2, $3, $4, $5, 'physical', $6)`,
+      [abonos[i].pago, obligacion.employee_id, fromCents(parte), abonos[i].nota, U.jefe1, dias(abonos[i].dias)],
+    );
+    await qr.query(
+      `INSERT INTO employee_cash_payment_allocations (payment_id, obligation_id, amount)
+       VALUES ($1, $2, $3)`,
+      [abonos[i].pago, obligacion.id, fromCents(parte)],
+    );
+    await qr.query(
+      `UPDATE employee_cash_obligations
+          SET paid_amount = $2,
+              status = CASE WHEN $3 THEN 'paid' ELSE 'pending' END,
+              calculation_status = CASE WHEN $3 THEN 'paid' ELSE calculation_status END
+        WHERE id = $1`,
+      [obligacion.id, fromCents(parte), parte >= total],
+    );
+  }
+  // Un abono revertido: no reparte nada, y la conciliacion lo ignora.
+  await qr.query(
+    `INSERT INTO employee_cash_payments
+       (id, employee_id, amount, note, registered_by_user_id, origin, created_at,
+        reverted_at, reverted_by_user_id, reverted_reason)
+     VALUES ($1, $2, 500, 'Abono capturado por error.', $3, 'physical', $4, $4, $5,
+             'Se registró en la modelo equivocada.')`,
+    [id(312), EMP.dos, U.jefe1, dias(-2), U.admin],
+  );
+
+  // Un corte de chofer pagado suma exactamente los viajes que liquido. Uno
+  // pendiente no lleva viajes enlazados --se enlazan al pagarlo-- y su total es la
+  // suma de los viajes terminados de su semana que todavia no estan en un corte.
+  await qr.query(
+    `UPDATE viajes v SET driver_settlement_id = d.id
+       FROM driver_settlements d
+      WHERE d.id::text ${demo} AND v.id::text ${demo} AND d.status = 'paid'
+        AND v.chofer_id = d.driver_id AND v.proveedor_transporte = 'interno'
+        AND v.estado = 'finalizado' AND v.driver_payout > 0
+        AND v.hora_fin_viaje >= d.week_start
+        AND v.hora_fin_viaje < d.week_end + 1`,
+  );
+  await qr.query(
+    `UPDATE driver_settlements d
+        SET total = CASE WHEN d.status = 'paid'
+              THEN COALESCE((SELECT SUM(driver_payout) FROM viajes
+                              WHERE driver_settlement_id = d.id), 0)
+              ELSE COALESCE((SELECT SUM(driver_payout) FROM viajes v
+                              WHERE v.chofer_id = d.driver_id
+                                AND v.proveedor_transporte = 'interno'
+                                AND v.estado = 'finalizado'
+                                AND v.driver_settlement_id IS NULL
+                                AND v.hora_fin_viaje >= d.week_start
+                                AND v.hora_fin_viaje < d.week_end + 1), 0)
+            END
+      WHERE d.id::text ${demo}`,
+  );
+
+  // La multa de la demostracion apunta a su sancion.
+  await qr.query(
+    `UPDATE liquidation_records r SET sanction_id = sn.id
+       FROM disciplinary_sanctions sn
+      WHERE r.is_fine AND r.id::text ${demo} AND sn.id::text ${demo}
+        AND sn.type = 'fine' AND sn.subject_type = 'employee'
+        AND sn.subject_id = r.employee_id AND sn.fine_amount = r.fine_amount`,
+  );
+  // Una multa revocada ya no descuenta: es lo que hace la revocacion de verdad.
+  await qr.query(
+    `DELETE FROM liquidation_records r USING disciplinary_sanctions sn
+      WHERE r.sanction_id = sn.id AND sn.status = 'revoked' AND r.id::text ${demo}`,
+  );
+
+  // El corte confirmado guarda lo que dan hoy los registros de su semana.
+  const cortes: Array<{
+    id: string;
+    employee_id: string;
+    week_start: string;
+    week_end: string;
+  }> = await qr.query(
+    `SELECT id, employee_id, week_start::text, week_end::text
+       FROM employee_weekly_settlements WHERE id::text ${demo}`,
+  );
+  // El corte confirmado de la demostracion es el de la semana anterior.
+  const diaDeLaSemana = (fecha: Date) => fecha.toISOString().slice(0, 10);
+  await qr.query(
+    `UPDATE employee_weekly_settlements
+        SET week_start = $1, week_end = $2
+      WHERE id::text ${demo}`,
+    [
+      diaDeLaSemana(lunesAnterior),
+      diaDeLaSemana(new Date(lunesAnterior.getTime() + 6 * 24 * 60 * 60 * 1000)),
+    ],
+  );
+  for (const corte of await qr.query(
+    `SELECT id, employee_id, week_start::text, week_end::text
+       FROM employee_weekly_settlements WHERE id::text ${demo}`,
+  )) {
+    const inicio = desdeHoraDelNegocio(`${corte.week_start}T00:00:00`);
+    const fin = new Date(`${corte.week_end}T12:00:00.000Z`);
+    fin.setUTCDate(fin.getUTCDate() + 1);
+    const siguiente = desdeHoraDelNegocio(
+      `${fin.toISOString().slice(0, 10)}T00:00:00`,
+    );
+    if (!inicio || !siguiente) continue;
+    const registros = await manager.getRepository(LiquidationRecord).find({
+      where: {
+        employeeId: corte.employee_id,
+        excludedFromCut: false,
+        occurredAt: Between(inicio, new Date(siguiente.getTime() - 1)),
+      },
+    });
+    const bruto = calculateCut(
+      registros,
+      DEFAULT_CARD_EXTRA_COMMISSION,
+    ).employeeGrossPay;
+    const [pendiente] = await qr.query(
+      `SELECT COALESCE(SUM(amount - paid_amount), 0) AS deuda
+         FROM employee_cash_obligations
+        WHERE employee_id = $1 AND status <> 'paid' AND NOT administratively_excluded`,
+      [corte.employee_id],
+    );
+    await qr.query(
+      `UPDATE employee_weekly_settlements
+          SET gross_employee_pay = $2, cash_offset = 0,
+              net_employee_pay = $2, remaining_cash_debt = $3
+        WHERE id = $1`,
+      [corte.id, bruto, pendiente.deuda],
+    );
+  }
+}
+
 async function main(): Promise<void> {
   const ejecutar = process.argv.includes('--confirmar');
   const soloLimpiar = process.argv.includes('--limpiar');
@@ -2393,6 +2607,7 @@ async function main(): Promise<void> {
     if (!soloLimpiar) {
       console.log('Sembrando la operacion...');
       await sembrar(qr);
+      await armonizarDinero(qr);
     }
 
     await qr.commitTransaction();

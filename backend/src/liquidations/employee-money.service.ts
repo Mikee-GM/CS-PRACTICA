@@ -5,6 +5,7 @@ import { In, IsNull, LessThanOrEqual, Repository } from 'typeorm';
 import { Empleadas } from '../employees/entities/employee.entity';
 import { Usuarios } from '../users/entities/user.entity';
 import { fromCents, toCents } from '../common/money';
+import { fechaDelNegocio } from '../common/locale';
 import { EmployeeCashObligation } from '../transport-operations/entities/employee-cash-obligation.entity';
 import { EmployeeCashPayment } from '../transport-operations/entities/employee-cash-payment.entity';
 import { LiquidationPeriodQueryDto } from './dto/liquidation-query.dto';
@@ -186,7 +187,7 @@ export class EmployeeMoneyService {
           [empleada.jefeId, empleada.jefeSecundarioId].includes(actor.id)),
     );
 
-    const weekStart = query.startDate.toISOString().slice(0, 10);
+    const weekStart = fechaDelNegocio(query.startDate);
     const confirmadas = await this.settlements.find({
       where: { employeeId: In(visibles.map((item) => item.id)), weekStart },
     });
@@ -282,7 +283,7 @@ export class EmployeeMoneyService {
     );
     const dias = new Set(
       servicios.map((registro) =>
-        new Date(registro.occurredAt).toISOString().slice(0, 10),
+        fechaDelNegocio(new Date(registro.occurredAt)),
       ),
     );
     const conActividad = servicios.length + cancelados.length;

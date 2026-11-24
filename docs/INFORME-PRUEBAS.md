@@ -8,9 +8,9 @@ con los datos de demostración (`pnpm local:demo`), navegador Chrome y `curl`.
 
 | Medida | Resultado |
 |---|---|
-| Tests unitarios del backend | 1.842 en 175 suites, todos en verde |
-| Tests unitarios del frontend | 511 en 35 suites, todos en verde |
-| Tests e2e contra Postgres real | 21 en 3 suites, en verde (primera vez que se ejecutan) |
+| Tests unitarios del backend | 1.864 en 177 suites, todos en verde |
+| Tests unitarios del frontend | 526 en 38 suites, todos en verde |
+| Tests e2e contra Postgres real | 45 en 4 suites, en verde |
 | Tipos (`tsc`) | Limpio en backend y frontend |
 | Rutas de admin cargadas en navegador | 49 de 49 con 200, la más lenta 157 ms |
 | Rutas del jefe cargadas en navegador | 14 de 14 con 200 |
@@ -97,6 +97,47 @@ que se pinta como enlace y validación con ids reales.
 | # | Gravedad | Hallazgo | Sugerencia |
 |---|---|---|---|
 | J | Baja | `montoCobrado` de una solicitud de servicio manual no tiene tope (acepté 99.999.999). Pasa por aprobación del jefe. | Un máximo razonable. |
+
+## Tercera pasada: dinero, cortes y conciliacion
+
+Se construyo una **conciliacion de dinero** que recalcula cada importe desde los
+servicios con SQL propio y lo compara con lo que el sistema guardo en otra parte.
+Son 24 verificaciones (totales del servicio, extras y su comision con tarjeta,
+registros de liquidacion, obligaciones de efectivo, abonos, cortes de choferes,
+cortes semanales, deudas y multas). Esta en el Dashboard del administrador y en
+`GET /liquidations/conciliacion`.
+
+**Resultado de la prueba de extremo a extremo** (`pnpm qa:dinero`): 16 servicios con
+importes con centavos, los tres metodos de pago, extras, extensiones, lugares
+predefinidos y cancelaciones; despues abonos parciales y exactos, un centavo de mas
+(rechazado), cortes semanales, un corte de chofer y multas con reversa. En los 8
+puntos de control la conciliacion dio **0 discrepancias**, y las cifras del resumen
+coinciden con un calculo directo en SQL.
+
+**Prueba inversa:** al corromper a proposito la base, la conciliacion detecto todas
+las clases de error (comision, neto, servicio sin registro, base, abonos, estado,
+corte de chofer, viaje fuera de corte y corte recalculado). El total del servicio no
+se pudo corromper: lo restaura el trigger de la base. El boton de regenerar un
+registro se niega con un 409 si el corte de esa semana ya esta confirmado.
+
+### Corregidos
+
+| # | Gravedad | Hallazgo | Correccion |
+|---|---|---|---|
+| 20 | Alta | **Revocar una multa borraba todas las parecidas.** La multa y su registro del corte se unian por empleada, importe y un trozo del motivo (`LIKE`): dos multas iguales desaparecian juntas, y una multa ya incluida en un corte pagado lo cambiaba despues. | `sanction_id` en el registro (migracion); se borra solo el de esa sancion, y si el corte ya esta confirmado se anota una reversa negativa en la primera semana abierta. |
+| 21 | Media | Los cortes sumaban dinero con `Number`: `0.1 + 0.2 > 0.3` rechazaba el **ultimo abono legitimo de una deuda**, y una obligacion podia quedarse `pendiente` con saldo cero. | Centavos enteros (`money.ts`) en el corte, la confirmacion y las deudas. |
+| 22 | Media | **Todos los cortes semanales guardaban `week_end` un dia de mas** (el lunes siguiente): el domingo 23:59 de Mexico ya es lunes en UTC. Ademas, el grafico diario mandaba los servicios de la noche al dia siguiente. | `fechaDelNegocio` en todos los puntos; migracion que corrige los cortes ya guardados. |
+| 23 | Media | La siembra de demostracion se contradecia (obligaciones de efectivo sobre servicios por transferencia, abonos sin repartir, cortes sin sus viajes, una multa revocada que seguia descontando): la conciliacion nacia con decenas de discrepancias. | La siembra regenera lo derivado con las reglas reales del sistema. |
+
+### Abiertos: necesitan una decision tuya
+
+| # | Hallazgo |
+|---|---|
+| L | **Las multas a choferes no se descuentan.** Se registran como sancion (por ejemplo la multa automatica por rechazar ofertas), pero ningun corte de chofer las resta de su pago. Aparece en el Dashboard como «Multas a choferes sin descontar». |
+| M | **Un servicio creado a un domicilio desde el formulario del jefe no calcula el cargo de transporte** (el cambio de destino si lo calcula): al cliente no se le cobra y el chofer cobra 0. Solo el chat de reserva y los servicios grupales lo fijan. |
+| N | **Un viaje terminado despues de pagar el corte de su semana no entra en ningun corte** (el sistema solo mira los de su propia semana): ese dinero se le debe al chofer y nadie lo paga. La conciliacion lo senala; falta decidir como se liquida. |
+| O | **Un corte semanal confirmado no admite servicios tardios**: si despues entra un servicio de esa semana, el corte pagado deja de coincidir con sus registros. La conciliacion lo muestra; falta decidir si se reabre el corte o se compensa en la semana siguiente. |
+| P | Una multa y su registro del corte se crean en dos pasos sin transaccion: si falla el segundo, queda una sancion sin descuento. La conciliacion lo detecta. |
 
 ## Qué se probó
 

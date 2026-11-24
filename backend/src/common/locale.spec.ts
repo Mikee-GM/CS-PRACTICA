@@ -1,4 +1,8 @@
-import { desdeHoraDelNegocio, enHoraDelNegocio } from './locale';
+import {
+  desdeHoraDelNegocio,
+  enHoraDelNegocio,
+  fechaDelNegocio,
+} from './locale';
 
 /**
  * La hora pactada por chat llega como texto sin zona, y eso ya costo una cita:
@@ -55,5 +59,28 @@ describe('desdeHoraDelNegocio', () => {
   it('devuelve null en vez de una fecha invalida silenciosa', () => {
     expect(desdeHoraDelNegocio('manana a las dos')).toBeNull();
     expect(desdeHoraDelNegocio('')).toBeNull();
+  });
+});
+
+describe('fechaDelNegocio', () => {
+  it('da la fecha de Mexico, no la de UTC', () => {
+    // Domingo 29 de noviembre a las 23:59:59.999 en Mexico = lunes 30 en UTC.
+    const finDeSemana = new Date('2026-11-30T05:59:59.999Z');
+
+    expect(finDeSemana.toISOString().slice(0, 10)).toBe('2026-11-30');
+    expect(fechaDelNegocio(finDeSemana)).toBe('2026-11-29');
+  });
+
+  it('el inicio de la semana (lunes 00:00 de Mexico) sigue siendo lunes', () => {
+    expect(fechaDelNegocio(new Date('2026-11-23T06:00:00.000Z'))).toBe(
+      '2026-11-23',
+    );
+  });
+
+  it('un servicio de la noche cuenta en el dia en que ocurrio', () => {
+    // Sabado 28 a las 21:30 en Mexico = domingo 29 a las 03:30 en UTC.
+    expect(fechaDelNegocio(new Date('2026-11-29T03:30:00.000Z'))).toBe(
+      '2026-11-28',
+    );
   });
 });

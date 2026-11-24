@@ -194,6 +194,14 @@ export class LiquidationRecord {
   @Column('boolean', { name: 'is_fine', default: false })
   isFine: boolean;
 
+  /**
+   * Sancion a la que pertenece este registro de multa. Antes se unian por
+   * coincidencia de importe y motivo, y revocar una multa borraba tambien las
+   * que se le parecian.
+   */
+  @Column('uuid', { name: 'sanction_id', nullable: true })
+  sanctionId: string | null;
+
   @Column('numeric', {
     name: 'fine_amount',
     precision: 12,

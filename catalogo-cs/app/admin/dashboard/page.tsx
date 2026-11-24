@@ -25,6 +25,8 @@ import {
 import { getPendingAppeals } from "@/lib/actions/discipline";
 import { getWeeklySummary } from "@/app/admin/liquidations/actions";
 import { getServices } from "@/lib/data/services";
+import { getConciliacion } from "@/lib/data/conciliacion";
+import { bloquesDeConciliacion } from "@/components/erp/conciliacion-dinero";
 import { getCurrentUser } from "@/lib/auth";
 import { optionalSource } from "@/lib/optional-source";
 import { getOperationalWeek } from "@/lib/week-range";
@@ -73,6 +75,7 @@ export default async function DashboardPage() {
     layout,
     mapEmployees,
     mapDrivers,
+    conciliacion,
   ] = await Promise.all([
     optionalSource(getGodEyeOverviewAction(), OVERVIEW_VACIO, contexto),
     optionalSource(
@@ -90,6 +93,8 @@ export default async function DashboardPage() {
     // mismo componente, solo que integrado como bloque reordenable.
     optionalSource(getEmployees(), [], contexto),
     optionalSource(getDrivers(), [], contexto),
+    // Un fallo aqui no tumba el centro de mando: se avisa dentro del bloque.
+    optionalSource(getConciliacion(startDate, endDate), null, contexto),
   ]);
 
   const { contadores, ahora, dinero } = bloquesDeCentroDeMando({
@@ -181,6 +186,13 @@ export default async function DashboardPage() {
       id: "dinero-paneles",
       gridClassName: "grid grid-cols-1 gap-6 xl:grid-cols-2",
       bloques: semana,
+    },
+    {
+      id: "dinero-conciliacion",
+      titulo: "Conciliacion",
+      descripcion: "Si el dinero de la semana cuadra, recalculado desde los servicios",
+      gridClassName: "grid grid-cols-1 gap-6",
+      bloques: bloquesDeConciliacion(conciliacion),
     },
     {
       /*

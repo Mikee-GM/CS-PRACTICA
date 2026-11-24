@@ -45,6 +45,17 @@ export function enHoraDelNegocio(fecha: Date): Date {
 }
 
 /**
+ * La fecha del calendario del negocio (`AAAA-MM-DD`) de un instante.
+ *
+ * `instante.toISOString().slice(0, 10)` da la fecha en UTC: el domingo a las
+ * 23:59 de Mexico ya es lunes en UTC, y el corte semanal guardaba su fin un dia
+ * de mas.
+ */
+export function fechaDelNegocio(fecha: Date): string {
+  return enHoraDelNegocio(fecha).toISOString().slice(0, 10);
+}
+
+/**
  * El lunes de la semana operativa a la que pertenece una fecha, en formato
  * `YYYY-MM-DD` y en hora del negocio.
  */

@@ -31,6 +31,8 @@ import {
 } from '../transport-operations/entities/employee-cash-payment.entity';
 import { EmployeeWeeklySettlement } from './entities/employee-weekly-settlement.entity';
 import { LiquidationsRepository } from './liquidations.repository';
+import { fromCents, toCents } from '../common/money';
+import { fechaDelNegocio } from '../common/locale';
 import { SettlementsService } from '../transport-operations/settlements.service';
 
 @Injectable()
@@ -185,7 +187,7 @@ export class LiquidationsService {
     const records = await this.getRecords(query, actor);
     const commission = this.commissionPolicy();
     const report = buildCutReport(records, commission);
-    const weekStart = query.startDate.toISOString().slice(0, 10);
+    const weekStart = fechaDelNegocio(query.startDate);
     const existing = await this.weeklySettlements.findOneBy({
       employeeId: employee.id,
       weekStart,
@@ -199,10 +201,14 @@ export class LiquidationsService {
         serviceDate: LessThanOrEqual(query.endDate),
       },
     });
-    const cashOutstanding = obligations.reduce(
-      (sum, item) =>
-        sum + Math.max(0, Number(item.amount) - Number(item.paidAmount)),
-      0,
+    // En centavos enteros: restar y sumar `numeric` convertido a `Number` arrastra
+    // error de coma flotante y dejaba obligaciones con un centavo de mas o de menos.
+    const cashOutstanding = fromCents(
+      obligations.reduce(
+        (sum, item) =>
+          sum + Math.max(0, toCents(item.amount) - toCents(item.paidAmount)),
+        0,
+      ),
     );
     const grossEmployeePay = existing
       ? Number(existing.grossEmployeePay)
@@ -258,7 +264,7 @@ export class LiquidationsService {
     );
     if (!records.length) return [];
 
-    const weekStart = query.startDate.toISOString().slice(0, 10);
+    const weekStart = fechaDelNegocio(query.startDate);
     const employeeIds = [
       ...new Set(records.map((record) => record.employeeId)),
     ];
@@ -285,7 +291,7 @@ export class LiquidationsService {
     for (const item of obligations) {
       const pending = Math.max(
         0,
-        Number(item.amount) - Number(item.paidAmount),
+        toCents(item.amount) - toCents(item.paidAmount),
       );
       cashByEmployee.set(
         item.employeeId,
@@ -306,17 +312,19 @@ export class LiquidationsService {
       .map(([employeeId, employeeRecords]) => {
         const cut = calculateCut(employeeRecords, commission);
         const existing = settlementByEmployee.get(employeeId);
-        const cashOutstanding = cashByEmployee.get(employeeId) ?? 0;
+        const cashOutstanding = fromCents(cashByEmployee.get(employeeId) ?? 0);
 
         const grossEmployeePay = existing
           ? Number(existing.grossEmployeePay)
           : cut.employeeGrossPay;
         const cashOffset = existing
           ? Number(existing.cashOffset)
-          : Math.min(grossEmployeePay, cashOutstanding);
+          : fromCents(
+              Math.min(toCents(grossEmployeePay), toCents(cashOutstanding)),
+            );
         const netEmployeePay = existing
           ? Number(existing.netEmployeePay)
-          : grossEmployeePay - cashOffset;
+          : fromCents(toCents(grossEmployeePay) - toCents(cashOffset));
 
         const employee = employeeRecords[0]?.employee;
 
@@ -333,7 +341,9 @@ export class LiquidationsService {
           netEmployeePay,
           remainingCashDebt: existing
             ? Number(existing.remainingCashDebt)
-            : Math.max(0, cashOutstanding - cashOffset),
+            : fromCents(
+                Math.max(0, toCents(cashOutstanding) - toCents(cashOffset)),
+              ),
           status: existing ? ('confirmed' as const) : ('preview' as const),
           confirmedAt: existing?.confirmedAt ?? null,
         };
@@ -358,8 +368,8 @@ export class LiquidationsService {
       records,
       this.commissionPolicy(),
     ).employeeGrossPay;
-    const weekStart = query.startDate.toISOString().slice(0, 10);
-    const weekEnd = query.endDate.toISOString().slice(0, 10);
+    const weekStart = fechaDelNegocio(query.startDate);
+    const weekEnd = fechaDelNegocio(query.endDate);
     return this.dataSource.transaction(async (manager) => {
       const settlements = manager.getRepository(EmployeeWeeklySettlement);
       const existing = await settlements.findOneBy({
@@ -381,13 +391,20 @@ export class LiquidationsService {
           order: { serviceDate: 'ASC', createdAt: 'ASC' },
           lock: { mode: 'pessimistic_write' },
         });
-      const outstanding = obligations.reduce(
-        (sum, item) => sum + Number(item.amount) - Number(item.paidAmount),
+      // Todo en centavos enteros: con `Number` el saldo de una obligacion podia
+      // quedar en 4199.999999999999 y no llegar a `pagada` pese a estar saldada.
+      const outstandingCents = obligations.reduce(
+        (sum, item) => sum + toCents(item.amount) - toCents(item.paidAmount),
         0,
       );
-      const cashOffset = Math.min(grossEmployeePay, outstanding);
-      let remainingOffset = cashOffset;
-      if (cashOffset > 0) {
+      const cashOffsetCents = Math.min(
+        toCents(grossEmployeePay),
+        outstandingCents,
+      );
+      const outstanding = fromCents(outstandingCents);
+      const cashOffset = fromCents(cashOffsetCents);
+      let remainingOffsetCents = cashOffsetCents;
+      if (cashOffsetCents > 0) {
         const payment = await manager.getRepository(EmployeeCashPayment).save({
           employeeId: query.employeeId!,
           amount: cashOffset,
@@ -396,14 +413,17 @@ export class LiquidationsService {
           origin: 'weekly_offset',
         });
         for (const obligation of obligations) {
-          if (remainingOffset <= 0) break;
-          const amount = Math.min(
-            remainingOffset,
-            Number(obligation.amount) - Number(obligation.paidAmount),
+          if (remainingOffsetCents <= 0) break;
+          const amountCents = Math.min(
+            remainingOffsetCents,
+            toCents(obligation.amount) - toCents(obligation.paidAmount),
           );
-          obligation.paidAmount = Number(obligation.paidAmount) + amount;
+          const amount = fromCents(amountCents);
+          obligation.paidAmount = fromCents(
+            toCents(obligation.paidAmount) + amountCents,
+          );
           obligation.status =
-            obligation.paidAmount >= Number(obligation.amount)
+            toCents(obligation.paidAmount) >= toCents(obligation.amount)
               ? 'paid'
               : 'pending';
           if (obligation.status === 'paid')
@@ -415,7 +435,7 @@ export class LiquidationsService {
             obligationId: obligation.id,
             amount,
           });
-          remainingOffset -= amount;
+          remainingOffsetCents -= amountCents;
         }
       }
       const settlement = await settlements.save({
@@ -424,8 +444,8 @@ export class LiquidationsService {
         weekEnd,
         grossEmployeePay,
         cashOffset,
-        netEmployeePay: grossEmployeePay - cashOffset,
-        remainingCashDebt: outstanding - cashOffset,
+        netEmployeePay: fromCents(toCents(grossEmployeePay) - cashOffsetCents),
+        remainingCashDebt: fromCents(outstandingCents - cashOffsetCents),
         confirmedByUserId: actor.id,
       });
       await this.auditWithManager(
@@ -468,7 +488,7 @@ export class LiquidationsService {
       );
     this.validatePeriod(query);
     await this.assertEmployeeAccess(query.employeeId, actor);
-    const weekStart = query.startDate.toISOString().slice(0, 10);
+    const weekStart = fechaDelNegocio(query.startDate);
 
     const settlement = await this.weeklySettlements.findOneBy({
       employeeId: query.employeeId,
@@ -656,8 +676,10 @@ export class LiquidationsService {
         lock: { mode: 'pessimistic_write' },
       });
       if (!debt) throw new NotFoundException('Deuda no encontrada');
-      const paid = this.activePaidTotal(debt.payments);
-      if (paid + dto.amount > debt.amount) {
+      const paidCents = this.activePaidTotal(debt.payments);
+      // En centavos: con `Number`, 0.1 + 0.2 > 0.3 rechazaba el ultimo abono
+      // legitimo de una deuda.
+      if (paidCents + toCents(dto.amount) > toCents(debt.amount)) {
         throw new ConflictException('El abono supera el saldo pendiente');
       }
       const payment = await paymentRepository.save(
@@ -669,7 +691,10 @@ export class LiquidationsService {
         }),
       );
       debt.payments.push(payment);
-      debt.status = paid + payment.amount >= debt.amount ? 'paid' : 'pending';
+      debt.status =
+        paidCents + toCents(payment.amount) >= toCents(debt.amount)
+          ? 'paid'
+          : 'pending';
       debt.updatedAt = new Date();
       await debtRepository.save(debt);
       await this.auditWithManager(
@@ -726,19 +751,19 @@ export class LiquidationsService {
   private activePaidTotal(payments: LiquidationPayment[] = []) {
     return payments
       .filter((payment) => !payment.deletedAt)
-      .reduce((sum, payment) => sum + Number(payment.amount), 0);
+      .reduce((sum, payment) => sum + toCents(payment.amount), 0);
   }
 
   private serializeDebt(debt: LiquidationDebt) {
     const payments = (debt.payments ?? []).filter(
       (payment) => !payment.deletedAt,
     );
-    const paidAmount = this.activePaidTotal(payments);
+    const paidCents = this.activePaidTotal(payments);
     return {
       ...debt,
       payments,
-      paidAmount,
-      remainingAmount: Math.max(0, Number(debt.amount) - paidAmount),
+      paidAmount: fromCents(paidCents),
+      remainingAmount: fromCents(Math.max(0, toCents(debt.amount) - paidCents)),
     };
   }
 

@@ -11,6 +11,7 @@ import { LiquidationsService } from './liquidations.service';
 import { EmployeeMoneyService } from './employee-money.service';
 import { Servicios } from '../services/entities/service.entity';
 import { OfficeLiquidationSyncService } from './office-liquidation-sync.service';
+import { ConciliacionService } from './conciliacion.service';
 import { EmployeeCashObligation } from '../transport-operations/entities/employee-cash-obligation.entity';
 import {
   EmployeeCashPayment,
@@ -49,6 +50,7 @@ import { TransportOperationsModule } from '../transport-operations/transport-ope
     EmployeeMoneyService,
     LiquidationsRepository,
     OfficeLiquidationSyncService,
+    ConciliacionService,
   ],
   exports: [
     LiquidationsService,

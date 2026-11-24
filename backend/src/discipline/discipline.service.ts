@@ -908,6 +908,7 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
     if (dto.type === 'fine' && dto.subjectType === 'employee') {
       await this.dataSource.getRepository('LiquidationRecord').save({
         employeeId: dto.subjectId,
+        sanctionId: sanction.id,
         registeredByUserId: actorId,
         sourceRole: 'admin',
         occurredAt: startsAt,
@@ -994,25 +995,107 @@ export class DisciplineService implements OnModuleInit, OnModuleDestroy {
       }
     }
     if (sanction.type === 'fine' && sanction.subjectType === 'employee') {
-      await this.dataSource
-        .createQueryBuilder()
-        .delete()
-        .from('liquidation_records')
-        .where(
-          'employee_id = :empId AND is_fine = true AND fine_amount = :amt AND place LIKE :plc',
-          {
-            empId: sanction.subjectId,
-            amt: sanction.fineAmount,
-            plc: `%${sanction.reason.trim()}%`,
-          },
-        )
-        .execute();
+      await this.deshacerDescuentoDeMulta(sanction, admin.id);
     }
     this.realtime.emitToJefes({
       type: 'discipline.sanction.revoked',
       sanctionId: sanction.id,
     });
     return saved;
+  }
+
+  /**
+   * Quita del corte el descuento de una multa revocada.
+   *
+   * Solo toca el registro de ESA sancion (por `sanction_id`). Antes borraba todo
+   * registro con la misma empleada, importe y un trozo del motivo, asi que dos
+   * multas iguales desaparecian juntas al revocar una.
+   *
+   * Si la semana de la multa ya tiene el corte confirmado, no se reescribe: el
+   * registro original se queda y se anota una reversa negativa en la semana
+   * abierta, de modo que lo ya pagado no cambia y el neto vuelve a cero.
+   */
+  private async deshacerDescuentoDeMulta(
+    sanction: { id: string; subjectId: string; fineAmount: unknown; reason: string },
+    adminId: string,
+  ): Promise<void> {
+    const registros: Array<{
+      id: string;
+      occurred_at: Date;
+      fine_amount: string;
+    }> = await this.dataSource.query(
+      `SELECT id, occurred_at, fine_amount FROM liquidation_records
+        WHERE sanction_id = $1 AND is_fine AND fine_amount > 0`,
+      [sanction.id],
+    );
+    if (registros.length === 0) {
+      // Multa anterior al vinculo y sin coincidencia unica: no se adivina cual es.
+      this.logger.warn(
+        `La multa ${sanction.id} no tiene registro vinculado en el corte; revisar a mano.`,
+      );
+      return;
+    }
+
+    // La reversa va en la primera semana abierta: si cayera en una semana ya
+    // confirmada, el corte pagado dejaria de coincidir con sus registros.
+    const [{ fecha: fechaDeReversa }] = await this.dataSource.query(
+      `SELECT GREATEST(
+                now(),
+                ((MAX(w.week_end) + 1)::text || ' 00:00:00')::timestamp
+                  AT TIME ZONE 'America/Mexico_City'
+              ) AS fecha
+         FROM employee_weekly_settlements w
+        WHERE w.employee_id = $1`,
+      [sanction.subjectId],
+    );
+
+    for (const registro of registros) {
+      const [cerrada] = await this.dataSource.query(
+        `SELECT 1 FROM employee_weekly_settlements w
+          WHERE w.employee_id = $1
+            AND ($2::timestamptz AT TIME ZONE 'America/Mexico_City')::date
+                BETWEEN w.week_start AND w.week_end
+          LIMIT 1`,
+        [sanction.subjectId, registro.occurred_at],
+      );
+
+      if (!cerrada) {
+        await this.dataSource.query(
+          `DELETE FROM liquidation_records WHERE id = $1`,
+          [registro.id],
+        );
+        continue;
+      }
+
+      await this.dataSource.getRepository('LiquidationRecord').save({
+        employeeId: sanction.subjectId,
+        sanctionId: sanction.id,
+        registeredByUserId: adminId,
+        sourceRole: 'admin',
+        occurredAt: new Date(fechaDeReversa),
+        serviceTotal: 0,
+        paymentMethod: 'efectivo',
+        cashAmount: 0,
+        cardAmounts: [],
+        companyPercentage: 0,
+        extraAmount: 0,
+        promotion: false,
+        membershipAmount: 0,
+        companyTransportExpense: 0,
+        customerTransportCharge: 0,
+        employeeUberReimbursement: 0,
+        employeeCashDue: 0,
+        electronicExtraAmount: 0,
+        cardExtraAmount: 0,
+        transportExcess: 0,
+        place: `Reversa de multa: ${sanction.reason.trim()}`,
+        hasOutboundDriver: false,
+        hasReturnDriver: false,
+        cancelled: false,
+        isFine: true,
+        fineAmount: -Number(registro.fine_amount),
+      });
+    }
   }
 
   async listSanctions(
